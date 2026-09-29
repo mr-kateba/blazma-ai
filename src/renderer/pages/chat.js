@@ -5,6 +5,7 @@ import { ar, errorText, formatBytes, formatDuration } from '../i18n/ar.js';
 import { el, detectDir } from '../lib/dom.js';
 import { renderMarkdown } from '../lib/markdown.js';
 import { readSse } from '../lib/sse.js';
+import { store } from '../lib/store.js';
 
 const mdLabels = { copy: ar.actions.copy, copied: ar.actions.copied, code: ar.chat.code };
 
@@ -365,7 +366,10 @@ async function send(text) {
             reply.content += delta.content;
           }
         }
-        if (chunk.timings) reply.timings = chunk.timings;
+        if (chunk.timings) {
+          reply.timings = chunk.timings;
+          if (chunk.timings.predicted_per_second) store.lastSpeed = chunk.timings.predicted_per_second;
+        }
         renderLast();
       }
     }

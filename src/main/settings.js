@@ -10,6 +10,9 @@ const DEFAULTS = Object.freeze({
   modelsDir: '',
   activeModelId: '',
   temperature: null, // null = use the model's recommended value
+  monitorIntervalMs: 2000,
+  gpuTempWarn: null, // null = derived from the card's own limits (monitor.js)
+  gpuTempDanger: null,
   systemPrompt:
     'أنت مساعد ذكي ومفيد. أجب باللغة العربية الفصحى بوضوح ودقة، إلا إذا طلب المستخدم لغة أخرى.',
 });
@@ -24,6 +27,9 @@ const VALIDATORS = {
   activeModelId: (v) => typeof v === 'string',
   temperature: (v) => v === null || (typeof v === 'number' && v >= 0 && v <= 2),
   systemPrompt: (v) => typeof v === 'string' && v.length <= 20000,
+  monitorIntervalMs: (v) => [1000, 2000, 5000].includes(v),
+  gpuTempWarn: (v) => v === null || isInt(v, 30, 110),
+  gpuTempDanger: (v) => v === null || isInt(v, 30, 110),
 };
 
 let current = null;

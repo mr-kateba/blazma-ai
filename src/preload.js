@@ -15,6 +15,24 @@ contextBridge.exposeInMainWorld(
     stopServer: () => ipcRenderer.invoke('server:stop'),
     getConnection: () => ipcRenderer.invoke('server:getConnection'),
     getChatSettings: () => ipcRenderer.invoke('chat:getSettings'),
+    getSettings: () => ipcRenderer.invoke('settings:get'),
+    updateSettings: (patch) => ipcRenderer.invoke('settings:update', patch),
+    monitorInfo: () => ipcRenderer.invoke('monitor:info'),
+    monitorStart: (intervalMs) => ipcRenderer.invoke('monitor:start', Number(intervalMs)),
+    monitorStop: () => ipcRenderer.invoke('monitor:stop'),
+    monitorLast: () => ipcRenderer.invoke('monitor:last'),
+    runBenchmark: () => ipcRenderer.invoke('bench:run'),
+    exportReport: () => ipcRenderer.invoke('report:export'),
+    onMonitorSample: (callback) => {
+      const listener = (_event, sample) => callback(sample);
+      ipcRenderer.on('monitor:sample', listener);
+      return () => ipcRenderer.removeListener('monitor:sample', listener);
+    },
+    onAlerts: (callback) => {
+      const listener = (_event, alerts) => callback(alerts);
+      ipcRenderer.on('monitor:alerts', listener);
+      return () => ipcRenderer.removeListener('monitor:alerts', listener);
+    },
     onSetupState: (callback) => {
       const listener = (_event, state) => callback(state);
       ipcRenderer.on('setup:state', listener);

@@ -474,3 +474,96 @@ details.tech pre {
   padding: 6px 4px;
 }
 .composer textarea::placeholder { color: var(--faint); }
+
+/* ---------- global alerts ---------- */
+.global-alerts { position: sticky; top: 0; z-index: 5; }
+.alert { padding: 10px 40px; font-size: 14px; border-bottom: 1px solid; }
+.alert-warn { background: #2a2210; border-color: rgba(230, 162, 60, 0.45); color: #f2c27a; }
+.alert-danger { background: #2c1414; border-color: rgba(239, 90, 90, 0.5); color: #ff9b9b; }
+
+/* ---------- device page ---------- */
+.row-between { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.page-device { padding-bottom: 48px; }
+
+.now-running {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin-top: 20px;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.bench {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 28px;
+  margin-top: 12px;
+  padding: 12px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--accent-soft);
+  background: rgba(91, 140, 255, 0.06);
+  font-size: 14px;
+}
+.bench-item { display: flex; flex-direction: column; }
+.bench-item b { font-size: 17px; }
+.spinner.small { width: 18px; height: 18px; border-width: 2px; }
+.ok-note { background: rgba(63, 191, 127, 0.1); border-color: rgba(63, 191, 127, 0.35); color: #8fe0b5; }
+
+.dev-section { margin-top: 28px; }
+.dev-section h2 { margin: 0 0 4px; font-size: 17px; font-weight: 600; }
+.dev-sub { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+.dev-footnote { color: var(--faint); font-size: 12px; margin: 8px 0 0; }
+
+.stats { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; }
+.stat {
+  padding: 12px 14px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-inline-start: 3px solid var(--border);
+  min-height: 84px;
+}
+.stat-label { color: var(--muted); font-size: 13px; }
+.stat-value { font-size: 19px; font-weight: 600; line-height: 1.5; font-variant-numeric: tabular-nums; }
+.stat-value.na { font-size: 15px; color: var(--faint); font-weight: 400; }
+.stat-note { color: var(--faint); font-size: 12px; line-height: 1.5; }
+.st-ok { border-inline-start-color: var(--ok); }
+.st-warn { border-inline-start-color: var(--warn); }
+.st-warn .stat-value { color: #f2c27a; }
+.st-danger { border-inline-start-color: var(--danger); }
+.st-danger .stat-value { color: #ff9b9b; }
+
+.cores { display: flex; gap: 3px; height: 44px; align-items: flex-end; padding: 6px; border-radius: 8px; background: var(--surface); border: 1px solid var(--border); }
+.core { flex: 1; height: 100%; display: flex; align-items: flex-end; background: var(--surface-2); border-radius: 2px; }
+.core-fill { width: 100%; background: #3fbf7f; border-radius: 2px; }
+
+.charts { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.chart { padding: 10px 12px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border); }
+.chart-head { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+.chart-canvas { display: block; width: 100%; height: 130px; }
+.legend { display: flex; gap: 12px; }
+.legend-item { display: inline-flex; align-items: center; gap: 5px; }
+.dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.c-gpu { background: #5b8cff; }
+.c-cpu { background: #3fbf7f; }
+
+/* ---------- settings ---------- */
+.set-card { max-width: 560px; margin-top: 24px; padding: 18px 20px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 12px; }
+.set-card h2 { margin: 0; font-size: 17px; }
+.set-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.set-row.check { justify-content: flex-start; }
+.set-row select, .set-row input[type='number'] {
+  width: 120px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+}
+.set-row input:disabled { opacity: 0.5; }

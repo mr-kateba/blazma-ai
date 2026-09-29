@@ -75,6 +75,21 @@ if (smi) {
   log(run(smi, ['--query-compute-apps=pid,process_name,used_memory', '--format=csv,noheader']).trim() || '(no compute apps)');
 }
 
+if (smi) {
+  section('nvidia-smi temperature limits');
+  log(run(smi, ['-q', '-d', 'TEMPERATURE']).split(/\r?\n/).filter((l) => /Temp/i.test(l)).join('\n'));
+}
+
+section('Windows readings used by the "جهازي" page');
+const ps = (script) =>
+  run('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script]).trim();
+log(`CPU % performance (x base clock = current clock): ${ps("(Get-CimInstance Win32_PerfFormattedData_Counters_ProcessorInformation -Filter \"Name='_Total'\").PercentProcessorPerformance")}`);
+log(`CPU base clock MHz / cores / threads: ${ps("$c = Get-CimInstance Win32_Processor | Select-Object -First 1; \"$($c.MaxClockSpeed) / $($c.NumberOfCores) / $($c.NumberOfLogicalProcessors)\"")}`);
+log(`RAM modules (SMBIOSMemoryType, Speed, ConfiguredClockSpeed): ${ps("Get-CimInstance Win32_PhysicalMemory | ForEach-Object { \"$($_.SMBIOSMemoryType)/$($_.Speed)/$($_.ConfiguredClockSpeed)\" }")}`);
+log(`GPU process memory counters available: ${ps("@(Get-CimInstance Win32_PerfFormattedData_GPUPerformanceCounters_GPUProcessMemory).Count")}`);
+log(`llama-server GPU dedicated MB (Windows counters): ${ps("$p = Get-Process llama-server -ErrorAction SilentlyContinue | Select-Object -First 1; if ($p) { $n = 'pid_' + $p.Id + '_*'; [math]::Round(((Get-CimInstance Win32_PerfFormattedData_GPUPerformanceCounters_GPUProcessMemory | Where-Object { $_.Name -like $n } | Measure-Object DedicatedUsage -Sum).Sum) / 1MB) } else { 'not running' }")}`);
+log(`Battery: ${ps("$b = Get-CimInstance Win32_Battery; if ($b) { \"$($b.EstimatedChargeRemaining)% status=$($b.BatteryStatus)\" } else { 'none' }")}`);
+
 section('Blazma AI engine');
 const userData = path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'Blazma AI');
 const current = path.join(userData, 'engine', 'current.json');
