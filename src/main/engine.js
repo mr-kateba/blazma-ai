@@ -14,22 +14,23 @@ const { downloadFile, freeBytes } = require('./download');
 const { extractZip } = require('./extract');
 const { AppError } = require('./errors');
 
-const RELEASE_API = 'https://api.github.com/repos/ggml-org/llama.cpp/releases/latest';
+const RELEASES_API = 'https://api.github.com/repos/ggml-org/llama.cpp/releases';
 const EXE_NAME = process.platform === 'win32' ? 'llama-server.exe' : 'llama-server';
 
 const currentFile = () => path.join(paths.engineRoot(), 'current.json');
 
-async function fetchLatestRelease() {
+async function githubJson(url) {
   let res;
   try {
-    res = await net.fetch(RELEASE_API, {
-      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Blazma-AI' },
-    });
+    res = await net.fetch(url, { headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Blazma-AI' } });
   } catch (err) {
     throw new AppError('network', err.message);
   }
-  if (!res.ok) throw new AppError('engine-release', `GitHub API HTTP ${res.status}`);
-  const json = await res.json();
+  if (!res.ok) throw new AppError('engine-release', `GitHub API HTTP ${res.status} for ${url}`);
+  return res.json();
+}
+
+function toRelease(json) {
   return {
     tag: String(json.tag_name || ''),
     assets: (json.assets || []).map((a) => ({
@@ -39,6 +40,25 @@ async function fetchLatestRelease() {
       sha256: /^sha256:([a-f0-9]{64})$/i.exec(a.digest || '')?.[1] || null,
     })),
   };
+}
+
+// The release marked "latest" can be published before its Windows archives
+// finish uploading, so fall back to the newest recent release that has them.
+async function findRelease(nvidia) {
+  const latest = toRelease(await githubJson(`${RELEASES_API}/latest`));
+  if (planVariants(latest.assets, nvidia).length) return latest;
+
+  const recent = await githubJson(`${RELEASES_API}?per_page=10`);
+  for (const json of Array.isArray(recent) ? recent : []) {
+    if (json.draft || json.prerelease) continue;
+    const release = toRelease(json);
+    if (planVariants(release.assets, nvidia).length) return release;
+  }
+  const names = latest.assets.map((a) => a.name).filter((n) => /win/i.test(n));
+  throw new AppError(
+    'engine-no-asset',
+    `latest ${latest.tag}: ${latest.assets.length} assets; windows: ${names.join(', ') || 'none'}`,
+  );
 }
 
 // Ordered list of builds to try: newest CUDA the driver supports, older CUDA,
@@ -151,9 +171,8 @@ async function ensureEngine({ nvidia, onProgress }) {
   if (process.platform !== 'win32') throw new AppError('unsupported-os', process.platform);
 
   onProgress({ stage: 'release' });
-  const release = await fetchLatestRelease();
+  const release = await findRelease(nvidia);
   const variants = planVariants(release.assets, nvidia);
-  if (!variants.length) throw new AppError('engine-no-asset', `release ${release.tag}`);
 
   const failures = [];
   for (const variant of variants) {
@@ -178,4 +197,4 @@ async function ensureEngine({ nvidia, onProgress }) {
   throw new AppError('engine-test-failed', failures.map((f) => `[${f.variant}]\n${f.output}`).join('\n\n'));
 }
 
-module.exports = { ensureEngine, installedEngine, planVariants, fetchLatestRelease };
+module.exports = { ensureEngine, installedEngine, planVariants, findRelease };
