@@ -42,22 +42,18 @@ function toRelease(json) {
   };
 }
 
-// The release marked "latest" can be published before its Windows archives
-// finish uploading, so fall back to the newest recent release that has them.
+// Windows builds are published as prereleases named bNNNN (release.yml,
+// `prerelease: true`), while the release GitHub marks "latest" is a
+// versioned one (e.g. v0.5.0, make-release.yml) without Windows archives.
+// So take the newest non-draft release that has usable Windows assets.
 async function findRelease(nvidia) {
-  const latest = toRelease(await githubJson(`${RELEASES_API}/latest`));
-  if (planVariants(latest.assets, nvidia).length) return latest;
-
-  const recent = await githubJson(`${RELEASES_API}?per_page=10`);
-  for (const json of Array.isArray(recent) ? recent : []) {
-    if (json.draft || json.prerelease) continue;
-    const release = toRelease(json);
-    if (planVariants(release.assets, nvidia).length) return release;
-  }
-  const names = latest.assets.map((a) => a.name).filter((n) => /win/i.test(n));
+  const recent = await githubJson(`${RELEASES_API}?per_page=15`);
+  const releases = (Array.isArray(recent) ? recent : []).filter((r) => !r.draft).map(toRelease);
+  const usable = releases.find((r) => planVariants(r.assets, nvidia).length);
+  if (usable) return usable;
   throw new AppError(
     'engine-no-asset',
-    `latest ${latest.tag}: ${latest.assets.length} assets; windows: ${names.join(', ') || 'none'}`,
+    releases.map((r) => `${r.tag}: ${r.assets.filter((a) => /win/i.test(a.name)).length} windows assets`).join('\n') || 'no releases',
   );
 }
 
