@@ -5,44 +5,91 @@
 تطبيق ويندوز مفتوح المصدر بواجهة عربية كاملة، يجمع شيئين:
 
 1. **محادثة مع ذكاء اصطناعي يعمل محلياً** على كرت الشاشة في جهازك (موديلات مفتوحة فوق محرك [llama.cpp](https://github.com/ggml-org/llama.cpp)).
-2. **لوحة مراقبة حيّة للجهاز**: كرت الشاشة والمعالج والذاكرة والحرارة وسحب الطاقة.
+2. **لوحة مراقبة حيّة للجهاز**: كرت الشاشة والمعالج والذاكرة والحرارة وسحب الطاقة (المرحلة 2).
 
-> ⚠️ المشروع في بداياته (المرحلة 0). التطبيق لا يحادث أي موديل بعد.
+> ⚠️ المشروع قيد البناء (المرحلة 1). المحادثة الأساسية تعمل، والباقي في الطريق.
 
 ## الحالة الحالية
 
 | الجزء | الحالة |
 |---|---|
-| هيكل التطبيق والنافذة والشريط الجانبي والصفحات الأربع | ✅ يعمل |
-| الأمان: عزل السياق، بدون Node في الواجهة، CSP صارم، قنوات IPC محددة | ✅ يعمل |
-| تنزيل المحرك وتشغيله والمحادثة | ⏳ المرحلة 1 |
+| هيكل التطبيق والأمان والواجهة العربية | ✅ يعمل |
+| فحص الجهاز واقتراح الموديل المناسب | ✅ يعمل |
+| تنزيل محرك llama.cpp تلقائياً واختيار نسخة CUDA المناسبة لتعريفك | ✅ مكتوب، ⚠️ لم يُجرَّب على ويندوز بعد |
+| تنزيل الموديل بتقدّم حقيقي، والاستكمال تلقائياً بعد انقطاع الإنترنت | ✅ يعمل |
+| المحادثة: بث الرد، منطقة "يفكّر"، اتجاه النص التلقائي، markdown آمن، زر إيقاف | ✅ يعمل |
+| إيقاف المحرك عند إغلاق التطبيق وتنظيفه بعد الانهيار | ✅ يعمل |
+| رسائل الأخطاء بالعربي مع اقتراح الحل | ✅ يعمل |
+| العمل بدون كرت NVIDIA (على المعالج بموديل صغير) | ✅ يعمل |
+| مقارنة Qwen3.5 9B وGemma 4 12B على كرت الشاشة | ⏳ تحتاج تجربة على جهاز فيه كرت NVIDIA |
 | لوحة "جهازي" | ⏳ المرحلة 2 |
-| حفظ المحادثات وصفحة الموديلات والإعدادات | ⏳ المرحلة 3 |
+| حفظ المحادثات، صفحة الموديلات، الإعدادات، التحديثات | ⏳ المرحلة 3 |
 | ملف التنصيب | ⏳ المرحلة 4 |
 
 خطة البناء الكاملة في [docs/PLAN.md](docs/PLAN.md).
 
+## كيف يعمل
+
+1. **أول تشغيل:** يفحص التطبيق كرت الشاشة عبر `nvidia-smi`، ويقترح موديلاً يناسب ذاكرة الكرت.
+2. **المحرك:** ينزّل أحدث إصدار ويندوز من [llama.cpp على GitHub](https://github.com/ggml-org/llama.cpp/releases). أسماء الملفات تُقرأ من الإصدار نفسه، ويختار أحدث نسخة CUDA يدعمها تعريف كرتك. بعد التنزيل يتحقق من الحجم ومن بصمة SHA-256، ثم يتأكد أن المحرك يرى الكرت فعلاً. إذا لم يعمل يجرّب نسخة CUDA أقدم، ثم Vulkan، ثم المعالج.
+3. **الموديل:** يشغّل `llama-server` بخيار `-hf` فينزّل الموديل من Hugging Face. يستكمل التنزيل من حيث توقف إذا انقطع الإنترنت. شريط التقدم يقيس حجم الملف الفعلي على القرص، وبعد التنزيل يتحقق التطبيق من بصمة SHA-256 للموديل.
+4. **المحادثة:** الواجهة تتصل مباشرة بالخادم المحلي `http://127.0.0.1:<port>/v1/chat/completions` وتعرض الرد كلمة بكلمة.
+
+## الموديلات
+
+| الموديل | الملف على Hugging Face | الحجم | الرخصة | متى يُقترح |
+|---|---|---|---|---|
+| Qwen3.5 9B | `unsloth/Qwen3.5-9B-GGUF:Q4_K_M` | 5.68 GB | Apache-2.0 | كروت 8 جيجابايت فأكثر (الافتراضي حالياً) |
+| Gemma 4 12B | `unsloth/gemma-4-12b-it-GGUF:UD-Q4_K_XL` | 7.37 GB | Apache-2.0 | كروت 10 جيجابايت فأكثر |
+| Qwen3.5 4B | `unsloth/Qwen3.5-4B-GGUF:Q4_K_M` | 2.74 GB | Apache-2.0 | كروت 4 جيجابايت |
+| Qwen3.5 2B | `unsloth/Qwen3.5-2B-GGUF:Q4_K_M` | 1.28 GB | Apache-2.0 | أجهزة بدون كرت NVIDIA (يعمل على المعالج) |
+
+- الأحجام والرخص من صفحات الموديلات على Hugging Face.
+- إعدادات التوليد لكل موديل (temperature وtop_p وtop_k وغيرها) مأخوذة من صفحة الموديل الأصلي.
+- على المعالج نوقف مرحلة التفكير، لأنها قد تؤخر الرد لدقائق.
+
+### مقارنة الموديلين
+
+الاختبار جارٍ. ستُضاف النتائج هنا.
+
 ## التشغيل من الكود المصدري
 
-المتطلبات: [Node.js](https://nodejs.org) (نسخة LTS) و[Git](https://git-scm.com).
+المتطلبات: ويندوز 10 أو 11، و[Node.js](https://nodejs.org) (نسخة LTS)، و[Git](https://git-scm.com).
 
 ```powershell
+cd $HOME
 git clone https://github.com/mr-kateba/blazma-ai.git
 cd blazma-ai
 npm install
 npm start
 ```
 
-## الخصوصية
+للتشخيص عند وجود مشكلة: `npm run diag`. يحفظ تقريراً في `diag-report.txt` بدون اسم المستخدم.
+
+## الخصوصية والأمان
 
 - لا توجد أي تحليلات أو تتبع (telemetry).
-- المحادثات وقراءات الجهاز تبقى على جهازك فقط.
-- التطبيق يتصل بالإنترنت فقط من أجل: تنزيل المحرك من GitHub، وتنزيل الموديلات من Hugging Face، والتحقق من التحديثات.
+- المحادثات تبقى على جهازك فقط.
+- التطبيق يتصل بالإنترنت فقط من أجل:
+  - تنزيل المحرك من GitHub.
+  - تنزيل الموديلات من Hugging Face.
+  - التحقق من التحديثات (في مرحلة لاحقة).
 - الخادم المحلي يستمع على `127.0.0.1` فقط، ولا يمكن الوصول إليه من الشبكة.
+- لكل تشغيل مفتاح عشوائي جديد يُمرَّر للخادم عبر متغير بيئة، فلا يظهر في قائمة العمليات.
+- الخادم لا يقبل إلا طلبات التطبيق نفسه، فلا تستطيع أي صفحة ويب مفتوحة في متصفحك استخدام الموديل.
+- الواجهة معزولة عن النظام، وعليها سياسة CSP صارمة تمنع أي اتصال غير الخادم المحلي.
+- ردود الموديل تُعرض كنص فقط، ولا يُنفَّذ أي HTML فيها.
+
+## الحدود المعروفة
+
+- الموديل الصغير على المعالج (2B) لغته العربية سليمة، لكنه يخطئ أحياناً في المعلومات والحساب. موديل 4B أدق بشكل واضح لكنه أبطأ بمرتين.
+- إذا أُغلق التطبيق بالقوة (مثلاً "إنهاء المهمة")، قد يبقى المحرك يعمل حتى تفتح التطبيق مرة أخرى، وعندها يغلقه تلقائياً.
 
 ## الرخصة والإسناد
 
 - التطبيق: رخصة [MIT](LICENSE).
+- محرك التشغيل: [llama.cpp](https://github.com/ggml-org/llama.cpp)، رخصة MIT. ينزّله التطبيق من إصداراته الرسمية.
+- الموديلات: Qwen3.5 من Alibaba Cloud، وGemma 4 من Google، وكلاهما برخصة Apache-2.0. ملفات GGUF من [Unsloth](https://huggingface.co/unsloth).
 - الخط: IBM Plex Sans Arabic، رخصة SIL Open Font License 1.1 ([src/renderer/fonts/OFL.txt](src/renderer/fonts/OFL.txt)).
 
 </div>
@@ -51,6 +98,18 @@ npm start
 
 ## English
 
-**Blazma AI** is an open-source Windows app with a fully Arabic (RTL) interface that combines a chat with open models running locally on your GPU (via llama.cpp's `llama-server`) and a live hardware monitor (GPU, CPU, RAM, temperatures, power draw).
+**Blazma AI** is an open-source Windows app with a fully Arabic (RTL) interface. It combines a chat with open models running locally on your GPU (through llama.cpp's `llama-server`) and a live hardware monitor (GPU, CPU, RAM, temperatures, power draw).
 
-Status: early scaffold (phase 0). Run from source with `npm install && npm start`. No telemetry; network access is used only to download the engine (GitHub), models (Hugging Face), and to check for updates. License: MIT.
+**Status:** phase 1. Local chat works end to end:
+- hardware detection and model recommendation;
+- automatic llama.cpp download with CUDA version selection and a fallback chain;
+- resumable model download with real progress;
+- streaming chat with a collapsible reasoning section and safe Markdown rendering.
+
+Windows-specific paths are written but still awaiting testing on a real Windows + NVIDIA machine.
+
+**Run from source:** `npm install && npm start`.
+
+**Privacy:** no telemetry. The network is used only to download the engine (GitHub) and models (Hugging Face), and later to check for updates. The local server binds to 127.0.0.1, requires a per-session random API key, and only accepts the app's own origin.
+
+**License:** MIT. llama.cpp is MIT. Qwen3.5 and Gemma 4 are Apache-2.0. IBM Plex Sans Arabic is OFL-1.1.

@@ -46,15 +46,29 @@
     </aside>
 
     <main class="content">
-      <section class="page" data-page="chat" hidden>
-        <header class="page-head">
-          <h1>المحادثة</h1>
-          <p>تحدّث مع موديل ذكاء اصطناعي يعمل على كرت الشاشة في جهازك.</p>
+      <section class="page page-chat" data-page="chat" hidden>
+        <header class="chat-head">
+          <div class="chat-title">
+            <h1>المحادثة</h1>
+            <span id="model-pill" class="pill" dir="ltr" hidden></span>
+            <span id="status-pill" class="status" data-status="busy"><i aria-hidden="true"></i><span></span></span>
+          </div>
+          <div class="row">
+            <button id="btn-new-chat" class="btn ghost" type="button">محادثة جديدة</button>
+            <button id="btn-stop-server" class="btn ghost" type="button" hidden>إيقاف المحرك</button>
+          </div>
         </header>
-        <div class="empty">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>
-          <h2>المحادثة ليست جاهزة بعد</h2>
-          <p>ستعمل هذه الصفحة بعد تثبيت المحرك وتنزيل الموديل.</p>
+        <div id="engine-note" class="notice" hidden></div>
+
+        <div id="setup-panel" class="setup"></div>
+
+        <div id="chat-area" class="chat-area" hidden>
+          <div id="chat-log" class="chat-log" aria-live="polite"></div>
+          <form id="composer" class="composer">
+            <textarea id="chat-input" dir="auto" rows="1" aria-label="رسالتك"></textarea>
+            <button id="btn-send" class="btn primary" type="submit">إرسال</button>
+            <button id="btn-stop-gen" class="btn danger" type="button" hidden>إيقاف</button>
+          </form>
         </div>
       </section>
 

@@ -2,14 +2,20 @@
 
 const path = require('node:path');
 const { app, BrowserWindow, Menu, session } = require('electron');
-const { registerScheme, handleAppProtocol, APP_ORIGIN } = require('./protocol');
+const { registerScheme, handleAppProtocol, setServerPort, APP_ORIGIN } = require('./protocol');
 const { registerIpc } = require('./ipc');
+const { Setup } = require('./setup');
 
 // Must run before `ready` so userData resolves to "%APPDATA%\Blazma AI".
 app.setName('Blazma AI');
 registerScheme();
 
 let mainWindow = null;
+const setup = new Setup();
+
+function sendState(state) {
+  if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('setup:state', state);
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -62,13 +68,32 @@ if (!app.requestSingleInstanceLock()) {
     mainWindow.focus();
   });
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     Menu.setApplicationMenu(null);
     hardenWebContents();
     handleAppProtocol();
-    registerIpc();
+    registerIpc(setup);
+
+    // The CSP served with the page names the server port, so pick it first.
+    setServerPort(await setup.choosePort());
+    setup.on('state', sendState);
+    setup.on('port-changed', (port) => {
+      setServerPort(port);
+      if (mainWindow) mainWindow.webContents.reload();
+    });
+
     createWindow();
+    setup.init();
   });
 
   app.on('window-all-closed', () => app.quit());
+
+  // Never leave llama-server running (and holding GPU memory) after we exit.
+  app.on('will-quit', () => setup.shutdownSync());
+  process.on('exit', () => setup.shutdownSync());
+  process.on('uncaughtException', (err) => {
+    console.error(err);
+    setup.shutdownSync();
+    app.exit(1);
+  });
 }

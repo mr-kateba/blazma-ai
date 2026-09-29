@@ -1,0 +1,73 @@
+{
+  "version": 1,
+  "models": [
+    {
+      "id": "qwen3.5-9b",
+      "name": "Qwen3.5 9B",
+      "hf": "unsloth/Qwen3.5-9B-GGUF:Q4_K_M",
+      "sizeBytes": 5680522464,
+      "minVramMB": 7680,
+      "license": "Apache-2.0",
+      "note": "الموديل الأساسي المقترح لكروت 12 جيجابايت. يفكّر قبل أن يجيب.",
+      "thinking": true,
+      "sampling": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 20,
+        "min_p": 0.0,
+        "presence_penalty": 1.5
+      }
+    },
+    {
+      "id": "gemma-4-12b",
+      "name": "Gemma 4 12B",
+      "hf": "unsloth/gemma-4-12b-it-GGUF:UD-Q4_K_XL",
+      "sizeBytes": 7366423360,
+      "minVramMB": 10240,
+      "license": "Apache-2.0",
+      "note": "موديل أكبر من Google. يحتاج ذاكرة كرت أكثر.",
+      "thinking": true,
+      "sampling": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 64
+      }
+    },
+    {
+      "id": "qwen3.5-4b",
+      "name": "Qwen3.5 4B",
+      "hf": "unsloth/Qwen3.5-4B-GGUF:Q4_K_M",
+      "sizeBytes": 2740937888,
+      "minVramMB": 3584,
+      "license": "Apache-2.0",
+      "note": "موديل أصغر لكروت الشاشة ذات الذاكرة القليلة.",
+      "thinking": true,
+      "sampling": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 20,
+        "min_p": 0.0,
+        "presence_penalty": 1.5
+      }
+    },
+    {
+      "id": "qwen3.5-2b",
+      "name": "Qwen3.5 2B",
+      "hf": "unsloth/Qwen3.5-2B-GGUF:Q4_K_M",
+      "sizeBytes": 1280835840,
+      "minVramMB": 0,
+      "cpu": true,
+      "license": "Apache-2.0",
+      "note": "موديل صغير يعمل على المعالج للأجهزة بدون كرت NVIDIA. الردود أبطأ وأبسط.",
+      "thinking": false,
+      "sampling": {
+        "temperature": 0.7,
+        "top_p": 0.8,
+        "top_k": 20,
+        "min_p": 0.0,
+        "presence_penalty": 1.5
+      }
+    }
+  ],
+  "_sampling_source": "Values from each model's Hugging Face card (Qwen/Qwen3.5-9B README 'Best Practices'; google/gemma-4-12B-it README 'Sampling Parameters')."
+}
