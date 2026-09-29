@@ -1,4 +1,5 @@
 import { ar } from './i18n/ar.js';
+import { initChat } from './pages/chat.js';
 
 const PAGES = ['chat', 'device', 'models', 'settings'];
 
@@ -29,3 +30,4 @@ for (const item of document.querySelectorAll('.nav-item')) {
 
 showPage('chat');
 showVersion();
+initChat();

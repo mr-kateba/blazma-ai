@@ -5,6 +5,8 @@
 
 const { app, ipcMain } = require('electron');
 const { APP_ORIGIN } = require('./protocol');
+const settings = require('./settings');
+const models = require('./models');
 
 function isTrustedSender(event) {
   const url = event.senderFrame && event.senderFrame.url;
@@ -18,11 +20,26 @@ function handle(channel, fn) {
   });
 }
 
-function registerIpc() {
-  handle('app:getInfo', () => ({
-    name: app.getName(),
-    version: app.getVersion(),
-  }));
+function registerIpc(setup) {
+  handle('app:getInfo', () => ({ name: app.getName(), version: app.getVersion() }));
+  handle('setup:getState', () => setup.snapshot());
+  handle('setup:start', (modelId) => {
+    if (typeof modelId === 'string') setup.start(modelId);
+  });
+  handle('setup:retry', () => setup.retry());
+  handle('server:stop', () => setup.stopServer());
+  handle('server:getConnection', () => setup.connection());
+  // Per-request generation options: the active model's recommended sampling
+  // (from catalog.json), the user's temperature if set, and thinking on/off.
+  handle('chat:getSettings', () => {
+    const s = settings.get();
+    const model = models.findModel(s.activeModelId);
+    const sampling = { ...((model && model.sampling) || {}) };
+    if (s.temperature !== null) sampling.temperature = s.temperature;
+    // On the CPU, thinking first can mean minutes before the answer starts.
+    const onGpu = Boolean(setup.snapshot().hardware && setup.snapshot().hardware.nvidia) && !(model && model.cpu);
+    return { systemPrompt: s.systemPrompt, sampling, thinking: Boolean(model && model.thinking && onGpu) };
+  });
 }
 
 module.exports = { registerIpc };

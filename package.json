@@ -13,13 +13,15 @@
   },
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win nsis"
+    "dist": "electron-builder --win nsis",
+    "diag": "node scripts/diag.js"
   },
   "build": {
     "appId": "com.blazma.ai",
     "productName": "Blazma AI",
     "files": [
       "src/**/*",
+      "catalog.json",
       "package.json"
     ],
     "win": {
