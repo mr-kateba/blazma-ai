@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <!-- The main process also sends a CSP header that narrows connect-src to the exact server port. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src http://127.0.0.1:*; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Blazma AI</title>
+  <link rel="stylesheet" href="styles.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">B</span>
+        <div>
+          <div class="brand-name" dir="ltr">Blazma AI</div>
+          <div class="brand-sub">ذكاء اصطناعي يعمل على جهازك</div>
+        </div>
+      </div>
+
+      <nav class="nav" aria-label="الصفحات">
+        <button class="nav-item" type="button" data-page="chat">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>
+          <span>المحادثة</span>
+        </button>
+        <button class="nav-item" type="button" data-page="device">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
+          <span>جهازي</span>
+        </button>
+        <button class="nav-item" type="button" data-page="models">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 3 8l9 5 9-5z"/><path d="m3 13 9 5 9-5"/></svg>
+          <span>الموديلات</span>
+        </button>
+        <button class="nav-item" type="button" data-page="settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>
+          <span>الإعدادات</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-foot">
+        <span>الإصدار</span>
+        <span id="app-version" class="version" dir="ltr"></span>
+      </div>
+    </aside>
+
+    <main class="content">
+      <section class="page" data-page="chat" hidden>
+        <header class="page-head">
+          <h1>المحادثة</h1>
+          <p>تحدّث مع موديل ذكاء اصطناعي يعمل على كرت الشاشة في جهازك.</p>
+        </header>
+        <div class="empty">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>
+          <h2>المحادثة ليست جاهزة بعد</h2>
+          <p>ستعمل هذه الصفحة بعد تثبيت المحرك وتنزيل الموديل.</p>
+        </div>
+      </section>
+
+      <section class="page" data-page="device" hidden>
+        <header class="page-head">
+          <h1>جهازي</h1>
+          <p>مراقبة حيّة لكرت الشاشة والمعالج والذاكرة والحرارة والطاقة.</p>
+        </header>
+        <div class="empty">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>
+          <h2>لوحة المراقبة قيد البناء</h2>
+          <p>ستظهر هنا قراءات الجهاز الحقيقية فقط.</p>
+        </div>
+      </section>
+
+      <section class="page" data-page="models" hidden>
+        <header class="page-head">
+          <h1>الموديلات</h1>
+          <p>تنزيل الموديلات وإدارتها والتبديل بينها.</p>
+        </header>
+        <div class="empty">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 3 8l9 5 9-5z"/><path d="m3 13 9 5 9-5"/></svg>
+          <h2>لا توجد موديلات بعد</h2>
+          <p>ستظهر هنا قائمة الموديلات المقترحة لجهازك.</p>
+        </div>
+      </section>
+
+      <section class="page" data-page="settings" hidden>
+        <header class="page-head">
+          <h1>الإعدادات</h1>
+          <p>إعدادات المحادثة والمحرك والمراقبة والتحديثات.</p>
+        </header>
+        <div class="empty">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1 7 17M17 7l2.1-2.1"/></svg>
+          <h2>الإعدادات قيد البناء</h2>
+          <p>ستُضاف الإعدادات مع الميزات التي تتحكم بها.</p>
+        </div>
+      </section>
+    </main>
+  </div>
+</body>
+</html>

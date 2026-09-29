@@ -1,0 +1,37 @@
+{
+  "name": "blazma-ai",
+  "productName": "Blazma AI",
+  "version": "0.1.0",
+  "description": "تطبيق ويندوز عربي لمحادثة ذكاء اصطناعي محلي ومراقبة الجهاز",
+  "main": "src/main/main.js",
+  "author": "mr-kateba",
+  "license": "MIT",
+  "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/mr-kateba/blazma-ai.git"
+  },
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis"
+  },
+  "build": {
+    "appId": "com.blazma.ai",
+    "productName": "Blazma AI",
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false
+    }
+  },
+  "devDependencies": {
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3"
+  }
+}
