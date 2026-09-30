@@ -454,8 +454,8 @@ details.tech pre {
 
 .composer {
   display: flex;
+  flex-direction: column;
   gap: 8px;
-  align-items: flex-end;
   padding: 10px;
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -567,3 +567,40 @@ details.tech pre {
   font: inherit;
 }
 .set-row input:disabled { opacity: 0.5; }
+
+/* ---------- images in chat ---------- */
+.composer-row { display: flex; gap: 8px; align-items: flex-end; }
+.icon-square {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex-shrink: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-2);
+  color: var(--muted);
+  cursor: pointer;
+}
+.icon-square:hover { color: var(--text); }
+.icon-square:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.icon-square svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.attach-preview { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.attach-preview[hidden] { display: none; }
+.thumb { position: relative; width: 64px; height: 64px; }
+.thumb img { width: 100%; height: 100%; object-fit: cover; border-radius: 8px; border: 1px solid var(--border); }
+.thumb-x {
+  position: absolute;
+  top: -6px;
+  inset-inline-end: -6px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  line-height: 1;
+}
+.msg-images { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+.msg-images img { max-width: 220px; max-height: 220px; border-radius: 8px; border: 1px solid var(--border); }

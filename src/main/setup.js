@@ -37,6 +37,7 @@ class Setup extends EventEmitter {
       engine: null,
       progress: null,
       error: null,
+      vision: false,
     };
 
     this.server.on('state', (s) => this.onServerState(s));
@@ -127,10 +128,21 @@ class Setup extends EventEmitter {
       let entry = models.manifest()[model.hf];
       if (!entry) {
         this.update({ phase: 'model-resolve' });
-        entry = await models.resolveRemote(model.hf);
+        entry = await models.resolveRemote(model.hf, { vision: Boolean(model.vision) });
         if (run !== this.runId) return;
         entry.verified = false;
         models.saveManifestEntry(model.hf, entry);
+      } else if (model.vision && !entry.vision) {
+        // Downloaded before image support: add the vision projector. Without
+        // internet, keep chatting with text only rather than blocking.
+        try {
+          const upgraded = await models.resolveRemote(model.hf, { vision: true });
+          if (run !== this.runId) return;
+          entry = { ...upgraded, verified: false };
+          models.saveManifestEntry(model.hf, entry);
+        } catch (err) {
+          if (toAppError(err).code !== 'network') throw err;
+        }
       }
       this.entry = entry;
 
@@ -167,8 +179,10 @@ class Setup extends EventEmitter {
       gpuLayers: useGpu ? settings.get().gpuLayers : 0,
       port: this.port,
       offline: complete,
+      vision: Boolean(entry.vision),
       hfEndpoint: process.env.BLAZMA_HF_ENDPOINT || null,
     });
+    this.update({ vision: Boolean(entry.vision) });
 
     if (complete) {
       this.update({ phase: 'loading', progress: null });

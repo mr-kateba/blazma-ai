@@ -61,7 +61,36 @@ function pickFiles(tree, quant) {
   return tree.filter((f) => f.path.startsWith(`${split[1]}-`) && new RegExp(`-\\d{5}-of-${split[2]}\\.gguf$`).test(f.path));
 }
 
-async function resolveRemote(hf) {
+// Quantization bits from a GGUF file name's last tag: Q4_K_M -> 4, F16 -> 16
+// (llama.cpp get_gguf_split_info + extract_quant_bits).
+function quantBits(file) {
+  const base = file.replace(/\.gguf$/i, '').replace(/-\d{5}-of-\d{5}$/i, '');
+  const tag = (/[-.]([A-Z0-9_]+)$/i.exec(base) || [])[1] || '';
+  const m = /\d+/.exec(tag);
+  return m ? Number(m[0]) : 0;
+}
+
+// Mirrors llama.cpp's choice of vision projector for -hf (download.cpp
+// find_best_sibling with keyword "mmproj"): same folder as the model, closest
+// quantization bits to the model's, first in listing order on a tie.
+function pickMmproj(tree, modelPath) {
+  const dir = path.posix.dirname(modelPath);
+  const bits = quantBits(modelPath);
+  let best = null;
+  let bestDiff = Infinity;
+  for (const f of tree) {
+    if (f.type !== 'file' || !f.path.endsWith('.gguf') || !f.path.includes('mmproj')) continue;
+    if (path.posix.dirname(f.path) !== dir) continue;
+    const diff = Math.abs(quantBits(f.path) - bits);
+    if (diff < bestDiff) {
+      best = f;
+      bestDiff = diff;
+    }
+  }
+  return best;
+}
+
+async function resolveRemote(hf, { vision = false } = {}) {
   const { repo, quant } = parseHf(hf);
   let res;
   try {
@@ -74,13 +103,16 @@ async function resolveRemote(hf) {
   if (res.status === 404 || res.status === 401) throw new AppError('model-not-found', hf);
   if (!res.ok) throw new AppError('network', `Hugging Face HTTP ${res.status}`);
   const tree = await res.json();
-  const files = pickFiles(Array.isArray(tree) ? tree : [], quant).map((f) => ({
+  const list = Array.isArray(tree) ? tree : [];
+  const picked = pickFiles(list, quant);
+  const mmproj = vision && picked.length ? pickMmproj(list, picked[0].path) : null;
+  const files = [...picked, ...(mmproj ? [mmproj] : [])].map((f) => ({
     path: f.path,
     size: f.lfs ? f.lfs.size : f.size,
     oid: f.lfs ? f.lfs.oid : null,
   }));
   if (!files.length || files.some((f) => !f.oid)) throw new AppError('model-not-found', hf);
-  return { hf, repo, files, size: files.reduce((s, f) => s + f.size, 0) };
+  return { hf, repo, files, vision: Boolean(mmproj), size: files.reduce((s, f) => s + f.size, 0) };
 }
 
 // models.json remembers what each download resolved to, so the app can start

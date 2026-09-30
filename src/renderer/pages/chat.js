@@ -28,6 +28,11 @@ let selectedModelId = null;
 let messages = []; // { role, content, reasoning?, timings?, error?, stopped?, thinkStart?, thinkEnd? }
 let abortController = null;
 let speedSample = null; // for download speed: { t, done }
+let visionEnabled = false; // the running model was started with its vision projector
+let pendingImages = []; // data URLs attached to the message being written
+
+const MAX_IMAGES = 4;
+const MAX_IMAGE_SIDE = 1536;
 let speed = 0;
 
 // ---------- setup panel ----------
@@ -235,6 +240,12 @@ function renderStatus(state) {
 function onState(state) {
   const prevPhase = setupState && setupState.phase;
   setupState = state;
+  visionEnabled = Boolean(state.vision);
+  $('btn-attach').hidden = !visionEnabled;
+  if (!visionEnabled && pendingImages.length) {
+    pendingImages = [];
+    renderPreview();
+  }
   const ready = state.phase === 'ready';
   $('setup-panel').hidden = ready;
   $('chat-area').hidden = !ready;
@@ -266,7 +277,10 @@ function messageNode(msg, index) {
     body.append(thinking);
   }
 
-  if (isUser) body.append(el('p', { dir: detectDir(msg.content), class: 'plain' }, msg.content));
+  if (isUser && msg.images && msg.images.length) {
+    body.append(el('div', { class: 'msg-images' }, ...msg.images.map((src) => el('img', { src, alt: '' }))));
+  }
+  if (isUser && msg.content) body.append(el('p', { dir: detectDir(msg.content), class: 'plain' }, msg.content));
   else if (msg.content) body.append(renderMarkdown(msg.content, mdLabels));
 
   if (msg.stopped) body.append(el('p', { class: 'muted small' }, ar.chat.stopped));
@@ -330,13 +344,97 @@ function setBusy(busy) {
   $('btn-new-chat').disabled = busy;
 }
 
-async function send(text) {
+// Downscales to at most MAX_IMAGE_SIDE and re-encodes as JPEG, which keeps
+// requests small; the model resizes to its own input size anyway.
+async function prepareImage(file) {
+  const dataUrl = await new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  const img = await new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onload = () => resolve(image);
+    image.onerror = reject;
+    image.src = dataUrl;
+  });
+  const scale = Math.min(1, MAX_IMAGE_SIDE / Math.max(img.naturalWidth, img.naturalHeight));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#ffffff'; // transparent PNGs would otherwise turn black
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.9);
+}
+
+async function addImages(files) {
+  if (!visionEnabled) return;
+  for (const file of files) {
+    if (!file.type.startsWith('image/')) continue;
+    if (pendingImages.length >= MAX_IMAGES) {
+      showComposerNote(ar.chat.maxImages);
+      break;
+    }
+    try {
+      pendingImages.push(await prepareImage(file));
+    } catch {
+      showComposerNote(ar.chat.imageFailed);
+    }
+  }
+  renderPreview();
+}
+
+function showComposerNote(text) {
+  const box = $('attach-preview');
+  box.hidden = false;
+  box.append(el('span', { class: 'muted small attach-note' }, text));
+  setTimeout(renderPreview, 3000);
+}
+
+function renderPreview() {
+  const box = $('attach-preview');
+  box.hidden = pendingImages.length === 0;
+  box.replaceChildren(
+    ...pendingImages.map((src, i) =>
+      el(
+        'div',
+        { class: 'thumb' },
+        el('img', { src, alt: '' }),
+        el(
+          'button',
+          {
+            type: 'button',
+            class: 'thumb-x',
+            title: ar.chat.removeImage,
+            'aria-label': ar.chat.removeImage,
+            onclick: () => {
+              pendingImages.splice(i, 1);
+              renderPreview();
+            },
+          },
+          '×',
+        ),
+      ),
+    ),
+  );
+}
+
+// OpenAI-style content: plain text, or text plus image_url parts.
+function apiContent(m) {
+  if (!m.images || !m.images.length) return m.content;
+  return [{ type: 'text', text: m.content || ar.chat.describeImage }, ...m.images.map((url) => ({ type: 'image_url', image_url: { url } }))];
+}
+
+async function send(text, images = []) {
   const conn = await window.blazma.getConnection();
   if (!conn) return;
   const chatSettings = await window.blazma.getChatSettings();
 
   if (!messages.length) $('chat-log').replaceChildren();
-  messages.push({ role: 'user', content: text });
+  messages.push({ role: 'user', content: text, images });
   renderLast();
   const reply = { role: 'assistant', content: '', reasoning: '', streaming: true, thinkStart: Date.now() };
   messages.push(reply);
@@ -347,7 +445,7 @@ async function send(text) {
   const history = messages
     .slice(0, -1)
     .filter((m) => !m.error || m.content)
-    .map((m) => ({ role: m.role, content: m.content }));
+    .map((m) => ({ role: m.role, content: apiContent(m) }));
   const payload = {
     messages: [{ role: 'system', content: `${chatSettings.systemPrompt}\n\n${dateContext()}` }, ...history],
     stream: true,
@@ -415,10 +513,38 @@ export function initChat() {
   $('composer').addEventListener('submit', (e) => {
     e.preventDefault();
     const text = input.value.trim();
-    if (!text || abortController) return;
+    if ((!text && !pendingImages.length) || abortController) return;
+    const images = pendingImages;
+    pendingImages = [];
+    renderPreview();
     input.value = '';
     autoGrow(input);
-    send(text);
+    send(text, images);
+  });
+
+  // Images: button, paste, or drag and drop onto the chat.
+  $('btn-attach').title = ar.chat.attach;
+  $('btn-attach').setAttribute('aria-label', ar.chat.attach);
+  $('btn-attach').addEventListener('click', () => $('file-input').click());
+  $('file-input').addEventListener('change', (e) => {
+    addImages([...e.target.files]);
+    e.target.value = '';
+  });
+  input.addEventListener('paste', (e) => {
+    const files = [...e.clipboardData.items].filter((it) => it.kind === 'file').map((it) => it.getAsFile()).filter(Boolean);
+    if (files.length && visionEnabled) {
+      e.preventDefault();
+      addImages(files);
+    }
+  });
+  const area = $('chat-area');
+  area.addEventListener('dragover', (e) => {
+    if (visionEnabled) e.preventDefault();
+  });
+  area.addEventListener('drop', (e) => {
+    if (!visionEnabled) return;
+    e.preventDefault();
+    addImages([...e.dataTransfer.files]);
   });
   $('btn-stop-gen').addEventListener('click', () => abortController && abortController.abort());
   $('btn-new-chat').addEventListener('click', () => {

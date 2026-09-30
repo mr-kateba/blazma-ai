@@ -75,7 +75,7 @@ class LlamaServer extends EventEmitter {
     this.emit('state', state);
   }
 
-  // options: { exe, hf, modelsDir, contextSize, gpuLayers, port, offline }
+  // options: { exe, hf, modelsDir, contextSize, gpuLayers, port, offline, vision }
   start(options) {
     if (this.child) throw new Error('llama-server already running');
     this.options = options;
@@ -87,7 +87,6 @@ class LlamaServer extends EventEmitter {
     const args = [
       '-hf', options.hf,
       '--jinja',
-      '--no-mmproj',
       '-ngl', String(options.gpuLayers),
       '-c', String(options.contextSize),
       '--host', '127.0.0.1',
@@ -95,6 +94,9 @@ class LlamaServer extends EventEmitter {
       '--no-webui',
       '--cors-origins', 'app://blazma',
     ];
+    // Without --no-mmproj, -hf also fetches and loads the model's vision
+    // projector (mmproj) so the chat can take images.
+    if (!options.vision) args.push('--no-mmproj');
     if (options.offline) args.push('--offline');
 
     const env = {
