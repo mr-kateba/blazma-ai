@@ -17,6 +17,7 @@ function showPage(name) {
     if (item.dataset.page === name) item.setAttribute('aria-current', 'page');
     else item.removeAttribute('aria-current');
   }
+  document.body.classList.toggle('compact-nav', name === 'studio');
   setDeviceVisible(name === 'device');
   setStudioVisible(name === 'studio');
   setModelsVisible(name === 'models');
@@ -42,6 +43,7 @@ async function showVersion() {
 }
 
 for (const item of document.querySelectorAll('.nav-item')) {
+  item.title = item.textContent.trim(); // tooltip when the sidebar shows icons only
   item.addEventListener('click', () => showPage(item.dataset.page));
 }
 

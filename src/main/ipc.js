@@ -132,6 +132,7 @@ function registerIpc({ setup, monitor, getWindow }) {
   handle('studio:save', (project) => wrap(() => studio.save(project || {})));
   handle('studio:delete', (id) => studio.remove(String(id)));
   handle('studio:export', (id) => wrap(() => studio.exportProject(getWindow(), String(id))));
+  handle('studio:importFolder', () => wrap(() => studio.importFolder(getWindow())));
   handle('studio:preview', (files) => wrap(() => studio.setPreview(files || {})));
 
   // User-initiated only (a click on a code block): the save dialog decides

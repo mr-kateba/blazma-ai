@@ -35,6 +35,7 @@ contextBridge.exposeInMainWorld(
     studioSave: (project) => ipcRenderer.invoke('studio:save', project),
     studioDelete: (id) => ipcRenderer.invoke('studio:delete', String(id)),
     studioExport: (id) => ipcRenderer.invoke('studio:export', String(id)),
+    studioImportFolder: () => ipcRenderer.invoke('studio:importFolder'),
     studioPreview: (files) => ipcRenderer.invoke('studio:preview', files),
     saveTextFile: (content, lang) => ipcRenderer.invoke('file:saveText', String(content), String(lang || '')),
     getSettings: () => ipcRenderer.invoke('settings:get'),

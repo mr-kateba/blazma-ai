@@ -22,7 +22,9 @@
     "files": [
       "src/**/*",
       "catalog.json",
-      "package.json"
+      "package.json",
+      "!node_modules/monaco-editor/esm/**",
+      "!node_modules/monaco-editor/dev/**"
     ],
     "win": {
       "target": "nsis"
@@ -35,5 +37,8 @@
   "devDependencies": {
     "electron": "^44.4.5",
     "electron-builder": "^26.15.3"
+  },
+  "dependencies": {
+    "monaco-editor": "0.57.0"
   }
 }

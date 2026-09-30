@@ -12,6 +12,15 @@ const SCHEME = 'app';
 const HOST = 'blazma';
 const APP_ORIGIN = `${SCHEME}://${HOST}`;
 const RENDERER_DIR = path.join(__dirname, '..', 'renderer');
+// Monaco Editor (MIT), the editor of VS Code, served from the installed
+// package at app://blazma/vendor/monaco/vs/... so it works offline.
+const MONACO_PREFIX = '/vendor/monaco/vs/';
+// (The package's "exports" map hides package.json from require.resolve, so
+// the folder is located next to the app's other dependencies.)
+const MONACO_DIR = path.join(__dirname, '..', '..', 'node_modules', 'monaco-editor', 'min', 'vs');
+function monacoDir() {
+  return fs.existsSync(MONACO_DIR) ? MONACO_DIR : null;
+}
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -34,12 +43,18 @@ function buildCsp() {
   return [
     "default-src 'none'",
     "script-src 'self'",
-    "style-src 'self'",
-    "font-src 'self'",
+    // Monaco injects <style> elements and has no nonce support. Scripts stay
+    // 'self' only, and img/font/connect sources below block any external
+    // request, so injected CSS could not send data anywhere.
+    "style-src 'self' 'unsafe-inline'",
+    // Monaco's CSS embeds its icon font as a data: URL.
+    "font-src 'self' data:",
     "img-src 'self' data:",
     `connect-src ${connect}`,
     // The studio preview runs in a sandboxed iframe served over studio://.
     'frame-src studio:',
+    // Monaco starts its helper worker from a blob: URL that imports its own files.
+    "worker-src 'self' blob:",
     "base-uri 'none'",
     "form-action 'none'",
     "frame-ancestors 'none'",
@@ -71,8 +86,14 @@ function handleAppProtocol() {
     }
     if (rel === '/' || rel === '') rel = '/index.html';
 
-    const filePath = path.normalize(path.join(RENDERER_DIR, rel));
-    if (!filePath.startsWith(RENDERER_DIR + path.sep)) return notFound();
+    let base = RENDERER_DIR;
+    if (rel.startsWith(MONACO_PREFIX)) {
+      base = monacoDir();
+      if (!base) return notFound();
+      rel = rel.slice(MONACO_PREFIX.length - 1);
+    }
+    const filePath = path.normalize(path.join(base, rel));
+    if (!filePath.startsWith(base + path.sep)) return notFound();
 
     const type = MIME[path.extname(filePath).toLowerCase()];
     if (!type) return notFound();
