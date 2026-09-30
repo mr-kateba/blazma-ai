@@ -740,3 +740,18 @@ details.tech pre {
 .ai-entry.error { color: #ff9b9b; }
 .studio-ai-form { display: flex; gap: 8px; align-items: flex-end; padding: 8px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); }
 .studio-ai-form textarea { flex: 1; resize: none; border: 0; outline: none; background: transparent; color: var(--text); font: inherit; padding: 6px 4px; }
+
+/* ---------- models page ---------- */
+.section-title { margin: 24px 0 10px; font-size: 17px; font-weight: 600; }
+.model-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 12px; }
+.model-card { display: flex; flex-direction: column; gap: 6px; padding: 14px 16px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--border); }
+.model-card.active { border-color: rgba(63, 191, 127, 0.55); }
+.model-card .row { margin-top: 4px; }
+.faint { color: var(--faint); }
+.tag-ok { background: rgba(63, 191, 127, 0.14); color: #8fe0b5; }
+.add-model { max-width: none; }
+.add-model input { flex: 1; min-width: 260px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-2); color: var(--text); font: 14px var(--mono); }
+.add-status { font-size: 14px; }
+.add-status.ok { color: #8fe0b5; }
+.add-status.error { color: #ff9b9b; }
+.add-status.info { color: var(--muted); }

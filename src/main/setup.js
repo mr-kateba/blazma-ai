@@ -90,12 +90,34 @@ class Setup extends EventEmitter {
     return models.getCatalog().map((m) => ({
       id: m.id,
       name: m.name,
+      hf: m.hf,
       sizeBytes: m.sizeBytes,
       note: m.note,
+      license: m.license || null,
       cpu: Boolean(m.cpu),
+      custom: Boolean(m.custom),
+      vision: Boolean(m.vision),
       fits: m.cpu ? true : m.minVramMB <= vram,
       downloaded: models.isComplete(manifest[m.hf]),
+      onDisk: models.sizeOnDisk(m.hf),
     }));
+  }
+
+  refreshModels() {
+    this.update({ models: this.modelList() });
+    return this.state.models;
+  }
+
+  // Deleting the model that is running would pull files from under the
+  // server, so that one must be switched away from first.
+  async deleteModel(id) {
+    const model = models.findModel(id);
+    if (!model) return { ok: false, code: 'model-invalid' };
+    const running = this.state.modelId === id && ['ready', 'loading', 'model-download', 'engine', 'model-resolve'].includes(this.state.phase);
+    if (running) return { ok: false, code: 'model-in-use' };
+    models.deleteDownload(model.hf);
+    this.refreshModels();
+    return { ok: true };
   }
 
   clearTimers() {

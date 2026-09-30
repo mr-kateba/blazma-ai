@@ -18,9 +18,10 @@ const HF_ENDPOINT = (process.env.BLAZMA_HF_ENDPOINT || 'https://huggingface.co')
 
 let catalog = null;
 
+// Built-in catalog (catalog.json) followed by models the user added.
 function getCatalog() {
   if (!catalog) catalog = readJson(paths.catalogFile(), { models: [] }).models;
-  return catalog;
+  return [...catalog, ...readJson(paths.customModels(), [])];
 }
 
 function findModel(id) {
@@ -186,7 +187,57 @@ function removeLocal(entry) {
   fs.rmSync(repoDir(entry.repo), { recursive: true, force: true });
 }
 
+// "إضافة موديل مخصص": checks on Hugging Face that repo:quant resolves to a
+// GGUF file (and whether it has a vision projector) before adding it.
+async function addCustom(hf) {
+  const clean = String(hf || '').trim();
+  const withVision = await resolveRemote(clean, { vision: true });
+  const modelFiles = withVision.files.filter((f) => !f.path.includes('mmproj'));
+  const size = modelFiles.reduce((sum, f) => sum + f.size, 0);
+  const id = `custom-${clean.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`.slice(0, 64);
+  const custom = readJson(paths.customModels(), []).filter((m) => m.id !== id);
+  const entry = {
+    id,
+    name: withVision.repo.split('/')[1].replace(/-GGUF$/i, ''),
+    hf: clean,
+    sizeBytes: size,
+    // Rough fit: weights plus about 1.5 GB for context and buffers.
+    minVramMB: Math.round(size / 1024 / 1024 + 1536),
+    custom: true,
+    vision: withVision.vision,
+    thinking: true,
+    sampling: {},
+    note: '',
+  };
+  custom.push(entry);
+  writeJson(paths.customModels(), custom);
+  return entry;
+}
+
+function removeCustom(id) {
+  writeJson(
+    paths.customModels(),
+    readJson(paths.customModels(), []).filter((m) => m.id !== id),
+  );
+}
+
+// Bytes of this model's files on disk (finished or partial).
+function sizeOnDisk(hf) {
+  const entry = manifest()[hf];
+  return entry ? localProgress(entry).done : 0;
+}
+
+function deleteDownload(hf) {
+  const entry = manifest()[hf];
+  if (entry) removeLocal(entry);
+  saveManifestEntry(hf, null);
+}
+
 module.exports = {
+  addCustom,
+  removeCustom,
+  sizeOnDisk,
+  deleteDownload,
   HF_ENDPOINT,
   getCatalog,
   findModel,
