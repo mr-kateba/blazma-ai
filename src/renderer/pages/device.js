@@ -71,7 +71,15 @@ function gpuSection(s) {
 
   return section(
     D.gpuSection,
-    el('div', { class: 'dev-sub', dir: 'rtl' }, `${info.gpu.name} · ${D.driver} ${info.gpu.driver}${info.gpu.cuda ? ` · CUDA ${info.gpu.cuda}` : ''}`),
+    el(
+      'div',
+      { class: 'dev-sub', dir: 'rtl' },
+      el('bdi', { dir: 'ltr' }, info.gpu.name),
+      ` · ${D.driver} `,
+      el('bdi', { dir: 'ltr' }, info.gpu.driver),
+      info.gpu.cuda ? ' · ' : '',
+      info.gpu.cuda ? el('bdi', { dir: 'ltr' }, `CUDA ${info.gpu.cuda}`) : '',
+    ),
     el(
       'div',
       { class: 'stats' },

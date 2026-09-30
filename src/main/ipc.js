@@ -14,9 +14,25 @@ const { toAppError } = require('./errors');
 const web = require('./web');
 const chats = require('./chats');
 const studio = require('./studio');
+const updates = require('./updates');
+const paths = require('./paths');
 
 // Settings the renderer may change (more are added with the settings page).
-const EDITABLE_SETTINGS = ['monitorIntervalMs', 'gpuTempWarn', 'gpuTempDanger', 'webSearch', 'shareDeviceInfo'];
+const EDITABLE_SETTINGS = [
+  'monitorIntervalMs',
+  'gpuTempWarn',
+  'gpuTempDanger',
+  'webSearch',
+  'shareDeviceInfo',
+  'systemPrompt',
+  'temperature',
+  'contextSize',
+  'gpuLayers',
+  'port',
+];
+
+// Starting with Windows uses the OS login items; elsewhere it is not offered.
+const loginSupported = () => process.platform === 'win32';
 
 // File extensions for "حفظ كملف" on code blocks, by the block's language tag.
 const CODE_EXT = {
@@ -96,16 +112,68 @@ function registerIpc({ setup, monitor, getWindow }) {
     };
   });
 
-  handle('settings:get', () => {
+  const settingsView = () => {
     const s = settings.get();
-    return Object.fromEntries(EDITABLE_SETTINGS.map((k) => [k, s[k]]));
-  });
+    return {
+      ...Object.fromEntries(EDITABLE_SETTINGS.map((k) => [k, s[k]])),
+      modelsDir: settings.modelsDir(),
+      modelsDirCustom: Boolean(s.modelsDir),
+      defaults: {
+        systemPrompt: settings.DEFAULTS.systemPrompt,
+        contextSize: settings.DEFAULTS.contextSize,
+        gpuLayers: settings.DEFAULTS.gpuLayers,
+        port: settings.DEFAULTS.port,
+      },
+      launchAtLogin: { supported: loginSupported(), enabled: loginSupported() ? app.getLoginItemSettings().openAtLogin : false },
+    };
+  };
+  handle('settings:get', settingsView);
   handle('settings:update', (patch) => {
     const clean = {};
     for (const k of EDITABLE_SETTINGS) if (patch && k in patch) clean[k] = patch[k];
     settings.update(clean);
-    const s = settings.get();
-    return Object.fromEntries(EDITABLE_SETTINGS.map((k) => [k, s[k]]));
+    return settingsView();
+  });
+  // The folder for new model downloads. Files already downloaded stay where they are.
+  handle('settings:chooseModelsDir', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(getWindow(), {
+      title: 'اختر مجلد الموديلات',
+      properties: ['openDirectory', 'createDirectory'],
+    });
+    if (canceled || !filePaths[0]) return settingsView();
+    try {
+      fs.accessSync(filePaths[0], fs.constants.W_OK);
+    } catch {
+      return { ...settingsView(), error: 'not-writable' };
+    }
+    settings.update({ modelsDir: filePaths[0] });
+    setup.refreshModels();
+    return settingsView();
+  });
+  handle('settings:resetModelsDir', () => {
+    settings.update({ modelsDir: '' });
+    setup.refreshModels();
+    return settingsView();
+  });
+  handle('settings:openFolder', (kind) => {
+    const dir = kind === 'models' ? settings.modelsDir() : paths.userData();
+    fs.mkdirSync(dir, { recursive: true });
+    return shell.openPath(dir);
+  });
+  handle('settings:setLaunchAtLogin', (enabled) => {
+    if (loginSupported()) app.setLoginItemSettings({ openAtLogin: Boolean(enabled) });
+    return settingsView();
+  });
+  handle('server:restart', () => setup.restart());
+
+  // Updates: only when the user presses the button.
+  handle('updates:check', async () => {
+    const [appRes, engineRes] = await Promise.all([wrap(() => updates.checkApp()), wrap(() => updates.checkEngine(setup.nvidia))]);
+    return { app: appRes, engine: engineRes };
+  });
+  handle('updates:engine', () => wrap(() => setup.updateEngine()));
+  handle('updates:openRelease', (url) => {
+    if (typeof url === 'string' && url.startsWith(updates.APP_RELEASES_PAGE)) shell.openExternal(url);
   });
 
   handle('web:search', (query) => wrap(() => web.search(String(query || '').slice(0, 300))));

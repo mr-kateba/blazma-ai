@@ -10,7 +10,7 @@ const { net } = require('electron');
 const settings = require('./settings');
 const models = require('./models');
 const { detectNvidia } = require('./hardware/gpu');
-const { ensureEngine, installedEngine } = require('./engine');
+const { ensureEngine, updateEngine, installedEngine } = require('./engine');
 const { LlamaServer, isPortFree, pickPort, cleanupOrphan } = require('./server');
 const { freeBytes } = require('./download');
 const { toAppError, AppError } = require('./errors');
@@ -285,6 +285,36 @@ class Setup extends EventEmitter {
     this.clearTimers();
     await this.server.stop();
     this.update({ phase: 'stopped', progress: null });
+  }
+
+  // Settings > updates: install the newest engine, then start the model again
+  // (with the old engine if the update failed).
+  async updateEngine() {
+    const modelId = this.state.modelId || settings.get().activeModelId;
+    this.runId++;
+    this.clearTimers();
+    await this.server.stop();
+    const run = this.runId;
+    this.update({ phase: 'engine', error: null, progress: null });
+    let result;
+    let failure = null;
+    try {
+      result = await updateEngine({ nvidia: this.nvidia, onProgress: (p) => run === this.runId && this.update({ progress: p }) });
+    } catch (err) {
+      failure = toAppError(err);
+    }
+    if (run === this.runId) {
+      if (modelId) this.start(modelId);
+      else this.update({ phase: 'stopped', progress: null });
+    }
+    if (failure) throw failure;
+    return result;
+  }
+
+  // Settings > engine: apply context size, GPU layers or port.
+  restart() {
+    const id = this.state.modelId || settings.get().activeModelId;
+    if (id) this.start(id);
   }
 
   retry() {

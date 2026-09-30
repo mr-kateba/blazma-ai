@@ -71,13 +71,14 @@ function trackSpeed(done) {
 }
 
 function hardwareSummary(hw) {
+  // The English card name is isolated so the Arabic line keeps its order.
   const gpu = hw.nvidia
-    ? `${hw.nvidia.name} · ${(hw.nvidia.vramMB / 1024).toFixed(0)} جيجابايت`
-    : ar.setup.noNvidia;
+    ? el('b', { dir: 'rtl' }, el('bdi', { dir: 'ltr' }, hw.nvidia.name), ` · ${(hw.nvidia.vramMB / 1024).toFixed(0)} جيجابايت`)
+    : el('b', null, ar.setup.noNvidia);
   return el(
     'div',
     { class: 'hw-summary' },
-    el('div', null, el('span', { class: 'muted' }, ar.setup.gpu), el('b', { dir: 'auto' }, gpu)),
+    el('div', null, el('span', { class: 'muted' }, ar.setup.gpu), gpu),
     el('div', null, el('span', { class: 'muted' }, ar.setup.ram), el('b', null, `${(hw.ramMB / 1024).toFixed(0)} جيجابايت`)),
   );
 }
@@ -222,9 +223,54 @@ function renderSetup(state) {
   panel.replaceChildren(el('div', { class: 'setup-card' }, ...phaseView(state).filter(Boolean)));
 }
 
+// Quick model switch from the chat header (downloaded models only).
+function openModelMenu() {
+  closeModelMenu();
+  if (!setupState) return;
+  const pill = $('model-pill');
+  const items = setupState.models.filter((m) => m.downloaded);
+  const menu = el(
+    'div',
+    { class: 'model-menu', role: 'menu' },
+    el('div', { class: 'model-menu-head' }, ar.chat.switchModel),
+    ...items.map((m) => {
+      const current = m.id === setupState.modelId;
+      const row = el('button', { type: 'button', class: `model-menu-item${current ? ' current' : ''}`, role: 'menuitem' }, el('span', { dir: 'ltr' }, m.name), current ? el('span', { class: 'tag tag-ok' }, ar.chat.currentModel) : m.fits ? null : el('span', { class: 'tag tag-warn' }, ar.setup.notFit));
+      row.addEventListener('click', () => {
+        closeModelMenu();
+        if (!current) window.blazma.modelsUse(m.id);
+      });
+      return row;
+    }),
+    (() => {
+      const more = el('button', { type: 'button', class: 'model-menu-item more' }, ar.chat.manageModels);
+      more.addEventListener('click', () => {
+        closeModelMenu();
+        window.dispatchEvent(new CustomEvent('blazma:show-page', { detail: 'models' }));
+      });
+      return more;
+    })(),
+  );
+  const r = pill.getBoundingClientRect();
+  menu.style.top = `${r.bottom + 6}px`;
+  menu.style.right = `${window.innerWidth - r.right}px`;
+  document.body.append(menu);
+  setTimeout(() => document.addEventListener('mousedown', outsideModelMenu), 0);
+}
+
+function outsideModelMenu(e) {
+  if (!e.target.closest('.model-menu') && !e.target.closest('#model-pill')) closeModelMenu();
+}
+
+function closeModelMenu() {
+  const menu = document.querySelector('.model-menu');
+  if (menu) menu.remove();
+  document.removeEventListener('mousedown', outsideModelMenu);
+}
+
 function renderStatus(state) {
   const model = state.models.find((m) => m.id === state.modelId);
-  $('model-pill').textContent = model ? model.name : '';
+  $('model-pill').textContent = model ? `${model.name} ▾` : '';
   $('model-pill').hidden = !model;
 
   const pill = $('status-pill');
@@ -372,12 +418,35 @@ function messageNode(msg, index) {
   return el('div', { class: `msg ${isUser ? 'msg-user' : 'msg-ai'}`, 'data-index': index }, body, footer);
 }
 
+// Welcome screen with starting suggestions; a click puts the text in the
+// input so it can be edited before sending.
+function welcomeView() {
+  const cards = ar.chat.suggestions.map((sg) => {
+    const card = el('button', { type: 'button', class: 'suggest-card' }, el('span', { class: 'suggest-icon', 'aria-hidden': 'true' }, sg.icon), el('b', null, sg.title), el('span', { class: 'muted small' }, sg.text));
+    card.addEventListener('click', () => {
+      const input = $('chat-input');
+      input.value = sg.text;
+      autoGrow(input);
+      input.focus();
+      input.setSelectionRange(input.value.length, input.value.length);
+    });
+    return card;
+  });
+  return el(
+    'div',
+    { class: 'chat-empty' },
+    el('div', { class: 'chat-empty-mark', 'aria-hidden': 'true' }, 'B'),
+    el('h2', null, ar.chat.emptyTitle),
+    el('p', { class: 'muted' }, ar.chat.emptyHint),
+    el('div', { class: 'suggest-grid' }, ...cards),
+    el('p', { class: 'faint small' }, ar.chat.keysHint),
+  );
+}
+
 function renderMessages() {
   const log = $('chat-log');
   if (!messages.length) {
-    log.replaceChildren(
-      el('div', { class: 'chat-empty' }, el('h2', null, ar.chat.emptyTitle), el('p', { class: 'muted' }, ar.chat.emptyHint)),
-    );
+    log.replaceChildren(welcomeView());
     return;
   }
   log.replaceChildren(...messages.map(messageNode));
@@ -764,8 +833,15 @@ function renderList(items, query) {
     box.replaceChildren(el('div', { class: 'chat-list-empty' }, query ? ar.chat.noResults : ar.chat.noChats));
     return;
   }
+  // Group by date when not searching: today, yesterday, this week, older.
+  const dayStart = new Date().setHours(0, 0, 0, 0);
+  const groupOf = (t) => (t >= dayStart ? 'today' : t >= dayStart - 864e5 ? 'yesterday' : t >= dayStart - 7 * 864e5 ? 'week' : t >= dayStart - 30 * 864e5 ? 'month' : 'older');
+  let lastGroup = null;
   box.replaceChildren(
-    ...items.map((chat) => {
+    ...items.flatMap((chat) => {
+      const group = !query && chat.updatedAt ? groupOf(chat.updatedAt) : null;
+      const header = group && group !== lastGroup ? el('div', { class: 'chat-group' }, ar.chat.groups[group]) : null;
+      lastGroup = group || lastGroup;
       const item = el(
         'div',
         { class: 'chat-item', role: 'button', tabindex: '0', 'data-id': chat.id, 'aria-current': String(chat.id === currentChatId) },
@@ -792,7 +868,7 @@ function renderList(items, query) {
       item.append(actions);
       item.addEventListener('click', () => loadChat(chat.id));
       item.addEventListener('keydown', (e) => e.key === 'Enter' && loadChat(chat.id));
-      return item;
+      return header ? [header, item] : [item];
     }),
   );
 }
@@ -810,6 +886,7 @@ function autoGrow(textarea) {
 
 export function initChat() {
   const input = $('chat-input');
+  $('model-pill').addEventListener('click', () => (document.querySelector('.model-menu') ? closeModelMenu() : openModelMenu()));
   input.placeholder = ar.chat.placeholder;
   input.addEventListener('input', () => autoGrow(input));
   input.addEventListener('keydown', (e) => {
