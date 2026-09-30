@@ -66,9 +66,16 @@
         <div id="chat-area" class="chat-area" hidden>
           <div id="chat-log" class="chat-log" aria-live="polite"></div>
           <form id="composer" class="composer">
-            <textarea id="chat-input" dir="auto" rows="1" aria-label="رسالتك"></textarea>
-            <button id="btn-send" class="btn primary" type="submit">إرسال</button>
-            <button id="btn-stop-gen" class="btn danger" type="button" hidden>إيقاف</button>
+            <div id="attach-preview" class="attach-preview" hidden></div>
+            <div class="composer-row">
+              <button id="btn-attach" class="icon-square" type="button" hidden>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="9" cy="10" r="2"/><path d="m21 16-5-5-9 9"/></svg>
+              </button>
+              <input id="file-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+              <textarea id="chat-input" dir="auto" rows="1" aria-label="رسالتك"></textarea>
+              <button id="btn-send" class="btn primary" type="submit">إرسال</button>
+              <button id="btn-stop-gen" class="btn danger" type="button" hidden>إيقاف</button>
+            </div>
           </form>
         </div>
       </section>

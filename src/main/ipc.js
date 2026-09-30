@@ -44,7 +44,12 @@ function registerIpc({ setup, monitor, getWindow }) {
     if (s.temperature !== null) sampling.temperature = s.temperature;
     // On the CPU, thinking first can mean minutes before the answer starts.
     const onGpu = Boolean(setup.snapshot().hardware && setup.snapshot().hardware.nvidia) && !(model && model.cpu);
-    return { systemPrompt: s.systemPrompt, sampling, thinking: Boolean(model && model.thinking && onGpu) };
+    return {
+      systemPrompt: s.systemPrompt,
+      sampling,
+      thinking: Boolean(model && model.thinking && onGpu),
+      vision: Boolean(setup.snapshot().vision),
+    };
   });
 
   handle('settings:get', () => {

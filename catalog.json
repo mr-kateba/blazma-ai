@@ -14,7 +14,8 @@
         "temperature": 1.0,
         "top_p": 0.95,
         "top_k": 64
-      }
+      },
+      "vision": true
     },
     {
       "id": "qwen3.5-9b",
@@ -31,7 +32,8 @@
         "top_k": 20,
         "min_p": 0.0,
         "presence_penalty": 1.5
-      }
+      },
+      "vision": true
     },
     {
       "id": "qwen3.5-4b",
@@ -48,7 +50,8 @@
         "top_k": 20,
         "min_p": 0.0,
         "presence_penalty": 1.5
-      }
+      },
+      "vision": true
     },
     {
       "id": "qwen3.5-2b",
@@ -66,8 +69,10 @@
         "top_k": 20,
         "min_p": 0.0,
         "presence_penalty": 1.5
-      }
+      },
+      "vision": true
     }
   ],
-  "_sampling_source": "Values from each model's Hugging Face card (Qwen/Qwen3.5-9B README 'Best Practices'; google/gemma-4-12B-it README 'Sampling Parameters')."
+  "_sampling_source": "Values from each model's Hugging Face card (Qwen/Qwen3.5-9B README 'Best Practices'; google/gemma-4-12B-it README 'Sampling Parameters').",
+  "_vision_source": "All four repos ship mmproj-*.gguf vision projectors (checked on Hugging Face); llama.cpp downloads the one closest in quantization when --no-mmproj is not passed."
 }
