@@ -11,6 +11,7 @@ module.exports = {
   defaultModelsDir: () => path.join(userData(), 'models'),
   settingsFile: () => path.join(userData(), 'settings.json'),
   modelsManifest: () => path.join(userData(), 'models.json'),
+  customModels: () => path.join(userData(), 'custom-models.json'),
   pidFile: () => path.join(userData(), 'llama-server.pid'),
   catalogFile: () => path.join(__dirname, '..', '..', 'catalog.json'),
 };

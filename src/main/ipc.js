@@ -56,6 +56,25 @@ function registerIpc({ setup, monitor, getWindow }) {
     if (typeof modelId === 'string') setup.start(modelId);
   });
   handle('setup:retry', () => setup.retry());
+
+  // Models page.
+  handle('models:list', () => setup.refreshModels());
+  handle('models:use', (id) => setup.start(String(id)));
+  handle('models:delete', (id) => setup.deleteModel(String(id)));
+  handle('models:addCustom', async (hf) => {
+    const res = await wrap(() => models.addCustom(String(hf || '').slice(0, 200)));
+    setup.refreshModels();
+    return res;
+  });
+  handle('models:removeCustom', async (id) => {
+    const model = models.findModel(String(id));
+    if (!model || !model.custom) return { ok: false, code: 'model-invalid' };
+    const res = await setup.deleteModel(model.id);
+    if (!res.ok) return res;
+    models.removeCustom(model.id);
+    setup.refreshModels();
+    return { ok: true };
+  });
   handle('server:stop', () => setup.stopServer());
   handle('server:getConnection', () => setup.connection());
   // Per-request generation options: the active model's recommended sampling

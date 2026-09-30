@@ -3,6 +3,7 @@ import { initChat } from './pages/chat.js';
 import { initDevice, setDeviceVisible } from './pages/device.js';
 import { setSettingsVisible } from './pages/settings.js';
 import { setStudioVisible, openCodeInStudio } from './pages/studio.js';
+import { initModels, setModelsVisible } from './pages/models.js';
 import { el } from './lib/dom.js';
 
 const PAGES = ['chat', 'studio', 'device', 'models', 'settings'];
@@ -18,6 +19,7 @@ function showPage(name) {
   }
   setDeviceVisible(name === 'device');
   setStudioVisible(name === 'studio');
+  setModelsVisible(name === 'models');
   setSettingsVisible(name === 'settings');
 }
 
@@ -44,6 +46,7 @@ for (const item of document.querySelectorAll('.nav-item')) {
 }
 
 initDevice();
+initModels();
 initChat();
 window.blazma.onAlerts(showAlerts);
 // "فتح في الاستوديو" on a code block in the chat.
