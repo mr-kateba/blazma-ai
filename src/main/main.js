@@ -2,7 +2,8 @@
 
 const path = require('node:path');
 const { app, BrowserWindow, Menu, Notification, session } = require('electron');
-const { registerScheme, handleAppProtocol, setServerPort, APP_ORIGIN } = require('./protocol');
+const { registerScheme, handleAppProtocol, handleStudioProtocol, setServerPort, APP_ORIGIN } = require('./protocol');
+const studio = require('./studio');
 const { registerIpc } = require('./ipc');
 const { Setup } = require('./setup');
 const { Monitor } = require('./monitor');
@@ -71,6 +72,10 @@ function hardenWebContents() {
       if (!url.startsWith(`${APP_ORIGIN}/`)) event.preventDefault();
     });
     contents.on('will-attach-webview', (event) => event.preventDefault());
+    // The studio preview iframe may only show its own files.
+    contents.on('will-frame-navigate', (details) => {
+      if (!details.isMainFrame && !details.url.startsWith('studio://preview/')) details.preventDefault();
+    });
     contents.setWindowOpenHandler(() => ({ action: 'deny' }));
   });
 
@@ -92,6 +97,7 @@ if (!app.requestSingleInstanceLock()) {
     Menu.setApplicationMenu(null);
     hardenWebContents();
     handleAppProtocol();
+    handleStudioProtocol(studio.previewResponse);
     registerIpc({ setup, monitor, getWindow: () => mainWindow });
 
     // The CSP served with the page names the server port, so pick it first.

@@ -85,7 +85,13 @@ function codeBlock(lang, code, labels) {
       }
     });
   }
-  const head = el('div', { class: 'md-code-head' }, el('span', null, lang || labels.code), el('span', { class: 'row' }, save, copy));
+  // Web code can run in the studio's sandboxed preview.
+  let studio = null;
+  if (labels.studio && /^(html?|css|js|javascript)$/i.test(lang || '')) {
+    studio = el('button', { type: 'button', class: 'md-copy' }, labels.openInStudio);
+    studio.addEventListener('click', () => labels.studio(code, lang));
+  }
+  const head = el('div', { class: 'md-code-head' }, el('span', null, lang || labels.code), el('span', { class: 'row' }, studio, save, copy));
   return el('div', { class: 'md-code', dir: 'ltr' }, head, el('pre', null, el('code', null, code)));
 }
 
