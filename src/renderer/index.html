@@ -97,44 +97,7 @@
       </section>
 
       <section class="page page-studio" data-page="studio" hidden>
-        <header class="studio-head">
-          <div class="studio-title">
-            <h1>الاستوديو</h1>
-            <select id="studio-project" aria-label="المشروع"></select>
-            <button id="studio-new" class="btn ghost" type="button"></button>
-            <button id="studio-rename" class="icon-btn" type="button">✎</button>
-            <button id="studio-delete" class="icon-btn" type="button">🗑</button>
-          </div>
-          <div class="row">
-            <button id="studio-export" class="btn ghost" type="button"></button>
-            <button id="studio-run" class="btn primary" type="button"></button>
-          </div>
-        </header>
-        <p id="studio-intro" class="muted small studio-intro"></p>
-        <div class="studio-body">
-          <aside class="studio-files">
-            <div class="studio-files-head"><span id="studio-files-title"></span><button id="studio-new-file" class="icon-btn" type="button"></button></div>
-            <div id="studio-file-list"></div>
-          </aside>
-          <div class="studio-editor" dir="ltr">
-            <div id="studio-gutter" class="studio-gutter" aria-hidden="true"></div>
-            <textarea id="studio-code" spellcheck="false" autocomplete="off" aria-label="الكود"></textarea>
-          </div>
-          <div class="studio-output">
-            <div class="studio-pane-head"><span id="studio-preview-title"></span></div>
-            <iframe id="studio-frame" class="studio-frame" sandbox="allow-scripts allow-modals" title="النتيجة"></iframe>
-            <div class="studio-pane-head"><span id="studio-console-title"></span><button id="studio-clear" class="icon-btn" type="button"></button></div>
-            <div id="studio-console" class="studio-console" dir="ltr"></div>
-          </div>
-        </div>
-        <div class="studio-ai">
-          <div id="studio-ai-log" class="studio-ai-log"></div>
-          <form id="studio-ai-form" class="studio-ai-form">
-            <textarea id="studio-ai-input" rows="1" dir="auto"></textarea>
-            <button id="studio-ai-send" class="btn primary" type="submit"></button>
-            <button id="studio-ai-stop" class="btn danger" type="button" hidden></button>
-          </form>
-        </div>
+        <div id="studio-root" class="studio-root"></div>
       </section>
 
       <section class="page page-device" data-page="device" hidden>

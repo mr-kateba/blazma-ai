@@ -103,16 +103,33 @@ function setPreview(files) {
   return true;
 }
 
-// Forwards console output and errors from the preview to the studio page.
+// Runs inside the preview. Forwards console output and errors (with file and
+// line) to the studio page, and evaluates expressions the studio terminal
+// sends ("js ..."), which is no more than the preview's own code can do.
 const CONSOLE_BRIDGE = `(() => {
-  const fmt = (a) => { if (typeof a === 'string') return a; try { return JSON.stringify(a); } catch { return String(a); } };
-  const send = (level, args) => { try { parent.postMessage({ blazma: 'console', level, text: args.map(fmt).join(' ') }, '*'); } catch {} };
-  for (const level of ['log', 'info', 'warn', 'error']) {
+  const fmt = (a) => {
+    if (typeof a === 'string') return a;
+    if (a === undefined) return 'undefined';
+    if (typeof a === 'function') return String(a);
+    if (a instanceof Error) return a.name + ': ' + a.message;
+    if (typeof Node !== 'undefined' && a instanceof Node) return a.outerHTML || a.nodeName;
+    try { const s = JSON.stringify(a); return s === undefined ? String(a) : s; } catch { return String(a); }
+  };
+  const send = (level, args, where) => { try { parent.postMessage(Object.assign({ blazma: 'console', level, text: args.map(fmt).join(' ') }, where || {}), 'app://blazma'); } catch {} };
+  for (const level of ['log', 'info', 'warn', 'error', 'debug']) {
     const orig = console[level];
-    console[level] = (...a) => { send(level, a); orig.apply(console, a); };
+    console[level] = (...a) => { send(level === 'debug' ? 'log' : level, a); orig.apply(console, a); };
   }
-  addEventListener('error', (e) => send('error', [e.message + (e.lineno ? ' (' + String(e.filename).split('/').pop() + ':' + e.lineno + ')' : '')]));
-  addEventListener('unhandledrejection', (e) => send('error', [String(e.reason)]));
+  const fileOf = (u) => String(u || '').replace(/^studio:\\/\\/preview\\//, '').split('?')[0];
+  addEventListener('error', (e) => send('error', [e.message], { file: fileOf(e.filename), line: e.lineno || 0, col: e.colno || 0 }));
+  addEventListener('unhandledrejection', (e) => send('error', [e.reason instanceof Error ? e.reason.name + ': ' + e.reason.message : String(e.reason)]));
+  addEventListener('message', (e) => {
+    if (e.source !== parent || !e.data || e.data.blazma !== 'eval') return;
+    const reply = (ok, v) => parent.postMessage({ blazma: 'eval-result', id: e.data.id, ok, text: fmt(v) }, 'app://blazma');
+    let value;
+    try { value = (0, eval)(String(e.data.code)); } catch (err) { return reply(false, err); }
+    Promise.resolve(value).then((v) => reply(true, v), (err) => reply(false, err));
+  });
 })();`;
 
 const BRIDGE_TAG = '<script src="/__blazma__/console.js"></script>';
@@ -169,8 +186,27 @@ function previewResponse(url) {
   } catch {
     rel = '';
   }
-  const headers = (type) => ({ 'content-type': type, 'content-security-policy': PREVIEW_CSP, 'x-content-type-options': 'nosniff' });
+  const headers = (type) => ({
+    'content-type': type,
+    'content-security-policy': PREVIEW_CSP,
+    'x-content-type-options': 'nosniff',
+    // Every run must load the files as they are now, not a cached copy.
+    'cache-control': 'no-store',
+  });
   if (rel === '__blazma__/console.js') return new Response(CONSOLE_BRIDGE, { headers: headers(MIME.js) });
+  // "node file.js" in the studio terminal: a blank page that runs one script.
+  if (rel === '__blazma__/node.html') {
+    let file = '';
+    try {
+      file = cleanPath(new URL(url).searchParams.get('file'));
+    } catch {
+      file = '';
+    }
+    if (!file || previewFiles[file] === undefined || !/\.m?js$/i.test(file)) return new Response('Not found', { status: 404, headers: headers(MIME.txt) });
+    const type = file.endsWith('.mjs') ? ' type="module"' : '';
+    const html = `<!doctype html><html><head><meta charset="utf-8">${BRIDGE_TAG}</head><body><script src="/${encodeURI(file)}"${type}></script></body></html>`;
+    return new Response(html, { headers: headers(MIME.html) });
+  }
   if (rel === '' || rel === 'index.html') return new Response(entryHtml(), { headers: headers(MIME.html) });
   if (previewFiles[rel] === undefined) return new Response('Not found', { status: 404, headers: headers(MIME.txt) });
   const ext = rel.split('.').pop().toLowerCase();
