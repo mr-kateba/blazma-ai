@@ -38,6 +38,8 @@ function buildCsp() {
     "font-src 'self'",
     "img-src 'self' data:",
     `connect-src ${connect}`,
+    // The studio preview runs in a sandboxed iframe served over studio://.
+    'frame-src studio:',
     "base-uri 'none'",
     "form-action 'none'",
     "frame-ancestors 'none'",
@@ -48,6 +50,7 @@ function buildCsp() {
 function registerScheme() {
   protocol.registerSchemesAsPrivileged([
     { scheme: SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } },
+    { scheme: 'studio', privileges: { standard: true, secure: true } },
   ]);
 }
 
@@ -89,4 +92,13 @@ function handleAppProtocol() {
   });
 }
 
-module.exports = { APP_ORIGIN, registerScheme, handleAppProtocol, setServerPort };
+// studio://preview/<file> serves the studio's run preview (see studio.js).
+function handleStudioProtocol(previewResponse) {
+  protocol.handle('studio', (request) => {
+    const url = new URL(request.url);
+    if (url.host !== 'preview') return notFound();
+    return previewResponse(request.url);
+  });
+}
+
+module.exports = { APP_ORIGIN, registerScheme, handleAppProtocol, handleStudioProtocol, setServerPort };

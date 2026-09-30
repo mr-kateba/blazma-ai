@@ -13,6 +13,7 @@ const { exportReport } = require('./report');
 const { toAppError } = require('./errors');
 const web = require('./web');
 const chats = require('./chats');
+const studio = require('./studio');
 
 // Settings the renderer may change (more are added with the settings page).
 const EDITABLE_SETTINGS = ['monitorIntervalMs', 'gpuTempWarn', 'gpuTempDanger', 'webSearch', 'shareDeviceInfo'];
@@ -106,6 +107,13 @@ function registerIpc({ setup, monitor, getWindow }) {
   handle('chats:search', (q) => chats.search(String(q || '').slice(0, 200)));
 
   handle('device:summary', () => monitor.modelSummary());
+
+  handle('studio:list', () => studio.list());
+  handle('studio:get', (id) => studio.get(String(id)));
+  handle('studio:save', (project) => wrap(() => studio.save(project || {})));
+  handle('studio:delete', (id) => studio.remove(String(id)));
+  handle('studio:export', (id) => wrap(() => studio.exportProject(getWindow(), String(id))));
+  handle('studio:preview', (files) => wrap(() => studio.setPreview(files || {})));
 
   // User-initiated only (a click on a code block): the save dialog decides
   // where the file goes.

@@ -27,6 +27,8 @@ const mdLabels = {
   saveCode: ar.chat.saveCode,
   savedCode: ar.chat.savedCode,
   save: (code, lang) => window.blazma.saveTextFile(code, lang),
+  openInStudio: ar.studio.openInStudio,
+  studio: (code, lang) => window.dispatchEvent(new CustomEvent('blazma:open-in-studio', { detail: { code, lang } })),
 };
 
 const $ = (id) => document.getElementById(id);

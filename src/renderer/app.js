@@ -2,9 +2,10 @@ import { ar } from './i18n/ar.js';
 import { initChat } from './pages/chat.js';
 import { initDevice, setDeviceVisible } from './pages/device.js';
 import { setSettingsVisible } from './pages/settings.js';
+import { setStudioVisible, openCodeInStudio } from './pages/studio.js';
 import { el } from './lib/dom.js';
 
-const PAGES = ['chat', 'device', 'models', 'settings'];
+const PAGES = ['chat', 'studio', 'device', 'models', 'settings'];
 
 function showPage(name) {
   if (!PAGES.includes(name)) name = PAGES[0];
@@ -16,6 +17,7 @@ function showPage(name) {
     else item.removeAttribute('aria-current');
   }
   setDeviceVisible(name === 'device');
+  setStudioVisible(name === 'studio');
   setSettingsVisible(name === 'settings');
 }
 
@@ -44,5 +46,10 @@ for (const item of document.querySelectorAll('.nav-item')) {
 initDevice();
 initChat();
 window.blazma.onAlerts(showAlerts);
+// "فتح في الاستوديو" on a code block in the chat.
+window.addEventListener('blazma:open-in-studio', (e) => {
+  showPage('studio');
+  openCodeInStudio(e.detail.code, e.detail.lang);
+});
 showPage('chat');
 showVersion();
