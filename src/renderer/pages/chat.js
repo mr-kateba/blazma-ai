@@ -7,6 +7,18 @@ import { renderMarkdown } from '../lib/markdown.js';
 import { readSse } from '../lib/sse.js';
 import { store } from '../lib/store.js';
 
+// Today's date and time in Arabic (Gregorian and Umm al-Qura Hijri), with
+// Western digits to match the rest of the app.
+function dateContext() {
+  const now = new Date();
+  const fmt = (calendar, opts) => new Intl.DateTimeFormat(`ar-SA-u-ca-${calendar}-nu-latn`, opts).format(now);
+  return ar.chat.dateContext(
+    fmt('gregory', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
+    fmt('islamic-umalqura', { year: 'numeric', month: 'long', day: 'numeric' }),
+    fmt('gregory', { hour: 'numeric', minute: '2-digit' }),
+  );
+}
+
 const mdLabels = { copy: ar.actions.copy, copied: ar.actions.copied, code: ar.chat.code };
 
 const $ = (id) => document.getElementById(id);
@@ -337,7 +349,7 @@ async function send(text) {
     .filter((m) => !m.error || m.content)
     .map((m) => ({ role: m.role, content: m.content }));
   const payload = {
-    messages: [{ role: 'system', content: chatSettings.systemPrompt }, ...history],
+    messages: [{ role: 'system', content: `${chatSettings.systemPrompt}\n\n${dateContext()}` }, ...history],
     stream: true,
     ...chatSettings.sampling,
     // Gemma 4's template defaults thinking to off, Qwen3.5's to on; always say which.

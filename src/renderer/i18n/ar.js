@@ -67,6 +67,12 @@ export const ar = Object.freeze({
     stopped: 'أُوقف التوليد.',
     speed: (tps, n) => `${tps.toFixed(1)} توكن/ث · ${n} توكن`,
     code: 'كود',
+    // Appended to the system prompt on every request: the model has no clock
+    // and no internet, and otherwise assumes its training year.
+    dateContext: (gregorian, hijri, time) =>
+      `تاريخ اليوم: ${gregorian} (${hijri})، والساعة الآن ${time} بتوقيت جهاز المستخدم. ` +
+      'أنت تعمل على جهاز المستخدم بدون اتصال بالإنترنت، ومعلوماتك تتوقف عند تاريخ تدريبك. ' +
+      'إذا سُئلت عن أحداث أو أسعار أو أخبار حديثة فوضّح أنك قد لا تعرف آخر المستجدات، ولا تخترع معلومات.',
     errors: {
       contextFull: 'المحادثة أصبحت أطول من حجم السياق المسموح. ابدأ محادثة جديدة، أو كبّر حجم السياق من الإعدادات.',
       serverGone: 'انقطع الاتصال بمحرك الذكاء الاصطناعي. إذا توقف المحرك ستظهر رسالة بالسبب أعلى الصفحة.',
