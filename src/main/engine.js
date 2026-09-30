@@ -161,15 +161,10 @@ function installedEngine() {
   return fs.existsSync(exe) ? { ...cur, exe } : null;
 }
 
-async function ensureEngine({ nvidia, onProgress }) {
-  const installed = installedEngine();
-  if (installed) return installed;
-  if (process.platform !== 'win32') throw new AppError('unsupported-os', process.platform);
-
-  onProgress({ stage: 'release' });
-  const release = await findRelease(nvidia);
+// Downloads and tests the builds of one release in order, keeping the first
+// that works. current.json changes only after a build passes its test.
+async function installRelease(release, nvidia, onProgress) {
   const variants = planVariants(release.assets, nvidia);
-
   const failures = [];
   for (const variant of variants) {
     onProgress({ stage: 'download', variant: variant.id, done: 0, total: 0 });
@@ -193,4 +188,34 @@ async function ensureEngine({ nvidia, onProgress }) {
   throw new AppError('engine-test-failed', failures.map((f) => `[${f.variant}]\n${f.output}`).join('\n\n'));
 }
 
-module.exports = { ensureEngine, installedEngine, planVariants, findRelease };
+async function ensureEngine({ nvidia, onProgress }) {
+  const installed = installedEngine();
+  if (installed) return installed;
+  if (process.platform !== 'win32') throw new AppError('unsupported-os', process.platform);
+
+  onProgress({ stage: 'release' });
+  const release = await findRelease(nvidia);
+  return installRelease(release, nvidia, onProgress);
+}
+
+// Release tags are bNNNN; a larger number is newer.
+const tagNumber = (tag) => Number(/^b(\d+)$/.exec(String(tag))?.[1] || 0);
+
+// User-initiated from the settings page. The old build is removed only after
+// the new one passed its test.
+async function updateEngine({ nvidia, onProgress }) {
+  const installed = installedEngine();
+  if (installed && installed.kind === 'dev') throw new AppError('engine-dev');
+  if (process.platform !== 'win32') throw new AppError('unsupported-os', process.platform);
+  onProgress({ stage: 'release' });
+  const release = await findRelease(nvidia);
+  if (installed && tagNumber(release.tag) <= tagNumber(installed.tag)) return { updated: false, tag: installed.tag };
+  const info = await installRelease(release, nvidia, onProgress);
+  if (installed && installed.dir) {
+    const oldTop = path.join(paths.engineRoot(), `${installed.tag}-${installed.variant}`);
+    if (oldTop !== path.join(paths.engineRoot(), `${info.tag}-${info.variant}`)) fs.rmSync(oldTop, { recursive: true, force: true });
+  }
+  return { updated: true, tag: info.tag, variant: info.variant };
+}
+
+module.exports = { ensureEngine, updateEngine, installedEngine, planVariants, findRelease, tagNumber };

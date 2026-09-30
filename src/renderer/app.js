@@ -43,7 +43,8 @@ async function showVersion() {
 }
 
 for (const item of document.querySelectorAll('.nav-item')) {
-  item.title = item.textContent.trim(); // tooltip when the sidebar shows icons only
+  // Tooltip (the sidebar shows icons only in the studio) with the shortcut.
+  item.title = `${item.textContent.trim()} (Ctrl+${PAGES.indexOf(item.dataset.page) + 1})`;
   item.addEventListener('click', () => showPage(item.dataset.page));
 }
 
@@ -51,6 +52,17 @@ initDevice();
 initModels();
 initChat();
 window.blazma.onAlerts(showAlerts);
+// Ctrl+1 … Ctrl+5 switch pages (by key position, so any keyboard layout works).
+document.addEventListener('keydown', (e) => {
+  if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
+  const m = /^Digit([1-5])$/.exec(e.code);
+  if (!m) return;
+  e.preventDefault();
+  showPage(PAGES[Number(m[1]) - 1]);
+});
+
+// Links between pages (e.g. "إدارة الموديلات" in the chat's model menu).
+window.addEventListener('blazma:show-page', (e) => showPage(String(e.detail)));
 // "فتح في الاستوديو" on a code block in the chat.
 window.addEventListener('blazma:open-in-studio', (e) => {
   showPage('studio');
