@@ -604,3 +604,26 @@ details.tech pre {
 }
 .msg-images { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
 .msg-images img { max-width: 220px; max-height: 220px; border-radius: 8px; border: 1px solid var(--border); }
+
+/* ---------- web search ---------- */
+.web-toggle[aria-pressed='true'] { color: var(--accent); border-color: rgba(91, 140, 255, 0.5); background: var(--accent-soft); }
+.tool-steps { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.tool-step { display: flex; align-items: center; gap: 6px; color: var(--muted); font-size: 13px; }
+.tool-step.failed { color: #ff9b9b; }
+.tool-icon { width: 18px; text-align: center; color: var(--accent); }
+.sources { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 10px; }
+.source {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: #9db9ff;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.source:hover { border-color: rgba(91, 140, 255, 0.5); }

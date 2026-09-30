@@ -19,6 +19,7 @@
 | تنزيل الموديل بتقدّم حقيقي، والاستكمال تلقائياً بعد انقطاع الإنترنت | ✅ يعمل |
 | المحادثة: بث الرد، منطقة "يفكّر"، اتجاه النص التلقائي، markdown آمن، زر إيقاف | ✅ يعمل |
 | إرسال صور للموديل ليفهمها (إرفاق، لصق، سحب) | ✅ يعمل (جُرّب على لينكس بـQwen3.5 2B) |
+| البحث في الإنترنت وقراءة الصفحات (الموديل يقرر متى، مع المصادر تحت الإجابة) | ✅ حلقة الأدوات مُجرّبة بالموديل الحقيقي، ⚠️ الاتصال الفعلي بـDuckDuckGo من داخل التطبيق يُجرَّب على ويندوز |
 | إيقاف المحرك عند إغلاق التطبيق وتنظيفه بعد الانهيار | ✅ يعمل |
 | رسائل الأخطاء بالعربي مع اقتراح الحل | ✅ يعمل |
 | العمل بدون كرت NVIDIA (على المعالج بموديل صغير) | ✅ يعمل |
@@ -110,6 +111,11 @@ npm start
 - التطبيق يتصل بالإنترنت فقط من أجل:
   - تنزيل المحرك من GitHub.
   - تنزيل الموديلات من Hugging Face.
+  - **البحث في الإنترنت عندما يقرر الموديل ذلك** (زر الكرة الأرضية بجانب خانة الكتابة، مفعّل افتراضياً ويمكن إيقافه).
+    - عند البحث يُرسل **نص البحث فقط** إلى DuckDuckGo، وليس المحادثة.
+    - عند قراءة صفحة يُطلب رابطها من موقعها.
+    - الموديل لا يفتح إلا روابط ظهرت في نتائج البحث أو كتبتها أنت.
+    - لا يفتح أي عنوان على جهازك أو شبكتك المحلية.
   - التحقق من التحديثات (في مرحلة لاحقة).
 - الخادم المحلي يستمع على `127.0.0.1` فقط، ولا يمكن الوصول إليه من الشبكة.
 - لكل تشغيل مفتاح عشوائي جديد يُمرَّر للخادم عبر متغير بيئة، فلا يظهر في قائمة العمليات.
@@ -119,7 +125,11 @@ npm start
 
 ## الحدود المعروفة
 
-- **الموديل لا يتصل بالإنترنت.** معلوماته تتوقف عند تاريخ تدريبه (حوالي 2024–2025)، فلا يعرف الأخبار والأسعار الحديثة. التطبيق يعطيه تاريخ اليوم وساعته مع كل محادثة، ويطلب منه أن يوضّح ذلك بدل أن يخترع.
+- **البحث في الإنترنت:**
+  - الموديل يقرر متى يبحث، ومعلوماته بدون بحث تتوقف عند تاريخ تدريبه.
+  - يُطلب منه البحث في الأسعار والأخبار وكل ما يتغير، وألا يذكر أرقاماً إذا فشل البحث. الموديلات الصغيرة (2B) قد تخالف هذا أحياناً.
+  - البحث عبر DuckDuckGo بدون حساب، وقد يرفض الطلبات الكثيرة المتتالية.
+  - التطبيق يعطي الموديل تاريخ اليوم وساعته مع كل محادثة.
 - **الصور:** الموديل **يفهم** الصور التي ترسلها (زر الصورة، أو اللصق، أو السحب)، لكنه **لا يرسم** صوراً.
 
 - الموديل الصغير على المعالج (2B) لغته العربية سليمة، لكنه يخطئ أحياناً في المعلومات والحساب. موديل 4B أدق بشكل واضح لكنه أبطأ بمرتين.
@@ -150,6 +160,6 @@ Windows-specific paths are written but still awaiting testing on a real Windows 
 
 **Run from source:** `npm install && npm start`.
 
-**Privacy:** no telemetry. The network is used only to download the engine (GitHub) and models (Hugging Face), and later to check for updates. The local server binds to 127.0.0.1, requires a per-session random API key, and only accepts the app's own origin.
+**Privacy:** no telemetry. The network is used to download the engine (GitHub) and models (Hugging Face), for optional web search by the model (only the search query goes to DuckDuckGo; pages are fetched only from search results or links the user typed; local/private addresses are blocked), and later to check for updates. The local server binds to 127.0.0.1, requires a per-session random API key, and only accepts the app's own origin.
 
 **License:** MIT. llama.cpp is MIT. Qwen3.5 and Gemma 4 are Apache-2.0. IBM Plex Sans Arabic is OFL-1.1.

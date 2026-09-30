@@ -9,13 +9,14 @@ import { store } from '../lib/store.js';
 
 // Today's date and time in Arabic (Gregorian and Umm al-Qura Hijri), with
 // Western digits to match the rest of the app.
-function dateContext() {
+function dateContext(webOn) {
   const now = new Date();
   const fmt = (calendar, opts) => new Intl.DateTimeFormat(`ar-SA-u-ca-${calendar}-nu-latn`, opts).format(now);
   return ar.chat.dateContext(
     fmt('gregory', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
     fmt('islamic-umalqura', { year: 'numeric', month: 'long', day: 'numeric' }),
     fmt('gregory', { hour: 'numeric', minute: '2-digit' }),
+    webOn,
   );
 }
 
@@ -281,7 +282,42 @@ function messageNode(msg, index) {
     body.append(el('div', { class: 'msg-images' }, ...msg.images.map((src) => el('img', { src, alt: '' }))));
   }
   if (isUser && msg.content) body.append(el('p', { dir: detectDir(msg.content), class: 'plain' }, msg.content));
-  else if (msg.content) body.append(renderMarkdown(msg.content, mdLabels));
+  if (!isUser && msg.steps && msg.steps.length) {
+    body.append(
+      el(
+        'div',
+        { class: 'tool-steps' },
+        ...msg.steps.map((st) =>
+          el(
+            'div',
+            { class: `tool-step${st.failed ? ' failed' : ''}`, dir: 'rtl' },
+            el('span', { class: 'tool-icon', 'aria-hidden': 'true' }, st.kind === 'search' ? '⌕' : '↗'),
+            el('bdi', null, st.kind === 'search' ? ar.chat.stepSearch(st.label) : ar.chat.stepOpen(st.label)),
+            st.failed ? el('span', { class: 'muted' }, ` · ${ar.chat.stepFailed}`) : null,
+          ),
+        ),
+      ),
+    );
+  }
+  if (!isUser && msg.content) body.append(renderMarkdown(msg.content, mdLabels));
+  if (!isUser && !msg.streaming && msg.sources && msg.sources.length) {
+    const seen = new Set();
+    const unique = msg.sources.filter((src) => !seen.has(src.url) && seen.add(src.url)).slice(0, 6);
+    body.append(
+      el(
+        'div',
+        { class: 'sources' },
+        el('span', { class: 'muted small' }, `${ar.chat.sources}:`),
+        ...unique.map((src) =>
+          el(
+            'button',
+            { type: 'button', class: 'source', title: src.url, dir: 'auto', onclick: () => window.blazma.openExternal(src.url) },
+            src.title || new URL(src.url).hostname,
+          ),
+        ),
+      ),
+    );
+  }
 
   if (msg.stopped) body.append(el('p', { class: 'muted small' }, ar.chat.stopped));
   if (msg.error) body.append(el('div', { class: 'msg-error' }, msg.error));
@@ -428,45 +464,131 @@ function apiContent(m) {
   return [{ type: 'text', text: m.content || ar.chat.describeImage }, ...m.images.map((url) => ({ type: 'image_url', image_url: { url } }))];
 }
 
+// Tools the model may call when web search is on. Descriptions are for the
+// model, not shown to the user.
+const TOOLS = [
+  {
+    type: 'function',
+    function: {
+      name: 'web_search',
+      description:
+        'Search the internet. Use it for anything recent or changing (news, prices, weather, sports, releases), for facts you are not sure about, or when the user asks you to search. Returns titles, links and short snippets.',
+      parameters: {
+        type: 'object',
+        properties: { query: { type: 'string', description: 'The search query, in the language most likely to find good results.' } },
+        required: ['query'],
+      },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'open_url',
+      description: 'Open a web page (for example a search result) and read its text when the snippets are not enough.',
+      parameters: {
+        type: 'object',
+        properties: { url: { type: 'string', description: 'Full http(s) address of the page.' } },
+        required: ['url'],
+      },
+    },
+  },
+];
+const MAX_TOOL_ROUNDS = 3;
+
+// Runs one tool call and returns the text given back to the model.
+async function runTool(call, reply) {
+  let args = {};
+  try {
+    args = JSON.parse(call.function.arguments || '{}');
+  } catch {}
+  if (call.function.name === 'web_search') {
+    const step = { kind: 'search', label: String(args.query || '') };
+    reply.steps.push(step);
+    renderLast();
+    const res = await window.blazma.webSearch(args.query || '');
+    if (!res.ok || !res.result.results.length) {
+      step.failed = true;
+      return 'The search failed or returned no results.';
+    }
+    for (const r of res.result.results) reply.sources.push({ title: r.title, url: r.url });
+    return res.result.results.map((r, i) => `${i + 1}. ${r.title}\nURL: ${r.url}\n${r.snippet}`).join('\n\n');
+  }
+  if (call.function.name === 'open_url') {
+    // Only links that came from search results or that the user wrote; small
+    // models otherwise invent addresses.
+    const norm = (u) => String(u || '').trim().replace(/\/+$/, '');
+    const allowed = new Set([
+      ...reply.sources.map((src) => norm(src.url)),
+      ...messages.filter((m) => m.role === 'user').flatMap((m) => (m.content.match(/https?:\/\/[^\s)]+/g) || []).map(norm)),
+    ]);
+    if (!allowed.has(norm(args.url))) {
+      return 'You can only open links that appeared in your search results or that the user wrote. Search first.';
+    }
+    const step = { kind: 'open', label: String(args.url || '') };
+    reply.steps.push(step);
+    renderLast();
+    const res = await window.blazma.webOpen(args.url || '');
+    if (!res.ok) {
+      step.failed = true;
+      return `Could not open the page (${res.error.code}).`;
+    }
+    step.label = res.result.title || res.result.url;
+    reply.sources.push({ title: res.result.title || res.result.url, url: res.result.url });
+    return `${res.result.title}\n${res.result.url}\n\n${res.result.text}${res.result.truncated ? '\n[truncated]' : ''}`;
+  }
+  return `Unknown tool ${call.function.name}.`;
+}
+
 async function send(text, images = []) {
   const conn = await window.blazma.getConnection();
   if (!conn) return;
   const chatSettings = await window.blazma.getChatSettings();
+  const webOn = Boolean(chatSettings.webSearch);
 
   if (!messages.length) $('chat-log').replaceChildren();
   messages.push({ role: 'user', content: text, images });
   renderLast();
-  const reply = { role: 'assistant', content: '', reasoning: '', streaming: true, thinkStart: Date.now() };
+  const reply = { role: 'assistant', content: '', reasoning: '', streaming: true, thinkStart: Date.now(), steps: [], sources: [] };
   messages.push(reply);
   renderLast();
   setBusy(true);
 
-  // Thinking text is not sent back as history; only final answers are.
+  // Thinking text and tool traffic are not sent back as history; only the
+  // user's messages and the final answers are.
   const history = messages
     .slice(0, -1)
     .filter((m) => !m.error || m.content)
     .map((m) => ({ role: m.role, content: apiContent(m) }));
-  const payload = {
-    messages: [{ role: 'system', content: `${chatSettings.systemPrompt}\n\n${dateContext()}` }, ...history],
-    stream: true,
-    ...chatSettings.sampling,
-    // Gemma 4's template defaults thinking to off, Qwen3.5's to on; always say which.
-    chat_template_kwargs: { enable_thinking: chatSettings.thinking },
-  };
+  const apiMessages = [{ role: 'system', content: `${chatSettings.systemPrompt}\n\n${dateContext(webOn)}` }, ...history];
 
   abortController = new AbortController();
   try {
-    const res = await fetch(`http://127.0.0.1:${conn.port}/v1/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${conn.apiKey}` },
-      body: JSON.stringify(payload),
-      signal: abortController.signal,
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      const type = err && err.error && err.error.type;
-      reply.error = type === 'exceed_context_size_error' ? ar.chat.errors.contextFull : ar.chat.errors.generic;
-    } else {
+    for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
+      const payload = {
+        messages: apiMessages,
+        stream: true,
+        ...chatSettings.sampling,
+        // Gemma 4's template defaults thinking to off, Qwen3.5's to on; always say which.
+        chat_template_kwargs: { enable_thinking: chatSettings.thinking },
+      };
+      // The last round has no tools, so the model must answer with what it found.
+      if (webOn && round < MAX_TOOL_ROUNDS) payload.tools = TOOLS;
+
+      const res = await fetch(`http://127.0.0.1:${conn.port}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${conn.apiKey}` },
+        body: JSON.stringify(payload),
+        signal: abortController.signal,
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        const type = err && err.error && err.error.type;
+        reply.error = type === 'exceed_context_size_error' ? ar.chat.errors.contextFull : ar.chat.errors.generic;
+        break;
+      }
+
+      const toolCalls = [];
+      let roundContent = '';
       for await (const chunk of readSse(res)) {
         const delta = chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
         if (delta) {
@@ -474,6 +596,13 @@ async function send(text, images = []) {
           if (delta.content) {
             if (!reply.content && reply.reasoning) reply.thinkEnd = Date.now();
             reply.content += delta.content;
+            roundContent += delta.content;
+          }
+          for (const tc of delta.tool_calls || []) {
+            const slot = (toolCalls[tc.index ?? 0] ||= { id: '', type: 'function', function: { name: '', arguments: '' } });
+            if (tc.id) slot.id = tc.id;
+            if (tc.function && tc.function.name) slot.function.name += tc.function.name;
+            if (tc.function && tc.function.arguments) slot.function.arguments += tc.function.arguments;
           }
         }
         if (chunk.timings) {
@@ -482,6 +611,19 @@ async function send(text, images = []) {
         }
         renderLast();
       }
+
+      const calls = toolCalls.filter(Boolean);
+      if (!calls.length) break;
+      calls.forEach((c, i) => {
+        if (!c.id) c.id = `call_${round}_${i}`;
+      });
+      apiMessages.push({ role: 'assistant', content: roundContent, tool_calls: calls });
+      for (const call of calls) {
+        const result = await runTool(call, reply);
+        if (abortController.signal.aborted) throw new DOMException('aborted', 'AbortError');
+        apiMessages.push({ role: 'tool', tool_call_id: call.id, content: result });
+      }
+      renderLast();
     }
   } catch (err) {
     if (err.name === 'AbortError') reply.stopped = true;
@@ -520,6 +662,19 @@ export function initChat() {
     input.value = '';
     autoGrow(input);
     send(text, images);
+  });
+
+  // Web search on/off, remembered in settings.
+  const webBtn = $('btn-web');
+  const showWeb = (on) => {
+    webBtn.setAttribute('aria-pressed', String(on));
+    webBtn.title = on ? ar.chat.webToggleOn : ar.chat.webToggleOff;
+    webBtn.setAttribute('aria-label', webBtn.title);
+  };
+  window.blazma.getSettings().then((st) => showWeb(st.webSearch));
+  webBtn.addEventListener('click', async () => {
+    const st = await window.blazma.updateSettings({ webSearch: webBtn.getAttribute('aria-pressed') !== 'true' });
+    showWeb(st.webSearch);
   });
 
   // Images: button, paste, or drag and drop onto the chat.
