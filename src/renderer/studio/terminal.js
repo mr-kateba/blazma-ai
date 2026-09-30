@@ -40,6 +40,7 @@ export function createTerminal(T, ctx) {
   let histPos = 0;
   let attached = false; // mirror the preview console here (after run/node from the terminal)
   let busy = false;
+  let captured = null; // lines printed while the assistant runs a command
 
   // The project name may be Arabic, so it is isolated to keep "name ~/dir $" in order.
   const promptNodes = () => [el('bdi', null, ctx.projectName()), ` ~${cwd ? `/${cwd}` : ''} $`];
@@ -55,6 +56,7 @@ export function createTerminal(T, ctx) {
   }
 
   function append(node) {
+    if (captured && !node.classList.contains('cmd')) captured.push(node.textContent);
     out.append(node);
     while (out.childElementCount > 2000) out.firstChild.remove();
     root.scrollTop = root.scrollHeight;
@@ -372,6 +374,20 @@ export function createTerminal(T, ctx) {
       updatePrompt();
     },
     exec,
+    // Runs a command for the assistant and returns what it printed. Output of
+    // runs (node, run, npm start) arrives from the preview, so it waits a bit.
+    async runForAssistant(cmdLine) {
+      const name = words(cmdLine)[0] || '';
+      if (['ai', 'اسأل', 'export'].includes(name)) return `The command "${name}" is not available to the assistant.`;
+      captured = [];
+      try {
+        await exec(cmdLine);
+        if (/^(node|run|start|npm|live-server|js)$/.test(name)) await new Promise((r) => setTimeout(r, 1800));
+        return captured.join('\n') || '(no output)';
+      } finally {
+        captured = null;
+      }
+    },
     clear: () => out.replaceChildren(),
   };
 }

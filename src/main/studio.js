@@ -94,6 +94,61 @@ async function exportProject(win, id) {
   return { saved: true };
 }
 
+// User-initiated: copies the text files of a folder the user picks into a
+// new project (like "Open Folder"). Read-only; the folder is not changed.
+// Hidden entries, node_modules and symbolic links are skipped.
+const IMPORT_EXT = /\.(html?|css|m?js|json|md|txt|svg|xml|csv)$/i;
+const IMPORT_NAME = /^[A-Za-z0-9_\-./]{1,200}$/;
+const IMPORT_TOTAL_BYTES = 8 * 1024 * 1024;
+
+async function importFolder(win) {
+  const { canceled, filePaths } = await dialog.showOpenDialog(win, {
+    title: 'اختر مجلد المشروع',
+    properties: ['openDirectory'],
+  });
+  if (canceled || !filePaths[0]) return { opened: false };
+  const rootDir = filePaths[0];
+  const files = {};
+  let total = 0;
+  let skipped = 0;
+  const walk = (dir, rel, depth) => {
+    let entries = [];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const ent of entries) {
+      if (ent.name.startsWith('.') || ent.name === 'node_modules') continue;
+      const relPath = rel ? `${rel}/${ent.name}` : ent.name;
+      const full = path.join(dir, ent.name);
+      if (ent.isDirectory()) {
+        if (depth < 6) walk(full, relPath, depth + 1);
+        continue;
+      }
+      if (!ent.isFile() || !IMPORT_EXT.test(ent.name) || !IMPORT_NAME.test(relPath)) {
+        skipped++;
+        continue;
+      }
+      let size = 0;
+      try {
+        size = fs.statSync(full).size;
+      } catch {
+        skipped++;
+        continue;
+      }
+      if (Object.keys(files).length >= MAX_FILES || size > MAX_FILE_BYTES || total + size > IMPORT_TOTAL_BYTES) {
+        skipped++;
+        continue;
+      }
+      files[cleanPath(relPath)] = fs.readFileSync(full, 'utf8');
+      total += size;
+    }
+  };
+  walk(rootDir, '', 0);
+  return { opened: true, name: path.basename(rootDir).slice(0, 60), files, skipped };
+}
+
 // ---------- preview ----------
 
 let previewFiles = {};
@@ -214,4 +269,4 @@ function previewResponse(url) {
   return new Response(body, { headers: headers(MIME[ext] || MIME.txt) });
 }
 
-module.exports = { list, get, save, remove, exportProject, setPreview, previewResponse, cleanPath };
+module.exports = { list, get, save, remove, exportProject, importFolder, setPreview, previewResponse, cleanPath };

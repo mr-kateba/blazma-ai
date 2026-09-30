@@ -3,12 +3,17 @@
 // search across files, a command palette, a terminal whose commands work on
 // the project (never on the operating system), and a live preview that runs
 // in a sandboxed iframe over studio:// with no network and no access to the
-// user's files. The model can write, run and fix the project through tools.
+// user's files. The editor is Monaco (VS Code's editor) when it loads, with
+// the simple editor as a fallback. The assistant (studio/agent.js) works like
+// Claude Code: it reads, edits, runs and fixes the project through tools.
 
 import { ar } from '../i18n/ar.js';
 import { el, detectDir } from '../lib/dom.js';
 import { renderMarkdown } from '../lib/markdown.js';
 import { createEditor } from '../studio/editor.js';
+import { loadMonaco, createMonacoEditor } from '../studio/monaco.js';
+import { createAgent } from '../studio/agent.js';
+import { diffLines } from '../studio/diff.js';
 import { createTerminal } from '../studio/terminal.js';
 import { createPalette } from '../studio/palette.js';
 import { languageOf } from '../studio/highlight.js';
@@ -75,6 +80,57 @@ function starterFiles() {
   };
 }
 
+// Starting points for "New project".
+const TEMPLATES = [
+  { id: 'web', files: starterFiles },
+  {
+    id: 'blank',
+    files: () => ({ 'index.html': '<!doctype html>\n<html lang="ar" dir="rtl">\n<head>\n  <meta charset="utf-8">\n  <title>مشروع جديد</title>\n</head>\n<body>\n\n</body>\n</html>\n' }),
+  },
+  {
+    id: 'canvas',
+    files: () => ({
+      'index.html':
+        '<!doctype html>\n<html lang="ar" dir="rtl">\n<head>\n  <meta charset="utf-8">\n  <link rel="stylesheet" href="style.css">\n</head>\n<body>\n  <p id="score">النقاط: 0</p>\n  <canvas id="game" width="480" height="320"></canvas>\n  <p class="hint">حرّك المربع بالأسهم واجمع النقاط الصفراء</p>\n  <script src="game.js"></script>\n</body>\n</html>\n',
+      'style.css':
+        'body {\n  margin: 0;\n  padding: 20px;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  background: #10131a;\n  color: #e8eaef;\n  font-family: system-ui, sans-serif;\n}\n\ncanvas {\n  background: #1b2030;\n  border-radius: 8px;\n}\n\n.hint {\n  color: #9097a6;\n}\n',
+      'game.js':
+        "const canvas = document.getElementById('game');\nconst ctx = canvas.getContext('2d');\nconst player = { x: 40, y: 40, size: 22, speed: 3 };\nconst keys = new Set();\nlet coin = randomCoin();\nlet score = 0;\n\nfunction randomCoin() {\n  return { x: 20 + Math.random() * (canvas.width - 40), y: 20 + Math.random() * (canvas.height - 40), r: 8 };\n}\n\naddEventListener('keydown', (e) => keys.add(e.key));\naddEventListener('keyup', (e) => keys.delete(e.key));\n\nfunction update() {\n  if (keys.has('ArrowUp')) player.y -= player.speed;\n  if (keys.has('ArrowDown')) player.y += player.speed;\n  if (keys.has('ArrowLeft')) player.x -= player.speed;\n  if (keys.has('ArrowRight')) player.x += player.speed;\n  player.x = Math.max(0, Math.min(canvas.width - player.size, player.x));\n  player.y = Math.max(0, Math.min(canvas.height - player.size, player.y));\n\n  const cx = player.x + player.size / 2;\n  const cy = player.y + player.size / 2;\n  if (Math.hypot(cx - coin.x, cy - coin.y) < coin.r + player.size / 2) {\n    score++;\n    document.getElementById('score').textContent = 'النقاط: ' + score;\n    console.log('نقطة!', score);\n    coin = randomCoin();\n  }\n}\n\nfunction draw() {\n  ctx.clearRect(0, 0, canvas.width, canvas.height);\n  ctx.fillStyle = '#5b8cff';\n  ctx.fillRect(player.x, player.y, player.size, player.size);\n  ctx.fillStyle = '#f5c542';\n  ctx.beginPath();\n  ctx.arc(coin.x, coin.y, coin.r, 0, Math.PI * 2);\n  ctx.fill();\n}\n\nfunction loop() {\n  update();\n  draw();\n  requestAnimationFrame(loop);\n}\nloop();\n",
+    }),
+  },
+  {
+    id: 'script',
+    files: () => ({
+      'main.js':
+        "// شغّل هذا الملف بـ F5، أو من الطرفية: node main.js\n// المخرجات تظهر في الطرفية ووحدة التحكم.\n\nfunction greet(name) {\n  return `مرحباً يا ${name}!`;\n}\n\nconsole.log(greet('Blazma'));\n\nconst numbers = [3, 1, 4, 1, 5, 9, 2, 6];\nconsole.log('المجموع:', numbers.reduce((a, b) => a + b, 0));\nconsole.log('مرتبة:', [...numbers].sort((a, b) => a - b));\n",
+    }),
+  },
+];
+
+function newProjectFromTemplate() {
+  palette.pick(
+    S.pickTemplate,
+    TEMPLATES.map((t) => ({ label: S.templates[t.id].name, detail: S.templates[t.id].detail, run: () => createProject(S.templates[t.id].projectName, t.files()) })),
+  );
+}
+
+async function importFolder() {
+  const res = await window.blazma.studioImportFolder();
+  if (!res.ok) {
+    terminal.print(S.importFailed, 'error');
+    return;
+  }
+  if (!res.result.opened) return;
+  const { name, files, skipped } = res.result;
+  if (!Object.keys(files).length) {
+    terminal.print(S.importEmpty, 'error');
+    return;
+  }
+  await createProject(name, files);
+  showPanel('terminal');
+  terminal.print(S.imported(Object.keys(files).length, skipped), 'ok');
+}
+
 // ---------- state ----------
 
 let W = null; // DOM references
@@ -91,12 +147,12 @@ let collapsed = new Set();
 let newFileDir = '';
 let saveTimer = null;
 let liveTimer = null;
-let problems = [];
+let staticProblems = []; // from the editor's language services (Monaco)
+let runtimeProblems = []; // errors and warnings from the last run
 let runLog = [];
 let evalSeq = 0;
 const evalWaiters = new Map();
-let aiAbort = null;
-let aiHistory = [];
+let agent = null;
 let modelState = null;
 let initPromise = null;
 let visible = false;
@@ -111,6 +167,10 @@ const layout = {
   previewVisible: true,
   previewWidth: 0.45,
   live: true,
+  fontSize: 14,
+  wordWrap: false,
+  minimap: true,
+  agentMode: 'auto',
 };
 
 function loadLayout() {
@@ -176,14 +236,14 @@ async function openProject(id) {
   project = p;
   tabs = [];
   active = null;
-  editor.clear();
+  if (editor.reset) editor.reset();
+  else editor.clear();
   viewStates.clear();
   dirty.clear();
   emptyFolders = new Set();
   collapsed = new Set();
   newFileDir = '';
-  aiHistory = [];
-  W.aiLog.replaceChildren(aiWelcome());
+  agent.newConversation();
   terminal.projectChanged();
   const names = Object.keys(project.files).sort();
   const first = names.includes('index.html') ? 'index.html' : names[0];
@@ -242,6 +302,7 @@ function writeFile(p, content) {
   project.files[p] = content;
   dropEmptyParents(p);
   if (p === active) editor.replaceAll(content);
+  else if (editor.syncFile) editor.syncFile(p, content);
   changed(p);
   if (isNew) renderExplorer();
   return true;
@@ -251,6 +312,7 @@ function deleteFile(p) {
   if (project.files[p] === undefined) return;
   delete project.files[p];
   closeTab(p);
+  if (editor.dropModel) editor.dropModel(p);
   changed(p);
   renderExplorer();
 }
@@ -265,6 +327,7 @@ function renameFile(from, to) {
     active = to;
     editor.setDoc(project.files[to], to);
   }
+  if (editor.dropModel) editor.dropModel(from);
   changed(to);
   renderAll();
   return true;
@@ -278,6 +341,7 @@ function deleteFolder(dir) {
   for (const f of filesUnder(dir)) {
     delete project.files[f];
     closeTab(f);
+    if (editor.dropModel) editor.dropModel(f);
   }
   for (const d of [...emptyFolders]) if (d === dir || d.startsWith(`${dir}/`)) emptyFolders.delete(d);
   changed(dir);
@@ -293,6 +357,7 @@ function renameFolder(from, to) {
     delete project.files[o];
     tabs = tabs.map((t) => (t === o ? n : t));
     if (active === o) active = n;
+    if (editor.dropModel) editor.dropModel(o);
   }
   for (const d of [...emptyFolders]) {
     if (d === from || d.startsWith(`${from}/`)) {
@@ -332,6 +397,7 @@ function openFile(p, { line, col, noFocus } = {}) {
   renderExplorer();
   renderCrumbs();
   updateStatus();
+  if (agent) agent.updateChips();
   if (line) editor.revealLine(line, col);
   else if (!noFocus) editor.focus();
 }
@@ -649,7 +715,8 @@ function defineCommands() {
     { id: 'gotoLine', label: S.cmd.gotoLine, key: 'Ctrl+G', needsFile: true, run: () => palette.open(':') },
     { id: 'newFile', label: S.cmd.newFile, key: 'Ctrl+N', run: () => newEntry('file') },
     { id: 'newFolder', label: S.cmd.newFolder, run: () => newEntry('folder') },
-    { id: 'newProject', label: S.cmd.newProject, key: 'Ctrl+Shift+N', run: () => createProject(S.newProjectName, starterFiles()) },
+    { id: 'newProject', label: S.cmd.newProject, key: 'Ctrl+Shift+N', run: newProjectFromTemplate },
+    { id: 'importFolder', label: S.cmd.importFolder, run: importFolder },
     { id: 'openProject', label: S.cmd.openProject, key: 'Ctrl+O', run: pickProject },
     { id: 'save', label: S.cmd.save, key: 'Ctrl+S', run: () => (dirty.add('*'), saveNow()) },
     { id: 'export', label: S.cmd.export, run: exportProject },
@@ -658,12 +725,21 @@ function defineCommands() {
     { id: 'closeTab', label: S.cmd.closeTab, key: 'Ctrl+W', needsFile: true, run: () => closeTab(active) },
     { id: 'nextTab', label: S.cmd.nextTab, key: 'Ctrl+Tab', run: () => cycleTab(1) },
     { id: 'prevTab', label: S.cmd.prevTab, key: 'Ctrl+Shift+Tab', run: () => cycleTab(-1) },
-    { id: 'undo', label: S.cmd.undo, key: 'Ctrl+Z', displayOnly: true, needsFile: true, run: () => (editor.focus(), document.execCommand('undo')) },
-    { id: 'redo', label: S.cmd.redo, key: 'Ctrl+Y', displayOnly: true, needsFile: true, run: () => (editor.focus(), document.execCommand('redo')) },
+    { id: 'undo', label: S.cmd.undo, key: 'Ctrl+Z', displayOnly: true, needsFile: true, run: () => editorUndo('undo') },
+    { id: 'redo', label: S.cmd.redo, key: 'Ctrl+Y', displayOnly: true, needsFile: true, run: () => editorUndo('redo') },
     { id: 'find', label: S.cmd.find, key: 'Ctrl+F', needsFile: true, run: () => editor.openFind() },
     { id: 'findInFiles', label: S.cmd.findInFiles, key: 'Ctrl+Shift+F', run: () => showSide('search', true) },
     { id: 'comment', label: S.cmd.comment, key: 'Ctrl+/', displayOnly: true, needsFile: true, run: () => editor.toggleComment() },
-    { id: 'renameFile', label: S.cmd.renameFile, key: 'F2', needsFile: true, run: () => (showSide('explorer'), startRename(active, false)) },
+    // In Monaco, F2 renames the symbol under the cursor (as in VS Code).
+    { id: 'renameFile', label: S.cmd.renameFile, key: 'F2', needsFile: true, yieldsToEditor: true, run: () => (showSide('explorer'), startRename(active, false)) },
+    { id: 'format', label: S.cmd.format, key: 'Shift+Alt+F', needsFile: true, needsMonaco: true, run: () => editor.format() },
+    { id: 'toggleWrap', label: S.cmd.toggleWrap, key: 'Alt+Z', needsMonaco: true, run: () => setEditorPref('wordWrap', !layout.wordWrap) },
+    { id: 'toggleMinimap', label: S.cmd.toggleMinimap, needsMonaco: true, run: () => setEditorPref('minimap', !layout.minimap) },
+    { id: 'fontUp', label: S.cmd.fontUp, key: 'Ctrl+=', needsMonaco: true, run: () => setEditorPref('fontSize', Math.min(28, layout.fontSize + 1)) },
+    { id: 'fontDown', label: S.cmd.fontDown, key: 'Ctrl+-', needsMonaco: true, run: () => setEditorPref('fontSize', Math.max(10, layout.fontSize - 1)) },
+    { id: 'explainSelection', label: S.cmd.explainSelection, needsFile: true, run: () => askAboutSelection('explain') },
+    { id: 'fixSelection', label: S.cmd.fixSelection, needsFile: true, run: () => askAboutSelection('fix') },
+    { id: 'newChat', label: S.cmd.newChat, run: () => (showSide('ai', true), agent.newConversation()) },
     { id: 'explorer', label: S.cmd.explorer, key: 'Ctrl+Shift+E', run: () => showSide('explorer', true) },
     { id: 'search', label: S.cmd.search, run: () => showSide('search', true) },
     { id: 'ai', label: S.cmd.ai, key: 'Ctrl+Alt+I', run: () => showSide('ai', true) },
@@ -679,19 +755,37 @@ function defineCommands() {
     { id: 'clearConsole', label: S.cmd.clearConsole, run: clearConsole },
     { id: 'clearTerminal', label: S.cmd.clearTerminal, run: () => terminal.clear() },
     { id: 'terminalHelp', label: S.cmd.terminalHelp, run: () => (showPanel('terminal', true), terminal.exec('help')) },
-    { id: 'askAi', label: S.cmd.askAi, run: () => (showSide('ai', true), W.aiInput.focus()) },
+    { id: 'askAi', label: S.cmd.askAi, run: () => showSide('ai', true) },
   ];
 }
 
-const isDisabled = (c) => Boolean(c.needsFile && !active);
+const isDisabled = (c) => Boolean((c.needsFile && !active) || (c.needsMonaco && editor.kind !== 'monaco'));
+
+function editorUndo(which) {
+  editor.focus();
+  if (editor.kind === 'monaco') editor.trigger(which);
+  else document.execCommand(which);
+}
+
+function setEditorPref(key, value) {
+  layout[key] = value;
+  saveLayout();
+  applyEditorPrefs();
+}
+
+function applyEditorPrefs() {
+  if (editor.kind !== 'monaco') return;
+  editor.setOptions({ fontSize: layout.fontSize, lineHeight: Math.round(layout.fontSize * 1.45), wordWrap: layout.wordWrap ? 'on' : 'off', minimap: { enabled: layout.minimap } });
+}
 
 const MENUS = [
-  ['file', ['newFile', 'newFolder', 'sep', 'newProject', 'openProject', 'sep', 'save', 'export', 'sep', 'renameProject', 'deleteProject', 'sep', 'closeTab']],
-  ['edit', ['undo', 'redo', 'sep', 'find', 'findInFiles', 'sep', 'comment', 'renameFile']],
-  ['view', ['palette', 'quickOpen', 'gotoLine', 'sep', 'explorer', 'search', 'ai', 'sep', 'toggleSidebar', 'togglePanel', 'togglePreview', 'sep', 'console', 'problems']],
+  ['file', ['newFile', 'newFolder', 'sep', 'newProject', 'openProject', 'importFolder', 'sep', 'save', 'export', 'sep', 'renameProject', 'deleteProject', 'sep', 'closeTab']],
+  ['edit', ['undo', 'redo', 'sep', 'find', 'findInFiles', 'sep', 'comment', 'format', 'renameFile']],
+  ['view', ['palette', 'quickOpen', 'gotoLine', 'sep', 'explorer', 'search', 'ai', 'sep', 'toggleSidebar', 'togglePanel', 'togglePreview', 'sep', 'toggleWrap', 'toggleMinimap', 'fontUp', 'fontDown', 'sep', 'console', 'problems']],
   ['run', ['run', 'runFile', 'toggleLive', 'sep', 'clearConsole']],
   ['terminal', ['terminal', 'clearTerminal', 'terminalHelp']],
-  ['help', ['palette', 'terminalHelp', 'askAi']],
+  ['ai', ['askAi', 'newChat', 'sep', 'explainSelection', 'fixSelection']],
+  ['help', ['palette', 'terminalHelp']],
 ];
 
 const command = (id) => COMMANDS.find((c) => c.id === id);
@@ -704,7 +798,7 @@ function menuItems(ids) {
   });
 }
 
-const CODE_KEYS = { Backquote: '`', Slash: '/', Tab: 'Tab', BracketLeft: '[', BracketRight: ']' };
+const CODE_KEYS = { Backquote: '`', Slash: '/', Tab: 'Tab', BracketLeft: '[', BracketRight: ']', Equal: '=', Minus: '-' };
 
 // Uses e.code so shortcuts work with an Arabic keyboard layout too.
 function comboOf(e) {
@@ -730,6 +824,7 @@ function onGlobalKey(e) {
   if (combo === 'F2' && e.target.closest && e.target.closest('.tree-row')) return;
   const cmd = COMMANDS.find((c) => !c.displayOnly && (c.key === combo || c.alt === combo));
   if (!cmd) return;
+  if (cmd.yieldsToEditor && e.target.closest && e.target.closest('.monaco-editor')) return;
   e.preventDefault();
   e.stopPropagation();
   if (!isDisabled(cmd)) cmd.run();
@@ -753,7 +848,7 @@ function showSide(view, focus) {
   setSideVisible(true);
   if (focus === true) {
     if (view === 'search') W.searchInput.focus();
-    if (view === 'ai') W.aiInput.focus();
+    if (view === 'ai') agent.focus();
   }
 }
 
@@ -828,8 +923,16 @@ function clearConsole() {
   W.consoleOut.replaceChildren();
 }
 
-function setProblems(list) {
-  problems = list;
+const allProblems = () => [...staticProblems, ...runtimeProblems];
+
+function setRuntimeProblems(list) {
+  runtimeProblems = list;
+  renderProblems();
+  updateStatus();
+}
+
+function setStaticProblems(list) {
+  staticProblems = list;
   renderProblems();
   updateStatus();
 }
@@ -856,6 +959,7 @@ function gotoProblem(p) {
 }
 
 function renderProblems() {
+  const problems = allProblems();
   W.problemCount.textContent = problems.length ? String(problems.length) : '';
   W.problemCount.hidden = !problems.length;
   if (!problems.length) {
@@ -889,7 +993,7 @@ function loadFrame(src, label) {
   // A run started now replaces any pending live reload.
   clearTimeout(liveTimer);
   clearConsole();
-  setProblems([]);
+  setRuntimeProblems([]);
   runLog = [];
   W.address.textContent = label;
   W.frame.src = src;
@@ -972,7 +1076,7 @@ function onPreviewMessage(e) {
   terminal.console(level, where ? `${text}  (${locationText(where)})` : text);
   runLog.push(`[${level}] ${text}${where ? ` (${locationText(where)})` : ''}`);
   if (runLog.length > 200) runLog.shift();
-  if (level !== 'log') setProblems([...problems, { level, text, ...(where || {}) }].slice(-200));
+  if (level !== 'log') setRuntimeProblems([...runtimeProblems, { level, text, ...(where || {}) }].slice(-200));
 }
 
 // ---------- search view ----------
@@ -1031,174 +1135,75 @@ function runSearch() {
   );
 }
 
-// ---------- the model writes, runs and fixes the code ----------
+// ---------- the assistant (see studio/agent.js) ----------
 
-const TOOLS = [
-  {
-    type: 'function',
-    function: {
-      name: 'write_file',
-      description: 'Create or replace a file of the project with its full content.',
-      parameters: {
-        type: 'object',
-        properties: { path: { type: 'string', description: 'File path, e.g. index.html, style.css, js/game.js' }, content: { type: 'string', description: 'The complete file content.' } },
-        required: ['path', 'content'],
-      },
-    },
-  },
-  {
-    type: 'function',
-    function: { name: 'read_file', description: 'Read a file of the project.', parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } },
-  },
-  {
-    type: 'function',
-    function: { name: 'delete_file', description: 'Delete a file of the project.', parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } },
-  },
-  {
-    type: 'function',
-    function: { name: 'list_files', description: 'List the files of the project with their sizes.', parameters: { type: 'object', properties: {} } },
-  },
-  {
-    type: 'function',
-    function: {
-      name: 'run_project',
-      description: 'Run the project in the preview and return its console output and errors (with file and line). Use it after writing files to check that the code works, then fix any errors.',
-      parameters: { type: 'object', properties: {} },
-    },
-  },
-];
-
-function aiWelcome() {
-  return el('div', { class: 'ai-welcome' }, icon('ai'), el('p', null, S.aiWelcome));
-}
-
-function aiEntry(kind, text) {
-  const node =
-    kind === 'assistant'
-      ? el('div', { class: 'ai-entry assistant msg-body', dir: detectDir(text) }, renderMarkdown(text, { copy: ar.actions.copy, copied: ar.actions.copied, code: ar.chat.code }))
-      : el('div', { class: `ai-entry ${kind}`, dir: kind === 'step' ? 'rtl' : 'auto' }, text);
-  const welcome = W.aiLog.querySelector('.ai-welcome');
-  if (welcome) welcome.remove();
-  W.aiLog.append(node);
-  W.aiLog.scrollTop = W.aiLog.scrollHeight;
-  return node;
-}
-
-const listFiles = () =>
-  Object.keys(project.files)
-    .sort()
-    .map((n) => `${n} (${project.files[n].length} chars)`)
-    .join('\n') || '(no files)';
-
-async function runStudioTool(call) {
-  let args = {};
-  try {
-    args = JSON.parse(call.function.arguments || '{}');
-  } catch {
-    return 'Invalid arguments (JSON).';
-  }
-  const fn = call.function.name;
-  if (fn === 'list_files') return listFiles();
-  if (fn === 'run_project') {
-    aiEntry('step', S.aiRan);
-    const ok = await run();
-    if (!ok) return 'Nothing to run: add index.html (or a .js file).';
-    await new Promise((r) => setTimeout(r, 1800));
-    return runLog.length ? `Console output:\n${runLog.join('\n')}` : 'The project ran with no console output and no errors.';
-  }
-  const name = String(args.path || '').trim().replace(/^\.?\/+/, '');
-  if (!validName(name)) return `Invalid file name "${name}". Use names like index.html or js/app.js.`;
-  if (fn === 'write_file') {
-    writeFile(name, String(args.content ?? ''));
-    openFile(name, { noFocus: true });
-    aiEntry('step', S.aiWrote(name));
-    return `Wrote ${name} (${project.files[name].length} characters).`;
-  }
-  if (fn === 'read_file') {
-    aiEntry('step', S.aiRead(name));
-    return project.files[name] ?? `No file named ${name}.`;
-  }
-  if (fn === 'delete_file') {
-    if (project.files[name] === undefined) return `No file named ${name}.`;
-    deleteFile(name);
-    aiEntry('step', S.aiDeleted(name));
-    return `Deleted ${name}.`;
-  }
-  return `Unknown tool ${fn}.`;
-}
-
-function setAiBusy(busy) {
-  W.aiSend.hidden = busy;
-  W.aiStop.hidden = !busy;
-  W.aiInput.disabled = busy;
-  W.aiBadge.hidden = !busy;
-}
-
-const MAX_AI_ROUNDS = 10;
-
-async function askAi(text) {
-  if (aiAbort) return;
+function askAi(text) {
   showSide('ai');
-  const conn = await window.blazma.getConnection();
-  if (!conn) {
-    aiEntry('error', S.aiNotReady);
-    return;
-  }
-  const settings = await window.blazma.getChatSettings();
-  aiEntry('user', text);
-  const working = aiEntry('working', S.aiWorking);
-  setAiBusy(true);
-  aiAbort = new AbortController();
-  const messages = [{ role: 'system', content: S.system(listFiles().replace(/\n/g, '، '), active) }, ...aiHistory, { role: 'user', content: text }];
-  let answer = '';
-  try {
-    for (let round = 0; round < MAX_AI_ROUNDS; round++) {
-      const res = await fetch(`http://127.0.0.1:${conn.port}/v1/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${conn.apiKey}` },
-        body: JSON.stringify({
-          messages,
-          stream: false,
-          ...settings.sampling,
-          chat_template_kwargs: { enable_thinking: settings.thinking },
-          ...(round < MAX_AI_ROUNDS - 1 ? { tools: TOOLS } : {}),
-        }),
-        signal: aiAbort.signal,
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const msg = (await res.json()).choices[0].message;
-      const calls = msg.tool_calls || [];
-      if (!calls.length) {
-        answer = msg.content || '';
-        break;
-      }
-      messages.push({ role: 'assistant', content: msg.content || '', tool_calls: calls });
-      for (const call of calls) messages.push({ role: 'tool', tool_call_id: call.id, content: await runStudioTool(call) });
-    }
-    aiHistory.push({ role: 'user', content: text }, { role: 'assistant', content: answer || '…' });
-    if (answer) aiEntry('assistant', answer);
-    dirty.add('*');
-    await saveNow();
-    await run();
-  } catch (err) {
-    if (err.name !== 'AbortError') aiEntry('error', S.aiFailed);
-  } finally {
-    working.remove();
-    aiAbort = null;
-    setAiBusy(false);
-  }
+  return agent.ask(text);
 }
 
 function askAiAbout(path) {
   showSide('ai', true);
-  W.aiInput.value = S.aiAboutFile(path);
-  W.aiInput.focus();
+  agent.prefill(S.agent.aboutFile(path));
+}
+
+function askAboutSelection(kind) {
+  showSide('ai', true);
+  const sel = editor.selectionText ? editor.selectionText() : '';
+  if (!sel) {
+    agent.prefill(active ? S.agent.aboutFile(active) : '');
+    return;
+  }
+  agent.ask(kind === 'fix' ? S.agent.fixSelection : S.agent.explainSelection);
+}
+
+// Runs the project for the assistant and reports output and problems.
+async function runForAgent() {
+  const ok = await run();
+  if (!ok) return { text: 'Nothing to run: add index.html (or a .js file).', problems: [] };
+  await new Promise((r) => setTimeout(r, 1800));
+  const all = [...staticProblems, ...runtimeProblems];
+  const lines = [];
+  lines.push(runLog.length ? `Console output:\n${runLog.join('\n')}` : 'Console: no output.');
+  const editorErrors = staticProblems.filter((p) => p.level === 'error');
+  if (editorErrors.length) lines.push(`Problems found by the editor:\n${editorErrors.map((p) => `${p.file}:${p.line}: ${p.text}`).join('\n')}`);
+  if (!all.some((p) => p.level === 'error')) lines.push('No errors.');
+  return { text: lines.join('\n\n'), problems: all };
+}
+
+// Side-by-side style diff of one file, opened from the assistant's change list.
+function showDiff(path, before, after) {
+  closeDiff();
+  const body = el('div', { class: 'diff-modal-body', dir: 'ltr' });
+  const close = iconBtn('close', S.close, closeDiff);
+  const modal = el('div', { class: 'diff-modal' }, el('div', { class: 'diff-modal-head' }, el('span', null, S.agent.diffTitle(path)), close), body);
+  const overlay = el('div', { class: 'diff-overlay' }, modal);
+  overlay.addEventListener('mousedown', (e) => e.target === overlay && closeDiff());
+  W.root.append(overlay);
+  let dispose = null;
+  if (editor.showDiff) dispose = editor.showDiff(body, before, after, path);
+  else {
+    const ops = diffLines(before, after);
+    body.classList.add('plain');
+    body.append(
+      ...ops.map((o) => el('div', { class: `diff-line ${o.type === '+' ? 'add' : o.type === '-' ? 'del' : ''}` }, el('span', { class: 'diff-sign' }, o.type), o.text || ' ')),
+    );
+  }
+  W.diff = { overlay, dispose };
+}
+
+function closeDiff() {
+  if (!W || !W.diff) return;
+  if (W.diff.dispose) W.diff.dispose();
+  W.diff.overlay.remove();
+  W.diff = null;
 }
 
 // ---------- status bar ----------
 
 function updateStatus() {
   if (!W) return;
+  const problems = allProblems();
   const errors = problems.filter((p) => p.level === 'error').length;
   const warns = problems.length - errors;
   W.stProblems.replaceChildren(icon('error'), el('span', null, String(errors)), icon('warn'), el('span', null, String(warns)));
@@ -1279,7 +1284,7 @@ function build(host) {
   W.projectTitle = el('span', { class: 'proj-name', dir: 'auto' });
   const projMore = iconBtn('more', S.projectActions, (e) => {
     const r = e.currentTarget.getBoundingClientRect();
-    showMenu(r.right, r.bottom + 2, menuItems(['newProject', 'openProject', 'sep', 'renameProject', 'export', 'sep', 'deleteProject']), { alignRightTo: r.right });
+    showMenu(r.right, r.bottom + 2, menuItems(['newProject', 'openProject', 'importFolder', 'sep', 'renameProject', 'export', 'sep', 'deleteProject']), { alignRightTo: r.right });
   });
   W.tree = el('div', { class: 'tree', role: 'tree' });
   const explorer = el(
@@ -1327,27 +1332,8 @@ function build(host) {
     W.searchResults,
   );
 
-  // AI view.
-  W.aiLog = el('div', { class: 'ai-log' });
-  W.aiInput = el('textarea', { class: 'ai-input', rows: '3', dir: 'auto', placeholder: S.aiPlaceholder });
-  W.aiSend = el('button', { type: 'submit', class: 'btn primary' }, S.aiSend);
-  W.aiStop = el('button', { type: 'button', class: 'btn danger', hidden: true }, S.aiStop);
-  const aiForm = el('form', { class: 'ai-form' }, W.aiInput, el('div', { class: 'ai-form-row' }, el('span', { class: 'ai-hint' }, S.aiHint), W.aiSend, W.aiStop));
-  aiForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const text = W.aiInput.value.trim();
-    if (!text || aiAbort) return;
-    W.aiInput.value = '';
-    askAi(text);
-  });
-  W.aiInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
-      e.preventDefault();
-      aiForm.requestSubmit();
-    }
-  });
-  W.aiStop.addEventListener('click', () => aiAbort && aiAbort.abort());
-  const aiView = el('div', { class: 'side-view ai-view', 'data-view': 'ai', hidden: true }, el('div', { class: 'side-head' }, el('span', null, S.aiTitle)), W.aiLog, aiForm);
+  // Assistant view (studio/agent.js).
+  const aiView = agent.root;
 
   W.side = el('aside', { class: 'wb-side' }, explorer, search, aiView);
   W.sideSash = el('div', { class: 'sash sash-v' });
@@ -1492,14 +1478,29 @@ export async function openCodeInStudio(code, lang) {
 
 async function setup() {
   loadLayout();
-  editor = createEditor(S.editor, {
+  const host = document.getElementById('studio-root');
+  host.replaceChildren(el('div', { class: 'studio-loading' }, S.loadingEditor));
+  const editorEvents = {
     onChange(value) {
       if (!active || project.files[active] === value) return;
       project.files[active] = value;
       changed(active);
     },
-    onCursor: () => updateStatus(),
-  });
+    onCursor: () => {
+      updateStatus();
+      if (agent) agent.updateChips();
+    },
+    onMarkers: (list) => setStaticProblems(list),
+  };
+  let editorNote = null;
+  try {
+    const monaco = await loadMonaco();
+    editor = createMonacoEditor(monaco, S.editor, editorEvents);
+  } catch (err) {
+    // Fall back to the simple editor; the studio keeps working.
+    editor = createEditor(S.editor, editorEvents);
+    editorNote = S.monacoFailed;
+  }
   terminal = createTerminal(S.term, {
     files: () => (project ? project.files : {}),
     projectName: () => (project ? project.name.replace(/\s+/g, '-') : ''),
@@ -1521,6 +1522,43 @@ async function setup() {
     exportProject,
     askAi: (text) => askAi(text),
   });
+  agent = createAgent(S.agent, {
+    files: () => (project ? project.files : {}),
+    writeFile: (p, content) => {
+      writeFile(p, content);
+      openFile(p, { noFocus: true });
+    },
+    deleteFile,
+    restore(list) {
+      for (const { path, content } of list) {
+        if (content === undefined) deleteFile(path);
+        else writeFile(path, content);
+      }
+      renderAll();
+      run();
+    },
+    activeFile: () => active,
+    cursorLine: () => (active ? editor.position().line : 0),
+    selection: () => (active && editor.selectionText ? editor.selectionText() : ''),
+    problems: allProblems,
+    runProject: runForAgent,
+    runCommand: (cmd) => {
+      showPanel('terminal');
+      return terminal.runForAssistant(cmd);
+    },
+    showDiff,
+    renderMarkdown: (text) => renderMarkdown(text, { copy: ar.actions.copy, copied: ar.actions.copied, code: ar.chat.code }),
+    onBusy: (b) => (W.aiBadge.hidden = !b),
+    setMode: (m) => {
+      layout.agentMode = m;
+      saveLayout();
+    },
+    afterTurn: async () => {
+      dirty.add('*');
+      await saveNow();
+    },
+  });
+  agent.setMode(layout.agentMode);
   defineCommands();
   palette = createPalette(S.palette, {
     commands: () => COMMANDS.filter((c) => !isDisabled(c)).map((c) => ({ id: c.id, label: c.label, key: c.key, run: c.run })),
@@ -1534,7 +1572,13 @@ async function setup() {
     gotoLine: (n) => editor.revealLine(n),
   });
 
-  build(document.getElementById('studio-root'));
+  build(host);
+  applyEditorPrefs();
+  if (editor.addContextAction) {
+    editor.addContextAction('blazma.explain', S.cmd.explainSelection, () => askAboutSelection('explain'), 1);
+    editor.addContextAction('blazma.fix', S.cmd.fixSelection, () => askAboutSelection('fix'), 2);
+  }
+  if (editorNote) terminal.print(editorNote, 'warn');
   showSide(layout.side);
   setSideVisible(layout.sideVisible);
   setPanelVisible(layout.panelVisible);
