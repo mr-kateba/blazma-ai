@@ -278,10 +278,18 @@ button { font: inherit; color: inherit; }
 /* ---------- chat page layout ---------- */
 .page-chat {
   display: flex;
-  flex-direction: column;
+  gap: 20px;
   height: 100vh;
+  max-width: none;
+  padding: 20px 24px;
+}
+.chat-main {
+  flex: 1;
+  min-width: 0;
   max-width: 920px;
-  padding-bottom: 20px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
 }
 .page-chat[hidden] { display: none; }
 
@@ -627,3 +635,60 @@ details.tech pre {
   cursor: pointer;
 }
 .source:hover { border-color: rgba(91, 140, 255, 0.5); }
+
+/* ---------- saved conversations ---------- */
+.chat-list {
+  width: 230px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding-inline-end: 16px;
+  border-inline-end: 1px solid var(--border);
+}
+.chat-new { width: 100%; }
+.chat-search {
+  width: 100%;
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 14px;
+}
+.chat-items { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
+.chat-item {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 14px;
+}
+.chat-item:hover { background: var(--surface); color: var(--text); }
+.chat-item[aria-current='true'] { background: var(--accent-soft); color: var(--text); }
+.chat-item-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-inline-end: 44px; }
+.chat-item-snippet { font-size: 12px; color: var(--faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-item-actions { position: absolute; top: 6px; inset-inline-end: 6px; display: none; gap: 2px; }
+.chat-item:hover .chat-item-actions, .chat-item:focus-within .chat-item-actions { display: flex; }
+.chat-item-actions button { border: 0; background: transparent; color: var(--faint); cursor: pointer; font-size: 13px; padding: 2px 4px; }
+.chat-item-actions button:hover { color: var(--text); }
+.chat-item input { width: 100%; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--accent); background: var(--surface-2); color: var(--text); font: inherit; }
+.chat-list-empty { color: var(--faint); font-size: 13px; padding: 8px; }
+
+/* edit a sent message */
+.edit-box { display: flex; flex-direction: column; gap: 6px; min-width: 320px; }
+.edit-box textarea {
+  width: 100%;
+  min-height: 70px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--accent);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}

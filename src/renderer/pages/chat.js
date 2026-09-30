@@ -20,7 +20,14 @@ function dateContext(webOn) {
   );
 }
 
-const mdLabels = { copy: ar.actions.copy, copied: ar.actions.copied, code: ar.chat.code };
+const mdLabels = {
+  copy: ar.actions.copy,
+  copied: ar.actions.copied,
+  code: ar.chat.code,
+  saveCode: ar.chat.saveCode,
+  savedCode: ar.chat.savedCode,
+  save: (code, lang) => window.blazma.saveTextFile(code, lang),
+};
 
 const $ = (id) => document.getElementById(id);
 
@@ -35,6 +42,8 @@ let pendingImages = []; // data URLs attached to the message being written
 const MAX_IMAGES = 4;
 const MAX_IMAGE_SIDE = 1536;
 let speed = 0;
+let currentChatId = null; // saved conversation shown now (null until the first message)
+let editingIndex = null; // user message being edited
 
 // ---------- setup panel ----------
 
@@ -281,7 +290,24 @@ function messageNode(msg, index) {
   if (isUser && msg.images && msg.images.length) {
     body.append(el('div', { class: 'msg-images' }, ...msg.images.map((src) => el('img', { src, alt: '' }))));
   }
-  if (isUser && msg.content) body.append(el('p', { dir: detectDir(msg.content), class: 'plain' }, msg.content));
+  if (isUser && editingIndex === index) {
+    const box = el('textarea', { dir: 'auto' });
+    box.value = msg.content;
+    body.append(
+      el(
+        'div',
+        { class: 'edit-box' },
+        box,
+        el(
+          'div',
+          { class: 'row' },
+          el('button', { type: 'button', class: 'btn primary', onclick: () => saveEdit(index, box.value) }, ar.chat.saveEdit),
+          el('button', { type: 'button', class: 'btn ghost', onclick: () => ((editingIndex = null), renderMessages()) }, ar.chat.cancel),
+        ),
+      ),
+    );
+    setTimeout(() => box.focus(), 0);
+  } else if (isUser && msg.content) body.append(el('p', { dir: detectDir(msg.content), class: 'plain' }, msg.content));
   if (!isUser && msg.steps && msg.steps.length) {
     body.append(
       el(
@@ -332,6 +358,10 @@ function messageNode(msg, index) {
       }),
     );
     if (msg.content) footer.append(copy);
+    if (!abortController) {
+      if (isUser) footer.append(el('button', { type: 'button', class: 'icon-btn', onclick: () => startEdit(index) }, ar.chat.edit));
+      else if (index === messages.length - 1) footer.append(el('button', { type: 'button', class: 'icon-btn', onclick: regenerate }, ar.chat.regenerate));
+    }
     if (msg.timings && msg.timings.predicted_per_second) {
       footer.append(el('span', { class: 'stats', dir: 'rtl' }, ar.chat.speed(msg.timings.predicted_per_second, msg.timings.predicted_n)));
     }
@@ -378,6 +408,7 @@ function setBusy(busy) {
   $('btn-send').hidden = busy;
   $('btn-stop-gen').hidden = !busy;
   $('btn-new-chat').disabled = busy;
+  if (!busy) renderMessages(); // brings back the edit / regenerate buttons
 }
 
 // Downscales to at most MAX_IMAGE_SIDE and re-encodes as JPEG, which keeps
@@ -540,14 +571,25 @@ async function runTool(call, reply) {
 }
 
 async function send(text, images = []) {
+  if (!messages.length) $('chat-log').replaceChildren();
+  messages.push({ role: 'user', content: text, images });
+  renderLast();
+  await generate();
+}
+
+// Generates an assistant reply for the conversation as it is now (its last
+// message is the user's), then saves the conversation.
+async function generate() {
   const conn = await window.blazma.getConnection();
   if (!conn) return;
   const chatSettings = await window.blazma.getChatSettings();
   const webOn = Boolean(chatSettings.webSearch);
+  let system = `${chatSettings.systemPrompt}\n\n${dateContext(webOn)}`;
+  if (chatSettings.shareDeviceInfo) {
+    const summary = await window.blazma.deviceSummary().catch(() => null);
+    if (summary) system += `\n\n${ar.chat.deviceContext(summary)}`;
+  }
 
-  if (!messages.length) $('chat-log').replaceChildren();
-  messages.push({ role: 'user', content: text, images });
-  renderLast();
   const reply = { role: 'assistant', content: '', reasoning: '', streaming: true, thinkStart: Date.now(), steps: [], sources: [] };
   messages.push(reply);
   renderLast();
@@ -559,7 +601,7 @@ async function send(text, images = []) {
     .slice(0, -1)
     .filter((m) => !m.error || m.content)
     .map((m) => ({ role: m.role, content: apiContent(m) }));
-  const apiMessages = [{ role: 'system', content: `${chatSettings.systemPrompt}\n\n${dateContext(webOn)}` }, ...history];
+  const apiMessages = [{ role: 'system', content: system }, ...history];
 
   abortController = new AbortController();
   try {
@@ -633,8 +675,130 @@ async function send(text, images = []) {
     reply.streaming = false;
     abortController = null;
     setBusy(false);
-    renderLast();
+    renderMessages();
+    persist();
   }
+}
+
+// ---------- regenerate / edit ----------
+
+function regenerate() {
+  if (abortController || !messages.length || messages[messages.length - 1].role !== 'assistant') return;
+  messages.pop();
+  renderMessages();
+  generate();
+}
+
+function startEdit(index) {
+  if (abortController) return;
+  editingIndex = index;
+  renderMessages();
+}
+
+function saveEdit(index, text) {
+  const content = text.trim();
+  const original = messages[index];
+  if (!content && !(original.images && original.images.length)) return;
+  editingIndex = null;
+  messages = [...messages.slice(0, index), { role: 'user', content, images: original.images || [] }];
+  renderMessages();
+  generate();
+}
+
+// ---------- saved conversations ----------
+
+async function persist() {
+  if (!messages.some((m) => m.role === 'user')) return;
+  if (!currentChatId) currentChatId = crypto.randomUUID();
+  await window.blazma.chatsSave({ id: currentChatId, messages, fallbackTitle: ar.chat.untitled });
+  refreshList();
+}
+
+function newChat() {
+  if (abortController) abortController.abort();
+  currentChatId = null;
+  editingIndex = null;
+  messages = [];
+  renderMessages();
+  highlightCurrent();
+  $('chat-input').focus();
+}
+
+async function loadChat(id) {
+  if (abortController) return;
+  const chat = await window.blazma.chatsGet(id);
+  if (!chat) return;
+  currentChatId = chat.id;
+  editingIndex = null;
+  messages = chat.messages;
+  renderMessages();
+  highlightCurrent();
+}
+
+function highlightCurrent() {
+  for (const item of document.querySelectorAll('.chat-item')) item.setAttribute('aria-current', String(item.dataset.id === currentChatId));
+}
+
+function startRename(item, chat) {
+  const input = el('input', { type: 'text', value: chat.title, dir: 'auto', 'aria-label': ar.chat.rename });
+  const done = async (commit) => {
+    if (commit && input.value.trim()) await window.blazma.chatsRename(chat.id, input.value.trim());
+    refreshList();
+  };
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') done(true);
+    if (e.key === 'Escape') done(false);
+  });
+  input.addEventListener('blur', () => done(true));
+  input.addEventListener('click', (e) => e.stopPropagation());
+  item.replaceChildren(input);
+  input.focus();
+  input.select();
+}
+
+function renderList(items, query) {
+  const box = $('chat-items');
+  if (!items.length) {
+    box.replaceChildren(el('div', { class: 'chat-list-empty' }, query ? ar.chat.noResults : ar.chat.noChats));
+    return;
+  }
+  box.replaceChildren(
+    ...items.map((chat) => {
+      const item = el(
+        'div',
+        { class: 'chat-item', role: 'button', tabindex: '0', 'data-id': chat.id, 'aria-current': String(chat.id === currentChatId) },
+        el('span', { class: 'chat-item-title', dir: 'auto' }, chat.title || ar.chat.untitled),
+        chat.snippet ? el('span', { class: 'chat-item-snippet', dir: 'auto' }, chat.snippet) : null,
+      );
+      const actions = el(
+        'span',
+        { class: 'chat-item-actions' },
+        el('button', { type: 'button', title: ar.chat.rename, 'aria-label': ar.chat.rename }, '✎'),
+        el('button', { type: 'button', title: ar.chat.remove, 'aria-label': ar.chat.remove }, '🗑'),
+      );
+      actions.children[0].addEventListener('click', (e) => {
+        e.stopPropagation();
+        startRename(item, chat);
+      });
+      actions.children[1].addEventListener('click', async (e) => {
+        e.stopPropagation();
+        if (!window.confirm(ar.chat.confirmDelete(chat.title || ar.chat.untitled))) return;
+        await window.blazma.chatsDelete(chat.id);
+        if (chat.id === currentChatId) newChat();
+        refreshList();
+      });
+      item.append(actions);
+      item.addEventListener('click', () => loadChat(chat.id));
+      item.addEventListener('keydown', (e) => e.key === 'Enter' && loadChat(chat.id));
+      return item;
+    }),
+  );
+}
+
+async function refreshList() {
+  const query = $('chat-search').value.trim();
+  const items = query ? await window.blazma.chatsSearch(query) : await window.blazma.chatsList();
+  renderList(items, query);
 }
 
 function autoGrow(textarea) {
@@ -702,10 +866,25 @@ export function initChat() {
     addImages([...e.dataTransfer.files]);
   });
   $('btn-stop-gen').addEventListener('click', () => abortController && abortController.abort());
-  $('btn-new-chat').addEventListener('click', () => {
-    messages = [];
-    renderMessages();
-    input.focus();
+  $('btn-new-chat').addEventListener('click', newChat);
+  let searchTimer = null;
+  $('chat-search').addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(refreshList, 250);
+  });
+  refreshList();
+
+  // "أعطِ الذكاء معلومات جهازي": off by default, remembered in settings.
+  const devBtn = $('btn-device-info');
+  const showDev = (on) => {
+    devBtn.setAttribute('aria-pressed', String(on));
+    devBtn.title = on ? ar.chat.deviceInfoOn : ar.chat.deviceInfoOff;
+    devBtn.setAttribute('aria-label', devBtn.title);
+  };
+  window.blazma.getSettings().then((st) => showDev(st.shareDeviceInfo));
+  devBtn.addEventListener('click', async () => {
+    const st = await window.blazma.updateSettings({ shareDeviceInfo: devBtn.getAttribute('aria-pressed') !== 'true' });
+    showDev(st.shareDeviceInfo);
   });
   $('btn-stop-server').addEventListener('click', () => window.blazma.stopServer());
 

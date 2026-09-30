@@ -73,7 +73,19 @@ function codeBlock(lang, code, labels) {
       setTimeout(() => (copy.textContent = labels.copy), 1500);
     });
   });
-  const head = el('div', { class: 'md-code-head' }, el('span', null, lang || labels.code), copy);
+  // "حفظ كملف": the user picks where to save in a normal save dialog.
+  let save = null;
+  if (labels.save) {
+    save = el('button', { type: 'button', class: 'md-copy' }, labels.saveCode);
+    save.addEventListener('click', async () => {
+      const res = await labels.save(code, lang);
+      if (res && res.saved) {
+        save.textContent = labels.savedCode;
+        setTimeout(() => (save.textContent = labels.saveCode), 1500);
+      }
+    });
+  }
+  const head = el('div', { class: 'md-code-head' }, el('span', null, lang || labels.code), el('span', { class: 'row' }, save, copy));
   return el('div', { class: 'md-code', dir: 'ltr' }, head, el('pre', null, el('code', null, code)));
 }
 

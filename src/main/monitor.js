@@ -156,6 +156,48 @@ class Monitor extends EventEmitter {
     }, BACKGROUND_MS);
   }
 
+  // Plain-text hardware summary for the model ("أعطِ الذكاء معلومات جهازي").
+  // Hardware readings only: no computer name, user name or file paths.
+  async modelSummary() {
+    const nv = this.nvidia();
+    const st = await system.staticInfo();
+    const fresh = this.last && Date.now() - this.last.t < 15000 ? this.last : null;
+    const g = fresh ? fresh.gpu : nv ? await gpu.sampleGpu(nv.best.index) : null;
+    const ram = system.memory();
+    const mem = system.memoryType(st.memoryModules);
+    const gb = (b) => (b / 1024 ** 3).toFixed(1);
+    const lines = [];
+    if (nv) {
+      lines.push(`GPU: ${nv.best.name}, driver ${nv.best.driver}${nv.cuda ? `, CUDA ${nv.cuda.major}.${nv.cuda.minor}` : ''}`);
+      if (g) {
+        const part = (label, v, unit) => (v == null ? null : `${label} ${Math.round(v)}${unit}`);
+        lines.push(
+          [
+            part('usage', g.util, '%'),
+            g.memUsed != null && g.memTotal != null ? `VRAM ${(g.memUsed / 1024).toFixed(1)}/${(g.memTotal / 1024).toFixed(1)} GB` : null,
+            part('temperature', g.temp, '°C'),
+            part('power', g.power, ' W'),
+            g.powerLimit != null ? `power limit ${Math.round(g.powerLimit)} W` : null,
+            part('fan', g.fan, '%'),
+            g.pstate ? `state ${g.pstate}` : null,
+          ]
+            .filter(Boolean)
+            .join(', '),
+        );
+        const reasons = Object.entries(g.reasons || {}).filter(([k, v]) => v && k !== 'gpu_idle').map(([k]) => k);
+        if (reasons.length) lines.push(`GPU clock slowdown reasons active: ${reasons.join(', ')}`);
+      }
+      if (this.limits && this.limits.maxOperating) lines.push(`GPU max operating temperature: ${this.limits.maxOperating}°C`);
+    } else {
+      lines.push('No NVIDIA GPU detected; the model runs on the CPU.');
+    }
+    const cpu = fresh && fresh.cpu ? `, usage ${Math.round(fresh.cpu.total)}%` : '';
+    lines.push(`CPU: ${st.cpu.name || 'unknown'}${st.cpu.cores ? `, ${st.cpu.cores} cores` : ''}, ${st.cpu.threads} threads${cpu}. CPU temperature is not available on Windows without a sensor driver.`);
+    lines.push(`RAM: ${gb(ram.usedBytes)}/${gb(ram.totalBytes)} GB used${mem.type ? `, ${mem.type}` : ''}${mem.speedMTs ? ` ${mem.speedMTs} MT/s` : ''}`);
+    if (st.os && st.os.caption) lines.push(`OS: ${st.os.caption}`);
+    return lines.join('\n');
+  }
+
   shutdown() {
     this.stop();
     clearInterval(this.bgTimer);
