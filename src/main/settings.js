@@ -10,6 +10,7 @@ const DEFAULTS = Object.freeze({
   modelsDir: '',
   activeModelId: '',
   temperature: null, // null = use the model's recommended value
+  webSearch: true, // the model may search the web (tool calls run in main/web.js)
   monitorIntervalMs: 2000,
   gpuTempWarn: null, // null = derived from the card's own limits (monitor.js)
   gpuTempDanger: null,
@@ -27,6 +28,7 @@ const VALIDATORS = {
   activeModelId: (v) => typeof v === 'string',
   temperature: (v) => v === null || (typeof v === 'number' && v >= 0 && v <= 2),
   systemPrompt: (v) => typeof v === 'string' && v.length <= 20000,
+  webSearch: (v) => typeof v === 'boolean',
   monitorIntervalMs: (v) => [1000, 2000, 5000].includes(v),
   gpuTempWarn: (v) => v === null || isInt(v, 30, 110),
   gpuTempDanger: (v) => v === null || isInt(v, 30, 110),

@@ -3,16 +3,28 @@
 // Every channel the renderer may call is registered here and mirrored in
 // preload.js. Calls from any frame not served by app://blazma are rejected.
 
-const { app, ipcMain } = require('electron');
+const { app, ipcMain, shell } = require('electron');
 const { APP_ORIGIN } = require('./protocol');
 const settings = require('./settings');
 const models = require('./models');
 const { runBenchmark } = require('./benchmark');
 const { exportReport } = require('./report');
 const { toAppError } = require('./errors');
+const web = require('./web');
 
 // Settings the renderer may change (more are added with the settings page).
-const EDITABLE_SETTINGS = ['monitorIntervalMs', 'gpuTempWarn', 'gpuTempDanger'];
+const EDITABLE_SETTINGS = ['monitorIntervalMs', 'gpuTempWarn', 'gpuTempDanger', 'webSearch'];
+
+// Tool calls return { ok, result } or { ok: false, error } instead of throwing,
+// so the model can be told what went wrong and carry on.
+async function wrap(fn) {
+  try {
+    return { ok: true, result: await fn() };
+  } catch (err) {
+    const e = toAppError(err, 'web-failed');
+    return { ok: false, error: { code: e.code, detail: e.detail } };
+  }
+}
 
 function isTrustedSender(event) {
   const url = event.senderFrame && event.senderFrame.url;
@@ -49,6 +61,7 @@ function registerIpc({ setup, monitor, getWindow }) {
       sampling,
       thinking: Boolean(model && model.thinking && onGpu),
       vision: Boolean(setup.snapshot().vision),
+      webSearch: s.webSearch,
     };
   });
 
@@ -62,6 +75,16 @@ function registerIpc({ setup, monitor, getWindow }) {
     settings.update(clean);
     const s = settings.get();
     return Object.fromEntries(EDITABLE_SETTINGS.map((k) => [k, s[k]]));
+  });
+
+  handle('web:search', (query) => wrap(() => web.search(String(query || '').slice(0, 300))));
+  handle('web:open', (url) => wrap(() => web.openPage(String(url || '').slice(0, 2000))));
+  // Source links under answers open in the user's browser (https/http only).
+  handle('web:openExternal', (url) => {
+    try {
+      const u = new URL(String(url));
+      if (u.protocol === 'https:' || u.protocol === 'http:') shell.openExternal(u.href);
+    } catch {}
   });
 
   handle('monitor:info', () => monitor.info());
