@@ -12,6 +12,8 @@ let state = null;
 let visible = false;
 let addStatus = null; // { kind: 'info'|'ok'|'error', text }
 let notice = null;
+let ollama = null; // last scan: { dir, found, models }
+let localStatus = null;
 
 function progressFor(m) {
   if (!state || state.modelId !== m.id) return null;
@@ -31,7 +33,10 @@ function modelCard(m) {
   if (isActive) tags.push(el('span', { class: 'tag tag-ok' }, M.active));
   if (m.downloaded && !isActive) tags.push(el('span', { class: 'tag' }, ar.setup.downloaded));
   if (m.vision) tags.push(el('span', { class: 'tag' }, M.vision));
-  if (m.custom) tags.push(el('span', { class: 'tag' }, M.custom));
+  if (m.source === 'ollama') tags.push(el('span', { class: 'tag' }, M.fromOllama));
+  else if (m.local) tags.push(el('span', { class: 'tag' }, M.localFile));
+  else if (m.custom) tags.push(el('span', { class: 'tag' }, M.custom));
+  if (m.local && !m.downloaded) tags.push(el('span', { class: 'tag tag-warn' }, M.fileMissing));
   if (!m.fits) tags.push(el('span', { class: 'tag tag-warn' }, state.hardware && state.hardware.nvidia ? ar.setup.notFit : ar.setup.slowOnCpu));
 
   const actions = el('div', { class: 'row' });
@@ -89,11 +94,12 @@ function modelCard(m) {
     { class: `model-card${isActive ? ' active' : ''}` },
     el('div', { class: 'model-option-head' }, el('b', { dir: 'ltr' }, m.name), el('span', { class: 'muted' }, formatBytes(m.sizeBytes)), ...tags),
     m.note ? el('div', { class: 'muted small' }, m.note) : null,
-    el('div', { class: 'faint small', dir: 'ltr' }, m.hf),
+    el('div', { class: 'faint small', dir: 'ltr' }, m.local ? m.path : m.hf),
+    m.local && m.hasTemplate === false ? el('div', { class: 'small warn-text' }, M.noTemplate) : null,
     el(
       'div',
       { class: 'faint small' },
-      m.license ? M.license(m.license) : M.customLicense,
+      m.license ? M.license(m.license) : m.local ? M.localNote : M.customLicense,
       m.onDisk > 0 ? ` · ${m.downloaded ? M.onDisk(formatBytes(m.onDisk)) : M.partial(formatBytes(m.onDisk))}` : '',
     ),
     bar,
@@ -126,6 +132,7 @@ function render() {
     notice ? el('div', { class: 'notice' }, notice) : null,
     el('h2', { class: 'section-title' }, M.catalog),
     el('div', { class: 'model-grid' }, ...state.models.map(modelCard)),
+    localSection(),
     el(
       'section',
       { class: 'set-card add-model' },
@@ -136,6 +143,69 @@ function render() {
     ),
   ];
   $('models-root').replaceChildren(...children.filter(Boolean));
+}
+
+// Models already on this computer: a GGUF file, or Ollama's downloads.
+function localSection() {
+  const addFile = el('button', { type: 'button', class: 'btn primary' }, M.addFile);
+  addFile.addEventListener('click', async () => {
+    const res = await window.blazma.modelsAddLocalFile();
+    if (!res.ok) localStatus = { kind: 'error', text: (ar.errors[res.error.code] || ar.errors.unknown).title };
+    else if (res.result) localStatus = { kind: 'ok', text: M.added(res.result.name) };
+    refresh();
+  });
+  const scan = el('button', { type: 'button', class: 'btn' }, M.scanOllama);
+  scan.addEventListener('click', async () => {
+    scan.disabled = true;
+    const res = await window.blazma.modelsScanOllama();
+    ollama = res.ok ? res.result : { found: false, models: [], error: true };
+    render();
+  });
+  let list = null;
+  if (ollama) {
+    if (!ollama.found) list = el('p', { class: 'muted small' }, M.ollamaNone(ollama.dir || ''));
+    else if (!ollama.models.length) list = el('p', { class: 'muted small' }, M.ollamaEmpty);
+    else
+      list = el(
+        'div',
+        { class: 'ollama-list' },
+        ...ollama.models.map((om) => {
+          let action;
+          if (om.added) action = el('span', { class: 'tag tag-ok' }, M.alreadyAdded);
+          else if (!om.ok) action = el('span', { class: 'faint small' }, M.ollamaReasons[om.reason] || om.reason);
+          else {
+            action = el('button', { type: 'button', class: 'btn small' }, M.addOne);
+            action.addEventListener('click', async () => {
+              action.disabled = true;
+              const res = await window.blazma.modelsAddOllama(om.key);
+              if (res.ok) {
+                om.added = true;
+                localStatus = { kind: 'ok', text: M.added(res.result.name) };
+              } else localStatus = { kind: 'error', text: (ar.errors[res.error.code] || ar.errors.unknown).title };
+              refresh();
+            });
+          }
+          return el(
+            'div',
+            { class: 'ollama-row' },
+            el('b', { dir: 'ltr' }, om.name),
+            om.ok ? el('span', { class: 'muted small' }, formatBytes(om.size)) : null,
+            om.vision ? el('span', { class: 'tag' }, M.vision) : null,
+            el('span', { class: 'spacer' }),
+            action,
+          );
+        }),
+      );
+  }
+  return el(
+    'section',
+    { class: 'set-card add-model' },
+    el('h2', null, M.localTitle),
+    el('p', { class: 'muted small' }, M.localHint),
+    el('div', { class: 'row' }, addFile, scan),
+    localStatus ? el('div', { class: `add-status ${localStatus.kind}` }, localStatus.text) : null,
+    list,
+  );
 }
 
 async function refresh() {
