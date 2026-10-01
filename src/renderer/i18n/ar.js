@@ -313,6 +313,7 @@ export const ar = Object.freeze({
     addFailed: {
       'model-invalid': 'الصيغة غير صحيحة. مثال: unsloth/Qwen3.5-4B-GGUF:Q4_K_M',
       'model-not-found': 'لم نجد هذا المستودع أو هذه الصيغة على Hugging Face.',
+      'model-in-catalog': 'هذا الموديل موجود في القائمة أصلاً.',
       network: 'تعذّر الاتصال بـHugging Face. تأكد من الإنترنت.',
     },
   },
