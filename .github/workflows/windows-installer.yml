@@ -1,0 +1,33 @@
+# Builds the Windows installer (Blazma-AI-Setup-<version>.exe) on Windows.
+# - Run it by hand from the Actions tab: the installer is attached to the run.
+# - Push a tag like v0.1.0: the installer is also uploaded to a DRAFT GitHub
+#   release, which stays private until someone publishes it.
+name: Windows installer
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build installer
+        run: npx electron-builder --win nsis --x64 --publish ${{ startsWith(github.ref, 'refs/tags/v') && 'always' || 'never' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v7
+        with:
+          name: Blazma-AI-Setup
+          path: dist/*.exe
+          if-no-files-found: error

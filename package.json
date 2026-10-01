@@ -13,8 +13,9 @@
   },
   "scripts": {
     "start": "electron .",
-    "dist": "electron-builder --win nsis",
-    "diag": "node scripts/diag.js"
+    "dist": "electron-builder --win nsis --x64 --publish never",
+    "diag": "node scripts/diag.js",
+    "release": "electron-builder --win nsis --x64 --publish always"
   },
   "build": {
     "appId": "com.blazma.ai",
@@ -29,15 +30,47 @@
       "!node_modules/pdfjs-dist/web/**",
       "!node_modules/pdfjs-dist/types/**",
       "!node_modules/pdfjs-dist/image_decoders/**",
-      "!node_modules/pdfjs-dist/**/*.map"
+      "!node_modules/pdfjs-dist/**/*.map",
+      "!node_modules/@napi-rs/**"
     ],
     "win": {
-      "target": "nsis"
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "legalTrademarks": "Blazma AI"
     },
     "nsis": {
-      "oneClick": true,
-      "perMachine": false
-    }
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Blazma AI",
+      "runAfterFinish": true,
+      "unicode": true,
+      "language": "1025",
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "Blazma-AI-Setup-${version}.${ext}",
+      "license": "LICENSE"
+    },
+    "directories": {
+      "buildResources": "build",
+      "output": "dist"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "mr-kateba",
+        "repo": "blazma-ai",
+        "releaseType": "draft"
+      }
+    ]
   },
   "devDependencies": {
     "electron": "^44.4.5",
