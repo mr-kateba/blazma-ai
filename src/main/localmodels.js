@@ -1,7 +1,8 @@
 'use strict';
 
-// Models that are already on this computer: a GGUF file the user picks, or
-// models downloaded by Ollama (read in place, nothing is copied). They are
+// Models that are already on this computer: a GGUF file the user picks or
+// drops, every GGUF in a folder (any folder, or LM Studio's), or models
+// downloaded by Ollama. Files are read in place, nothing is copied. They are
 // stored as custom catalog entries with `local: true` and run with -m.
 //
 // Ollama layout (verified from ollama/ollama: manifest/paths.go, server/images.go):
@@ -149,14 +150,34 @@ function saveEntry(entry) {
   return entry;
 }
 
-function entryFor({ key, name, file, mmproj, source, info }) {
-  const size = fs.statSync(file).size;
+// A model split into parts: "<name>-00001-of-00003.gguf". llama.cpp loads the
+// other parts itself when given the first one (-m).
+const SPLIT_RE = /^(.*)-(\d{5})-of-(\d{5})\.gguf$/i;
+
+function splitParts(file) {
+  const m = SPLIT_RE.exec(path.basename(file));
+  if (!m) return [file];
+  const total = Number(m[3]);
+  const parts = [];
+  for (let i = 1; i <= total; i++) parts.push(path.join(path.dirname(file), `${m[1]}-${String(i).padStart(5, '0')}-of-${m[3]}.gguf`));
+  return parts;
+}
+
+// The first part and the total size; throws when a part is missing.
+function modelFiles(file) {
+  const parts = splitParts(file);
+  const missing = parts.filter((p) => !fs.existsSync(p));
+  if (missing.length) throw new AppError('split-incomplete', `${missing.length} of ${parts.length} parts missing`);
+  return { first: parts[0], size: parts.reduce((s, p) => s + fs.statSync(p).size, 0), parts: parts.length };
+}
+
+function entryFor({ key, name, file, mmproj, source, info, size = fs.statSync(file).size }) {
   return {
     id: idFor(key),
     name: String(name).slice(0, 80),
     hf: `local:${key}`,
     local: true,
-    source, // 'file' | 'ollama'
+    source, // 'file' | 'folder' | 'lmstudio' | 'ollama'
     path: file,
     mmproj: mmproj || null,
     sizeBytes: size,
@@ -197,13 +218,90 @@ function siblingProjector(file, modelName) {
   return matches.length === 1 ? matches[0] : null;
 }
 
-function addFile(file) {
-  if (!/\.gguf$/i.test(file)) throw new AppError('not-gguf', file);
-  const info = ggufInfo(file);
-  if (info.isProjector) throw new AppError('gguf-projector', file);
-  const mmproj = siblingProjector(file, info.name);
-  const name = info.name || path.basename(file, path.extname(file));
-  return saveEntry(entryFor({ key: path.resolve(file), name, file, mmproj, source: 'file', info }));
+function addFile(picked, source = 'file') {
+  if (typeof picked !== 'string' || !path.isAbsolute(picked) || !/\.gguf$/i.test(picked)) throw new AppError('not-gguf', String(picked));
+  if (!fs.existsSync(picked) || !fs.statSync(picked).isFile()) throw new AppError('local-missing', picked);
+  const { first, size } = modelFiles(picked);
+  const info = ggufInfo(first);
+  if (info.isProjector) throw new AppError('gguf-projector', first);
+  const mmproj = siblingProjector(first, info.name);
+  const name = info.name || displayName(first);
+  return saveEntry(entryFor({ key: path.resolve(first), name, file: first, mmproj, source, info, size }));
+}
+
+// "Qwen3-8B-Q4_K_M-00001-of-00002.gguf" -> "Qwen3-8B-Q4_K_M"
+const displayName = (file) => path.basename(file).replace(SPLIT_RE, '$1').replace(/\.gguf$/i, '');
+
+// ---------- any folder, and LM Studio ----------
+
+const SCAN_MAX_DEPTH = 6;
+const SCAN_MAX_ENTRIES = 20000;
+// Files offered by the last folder scan; only these can be added by key, so
+// the renderer cannot name arbitrary paths through this route.
+let lastScan = new Map();
+
+function lmStudioDir() {
+  // LM Studio's default models folder: ~/.lmstudio/models/<publisher>/<model>/*.gguf
+  return path.join(os.homedir(), '.lmstudio', 'models');
+}
+
+function findGguf(dir) {
+  const out = [];
+  let seen = 0;
+  const walk = (d, depth) => {
+    if (depth > SCAN_MAX_DEPTH || seen > SCAN_MAX_ENTRIES) return;
+    let entries = [];
+    try {
+      entries = fs.readdirSync(d, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const e of entries) {
+      if (++seen > SCAN_MAX_ENTRIES) return;
+      if (e.name.startsWith('.') && depth > 0) continue;
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p, depth + 1);
+      else if (e.isFile() && /\.gguf$/i.test(e.name)) out.push(p);
+    }
+  };
+  walk(dir, 0);
+  return out;
+}
+
+// Every model in a folder (and its subfolders), with whether it can run.
+// Vision projectors are paired, not listed; a split model is listed once.
+function scanFolder(dir, source = 'folder') {
+  if (!dir || !fs.existsSync(dir)) return { dir, found: false, models: [] };
+  const added = new Set(readJson(paths.customModels(), []).map((m) => m.id));
+  lastScan = new Map();
+  const models = [];
+  for (const file of findGguf(dir)) {
+    const split = SPLIT_RE.exec(path.basename(file));
+    if (split && split[2] !== '00001') continue;
+    const item = { key: file, name: displayName(file), id: idFor(path.resolve(file)), ok: false, reason: null, size: 0, vision: false, added: false, rel: path.relative(dir, file) };
+    try {
+      const { size } = modelFiles(file);
+      const info = ggufInfo(file, { quick: true });
+      if (info.isProjector) continue;
+      if (info.name) item.name = info.name;
+      item.size = size;
+      item.vision = Boolean(siblingProjector(file, info.name));
+      item.ok = true;
+    } catch (err) {
+      item.reason = err.code === 'split-incomplete' ? 'split-incomplete' : err.code === 'not-gguf' ? 'not-gguf' : 'missing';
+    }
+    item.added = added.has(item.id);
+    if (item.ok) lastScan.set(file, source);
+    models.push(item);
+  }
+  models.sort((a, b) => a.name.localeCompare(b.name));
+  return { dir, found: true, models };
+}
+
+function addScanned(key) {
+  const source = lastScan.get(key);
+  if (!source) throw new AppError('model-invalid', key);
+  return addFile(key, source);
 }
 
 // ---------- Ollama ----------
@@ -285,4 +383,4 @@ function addOllama(key) {
   return saveEntry(entryFor({ key: `ollama:${key}`, name: item.name, file, mmproj, source: 'ollama', info: ggufInfo(file) }));
 }
 
-module.exports = { ggufInfo, addFile, scanOllama, addOllama, ollamaDir };
+module.exports = { ggufInfo, addFile, scanOllama, addOllama, ollamaDir, scanFolder, addScanned, lmStudioDir, splitParts };

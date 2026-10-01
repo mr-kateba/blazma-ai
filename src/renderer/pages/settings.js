@@ -227,6 +227,68 @@ function monitorSection(info) {
   );
 }
 
+// Other programs on this computer can use the running model through the
+// same OpenAI-compatible server the chat uses (127.0.0.1 only).
+function copyButton(text) {
+  const b = el('button', { type: 'button', class: 'btn ghost small' }, ar.actions.copy);
+  b.addEventListener('click', () =>
+    navigator.clipboard.writeText(text).then(() => {
+      b.textContent = ar.actions.copied;
+      setTimeout(() => (b.textContent = ar.actions.copy), 1500);
+    }),
+  );
+  return b;
+}
+
+function apiSection(conn) {
+  const A = S.api;
+  const on = values.apiEnabled;
+  const items = [
+    item(
+      A.enable,
+      A.enableDesc,
+      toggle(on, async (checked) => {
+        values = await window.blazma.apiSetEnabled(checked);
+        toast(A.restarting);
+        setTimeout(render, 300);
+      }),
+    ),
+  ];
+  if (on) {
+    const port = (conn && conn.port) || values.port;
+    const base = `http://127.0.0.1:${port}/v1`;
+    const key = values.apiKey;
+    const keyText = el('code', { dir: 'ltr', class: 'api-value' }, `${key.slice(0, 7)}${'•'.repeat(20)}`);
+    const show = el('button', { type: 'button', class: 'btn ghost small' }, A.show);
+    show.addEventListener('click', () => {
+      keyText.textContent = keyText.textContent === key ? `${key.slice(0, 7)}${'•'.repeat(20)}` : key;
+      show.textContent = keyText.textContent === key ? A.hide : A.show;
+    });
+    const renew = el('button', { type: 'button', class: 'btn ghost small' }, A.newKey);
+    renew.addEventListener('click', async () => {
+      if (!window.confirm(A.confirmNewKey)) return;
+      values = await window.blazma.apiNewKey();
+      toast(A.restarting);
+      setTimeout(render, 300);
+    });
+    const example = [
+      'from openai import OpenAI',
+      `client = OpenAI(base_url="${base}", api_key="${key}")`,
+      'reply = client.chat.completions.create(',
+      '    model="local",',
+      '    messages=[{"role": "user", "content": "مرحبا"}],',
+      ')',
+      'print(reply.choices[0].message.content)',
+    ].join('\n');
+    items.push(
+      item(A.url, A.urlDesc, el('div', { class: 'row' }, el('code', { dir: 'ltr', class: 'api-value' }, base), copyButton(base))),
+      item(A.key, A.keyDesc, el('div', { class: 'row' }, keyText, show, copyButton(key), renew)),
+      item(A.example, A.exampleDesc, null, el('pre', { class: 'api-example', dir: 'ltr' }, example)),
+    );
+  }
+  return section('api', A.title, A.desc, ...items);
+}
+
 function generalSection() {
   const login = values.launchAtLogin;
   const openData = el('button', { type: 'button', class: 'btn ghost small' }, S.openFolder);
@@ -315,10 +377,10 @@ function aboutSection(appInfo) {
 
 // ---------- page ----------
 
-const SECTIONS = ['chat', 'engine', 'monitor', 'general', 'updates', 'about'];
+const SECTIONS = ['chat', 'engine', 'api', 'monitor', 'general', 'updates', 'about'];
 
 async function render() {
-  const [v, info, state, appInfo] = await Promise.all([window.blazma.getSettings(), window.blazma.monitorInfo(), window.blazma.getSetupState(), window.blazma.getAppInfo()]);
+  const [v, info, state, appInfo, conn] = await Promise.all([window.blazma.getSettings(), window.blazma.monitorInfo(), window.blazma.getSetupState(), window.blazma.getAppInfo(), window.blazma.getConnection()]);
   values = v;
   const toc = el(
     'nav',
@@ -329,7 +391,7 @@ async function render() {
       return b;
     }),
   );
-  const body = el('div', { class: 'set-body' }, chatSection(), engineSection(state), monitorSection(info), generalSection(), updatesSection(), aboutSection(appInfo));
+  const body = el('div', { class: 'set-body' }, chatSection(), engineSection(state), apiSection(conn), monitorSection(info), generalSection(), updatesSection(), aboutSection(appInfo));
   $('settings-root').replaceChildren(el('div', { class: 'set-layout' }, toc, body));
   renderEngineBanner();
   renderUpdates();
