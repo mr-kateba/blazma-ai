@@ -451,7 +451,7 @@ function welcomeView() {
   return el(
     'div',
     { class: 'chat-empty' },
-    el('div', { class: 'chat-empty-mark', 'aria-hidden': 'true' }, 'B'),
+    el('img', { class: 'chat-empty-mark', src: 'logo.svg', alt: '', 'aria-hidden': 'true' }),
     el('h2', null, ar.chat.emptyTitle),
     el('p', { class: 'muted' }, ar.chat.emptyHint),
     el('div', { class: 'suggest-grid' }, ...cards),
