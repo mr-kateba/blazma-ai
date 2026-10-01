@@ -76,12 +76,14 @@ class LlamaServer extends EventEmitter {
   }
 
   // options: { exe, hf | modelPath (+ mmprojPath), modelsDir, contextSize,
-  //            gpuLayers, kvCache, port, offline, vision }
+  //            gpuLayers, kvCache, port, offline, vision, apiKey }
   start(options) {
     if (this.child) throw new Error('llama-server already running');
     this.options = options;
     this.port = options.port;
-    this.apiKey = crypto.randomBytes(24).toString('hex');
+    // A fixed key when other programs may use the server (settings > API),
+    // otherwise a new random key each start, known only to this app.
+    this.apiKey = options.apiKey || crypto.randomBytes(24).toString('hex');
     this.log = [];
     this.stopping = false;
 

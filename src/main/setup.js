@@ -234,6 +234,7 @@ class Setup extends EventEmitter {
       contextSize: Math.min(settings.get().contextSize, model.maxContext || Infinity),
       gpuLayers: useGpu ? settings.get().gpuLayers : 0,
       kvCache: settings.get().kvCache,
+      apiKey: settings.get().apiEnabled ? settings.get().apiKey : null,
       port: this.port,
       offline: complete,
       vision: model.local ? Boolean(model.mmproj) : Boolean(entry.vision),

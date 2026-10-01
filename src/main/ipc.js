@@ -4,6 +4,7 @@
 // preload.js. Calls from any frame not served by app://blazma are rejected.
 
 const fs = require('node:fs');
+const crypto = require('node:crypto');
 const { app, dialog, ipcMain, shell } = require('electron');
 const { APP_ORIGIN } = require('./protocol');
 const settings = require('./settings');
@@ -99,6 +100,28 @@ function registerIpc({ setup, monitor, getWindow }) {
     setup.refreshModels();
     return res;
   });
+  // Every GGUF in a folder the user picks, or in LM Studio's models folder.
+  handle('models:scanFolder', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(getWindow(), {
+      title: 'اختر مجلداً فيه موديلات GGUF',
+      properties: ['openDirectory'],
+    });
+    if (canceled || !filePaths[0]) return { ok: true, result: null };
+    return wrap(() => localmodels.scanFolder(filePaths[0], 'folder'));
+  });
+  handle('models:scanLmStudio', () => wrap(() => localmodels.scanFolder(localmodels.lmStudioDir(), 'lmstudio')));
+  handle('models:addScanned', async (key) => {
+    const res = await wrap(() => localmodels.addScanned(String(key || '')));
+    setup.refreshModels();
+    return res;
+  });
+  // A .gguf dropped on the models page (its path comes from webUtils in the
+  // preload; addFile checks the extension, the file and its GGUF header).
+  handle('models:addDropped', async (file) => {
+    const res = await wrap(() => localmodels.addFile(String(file || ''), 'file'));
+    setup.refreshModels();
+    return res;
+  });
   // Models downloaded by Ollama, used in place.
   handle('models:scanOllama', () => wrap(() => localmodels.scanOllama()));
   handle('models:addOllama', async (key) => {
@@ -143,6 +166,8 @@ function registerIpc({ setup, monitor, getWindow }) {
       ...Object.fromEntries(EDITABLE_SETTINGS.map((k) => [k, s[k]])),
       modelsDir: settings.modelsDir(),
       modelsDirCustom: Boolean(s.modelsDir),
+      apiEnabled: s.apiEnabled,
+      apiKey: s.apiEnabled ? s.apiKey : '',
       defaults: {
         systemPrompt: settings.DEFAULTS.systemPrompt,
         contextSize: settings.DEFAULTS.contextSize,
@@ -191,6 +216,20 @@ function registerIpc({ setup, monitor, getWindow }) {
     return settingsView();
   });
   handle('server:restart', () => setup.restart());
+  // Local API for other programs: the same llama-server (127.0.0.1 only),
+  // with a key that stays the same between starts. Applied by restarting.
+  const newApiKey = () => `bz-${crypto.randomBytes(24).toString('hex')}`;
+  handle('api:setEnabled', (on) => {
+    const s = settings.get();
+    settings.update({ apiEnabled: Boolean(on), apiKey: on && !s.apiKey ? newApiKey() : s.apiKey });
+    setup.restart();
+    return settingsView();
+  });
+  handle('api:newKey', () => {
+    settings.update({ apiKey: newApiKey() });
+    if (settings.get().apiEnabled) setup.restart();
+    return settingsView();
+  });
   handle('personas:list', () => personas.list());
   handle('personas:save', (p) => wrap(() => personas.save(p || {})));
   handle('personas:delete', (id) => personas.remove(String(id)));

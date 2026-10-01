@@ -12,7 +12,7 @@ let state = null;
 let visible = false;
 let addStatus = null; // { kind: 'info'|'ok'|'error', text }
 let notice = null;
-let ollama = null; // last scan: { dir, found, models }
+let scan = null; // last local scan: { source: 'folder'|'lmstudio'|'ollama', dir, found, models }
 let localStatus = null;
 let filter = 'all';
 try {
@@ -28,6 +28,7 @@ const FILTERS = {
   cn: (m) => m.origin === 'cn',
   arabic: (m) => (m.tags || []).includes('arabic') || ARABIC_ORIGINS.includes(m.origin),
   code: (m) => (m.tags || []).includes('code'),
+  translate: (m) => (m.tags || []).includes('translate'),
   vision: (m) => m.vision,
 };
 
@@ -37,7 +38,8 @@ function groupOf(m) {
   if (m.cpu || m.minVramMB <= 6144) return 'small';
   if (m.minVramMB <= 12288) return 'mid';
   if (m.minVramMB <= 16384) return 'big';
-  return 'xl';
+  if (m.minVramMB <= 24576) return 'xl';
+  return 'giant';
 }
 
 function progressFor(m) {
@@ -59,7 +61,9 @@ function modelCard(m) {
   if (m.downloaded && !isActive) tags.push(el('span', { class: 'tag' }, ar.setup.downloaded));
   if (m.vision) tags.push(el('span', { class: 'tag' }, M.vision));
   if ((m.tags || []).includes('code')) tags.push(el('span', { class: 'tag' }, M.code));
+  if ((m.tags || []).includes('translate')) tags.push(el('span', { class: 'tag' }, M.translate));
   if (m.source === 'ollama') tags.push(el('span', { class: 'tag' }, M.fromOllama));
+  else if (m.source === 'lmstudio') tags.push(el('span', { class: 'tag' }, M.fromLmStudio));
   else if (m.local) tags.push(el('span', { class: 'tag' }, M.localFile));
   else if (m.custom) tags.push(el('span', { class: 'tag' }, M.custom));
   if (m.local && !m.downloaded) tags.push(el('span', { class: 'tag tag-warn' }, M.fileMissing));
@@ -122,7 +126,7 @@ function modelCard(m) {
     el('div', { class: 'model-option-head' }, el('b', { dir: 'ltr' }, m.name), el('span', { class: 'muted' }, formatBytes(m.sizeBytes)), ...tags),
     m.maker ? el('div', { class: 'model-maker small' }, M.maker(m.maker, M.countries[m.origin] || '')) : null,
     m.note ? el('div', { class: 'muted small' }, m.note) : null,
-    el('div', { class: 'faint small', dir: 'ltr' }, m.local ? m.path : m.hf),
+    el('div', { class: 'faint small model-path', dir: 'ltr', title: m.local ? m.path : m.hf }, m.local ? m.path : m.hf),
     m.local && m.hasTemplate === false ? el('div', { class: 'small warn-text' }, M.noTemplate) : null,
     el(
       'div',
@@ -200,7 +204,7 @@ function catalogGroups() {
   const list = state.models.filter(FILTERS[filter] || FILTERS.all);
   if (!list.length) return [el('p', { class: 'muted' }, M.noMatch)];
   const out = [];
-  for (const g of ['small', 'mid', 'big', 'xl', 'mine']) {
+  for (const g of ['small', 'mid', 'big', 'xl', 'giant', 'mine']) {
     const items = list.filter((m) => groupOf(m) === g).sort((a, b) => (a.sizeBytes || 0) - (b.sizeBytes || 0));
     if (!items.length) continue;
     out.push(el('h3', { class: 'model-group-title' }, M.groups[g]), el('div', { class: 'model-grid' }, ...items.map(modelCard)));
@@ -208,67 +212,130 @@ function catalogGroups() {
   return out;
 }
 
-// Models already on this computer: a GGUF file, or Ollama's downloads.
+// Models already on this computer: a GGUF file (picked or dropped), every
+// GGUF in a folder, LM Studio's models, or Ollama's downloads.
+const SCANNERS = {
+  folder: { scan: () => window.blazma.modelsScanFolder(), add: (key) => window.blazma.modelsAddScanned(key) },
+  lmstudio: { scan: () => window.blazma.modelsScanLmStudio(), add: (key) => window.blazma.modelsAddScanned(key) },
+  ollama: { scan: () => window.blazma.modelsScanOllama(), add: (key) => window.blazma.modelsAddOllama(key) },
+};
+
+function localResult(res, okText) {
+  if (!res.ok) localStatus = { kind: 'error', text: (ar.errors[res.error.code] || ar.errors.unknown).title };
+  else if (res.result) localStatus = { kind: 'ok', text: okText || M.added(res.result.name) };
+}
+
+function scanButton(source, label) {
+  const b = el('button', { type: 'button', class: 'btn' }, label);
+  b.addEventListener('click', async () => {
+    b.disabled = true;
+    const res = await SCANNERS[source].scan();
+    b.disabled = false;
+    if (res.ok && res.result === null) return; // folder dialog cancelled
+    scan = res.ok ? { source, ...res.result } : { source, found: false, models: [], error: true };
+    render();
+  });
+  return b;
+}
+
+function scanList() {
+  if (!scan) return null;
+  if (!scan.found) return el('p', { class: 'muted small' }, M.scanNone[scan.source](scan.dir || ''));
+  if (!scan.models.length) return el('p', { class: 'muted small' }, M.scanEmpty[scan.source]);
+  const addable = scan.models.filter((m) => m.ok && !m.added);
+  const addOne = async (item) => {
+    const res = await SCANNERS[scan.source].add(item.key);
+    if (res.ok) item.added = true;
+    localResult(res);
+    return res.ok;
+  };
+  const rows = scan.models.map((item) => {
+    let action;
+    if (item.added) action = el('span', { class: 'tag tag-ok' }, M.alreadyAdded);
+    else if (!item.ok) action = el('span', { class: 'faint small' }, M.ollamaReasons[item.reason] || item.reason);
+    else {
+      action = el('button', { type: 'button', class: 'btn small' }, M.addOne);
+      action.addEventListener('click', async () => {
+        action.disabled = true;
+        await addOne(item);
+        refresh();
+      });
+    }
+    return el(
+      'div',
+      { class: 'ollama-row' },
+      el('span', { class: 'scan-name' }, el('b', { dir: 'ltr' }, item.name), item.rel && item.rel !== item.name ? el('span', { class: 'faint small', dir: 'ltr' }, item.rel) : null),
+      item.ok ? el('span', { class: 'muted small' }, formatBytes(item.size)) : null,
+      item.vision ? el('span', { class: 'tag' }, M.vision) : null,
+      el('span', { class: 'spacer' }),
+      action,
+    );
+  });
+  let addAll = null;
+  if (addable.length > 1) {
+    addAll = el('button', { type: 'button', class: 'btn small primary' }, M.addAll(addable.length));
+    addAll.addEventListener('click', async () => {
+      addAll.disabled = true;
+      let n = 0;
+      for (const item of addable) if (await addOne(item)) n++;
+      localStatus = { kind: n ? 'ok' : 'error', text: M.addedMany(n) };
+      refresh();
+    });
+  }
+  return el('div', { class: 'ollama-list' }, el('div', { class: 'scan-head' }, el('span', { class: 'faint small', dir: 'ltr' }, scan.dir), el('span', { class: 'spacer' }), addAll), ...rows);
+}
+
 function localSection() {
   const addFile = el('button', { type: 'button', class: 'btn primary' }, M.addFile);
   addFile.addEventListener('click', async () => {
-    const res = await window.blazma.modelsAddLocalFile();
-    if (!res.ok) localStatus = { kind: 'error', text: (ar.errors[res.error.code] || ar.errors.unknown).title };
-    else if (res.result) localStatus = { kind: 'ok', text: M.added(res.result.name) };
+    localResult(await window.blazma.modelsAddLocalFile());
     refresh();
   });
-  const scan = el('button', { type: 'button', class: 'btn' }, M.scanOllama);
-  scan.addEventListener('click', async () => {
-    scan.disabled = true;
-    const res = await window.blazma.modelsScanOllama();
-    ollama = res.ok ? res.result : { found: false, models: [], error: true };
-    render();
-  });
-  let list = null;
-  if (ollama) {
-    if (!ollama.found) list = el('p', { class: 'muted small' }, M.ollamaNone(ollama.dir || ''));
-    else if (!ollama.models.length) list = el('p', { class: 'muted small' }, M.ollamaEmpty);
-    else
-      list = el(
-        'div',
-        { class: 'ollama-list' },
-        ...ollama.models.map((om) => {
-          let action;
-          if (om.added) action = el('span', { class: 'tag tag-ok' }, M.alreadyAdded);
-          else if (!om.ok) action = el('span', { class: 'faint small' }, M.ollamaReasons[om.reason] || om.reason);
-          else {
-            action = el('button', { type: 'button', class: 'btn small' }, M.addOne);
-            action.addEventListener('click', async () => {
-              action.disabled = true;
-              const res = await window.blazma.modelsAddOllama(om.key);
-              if (res.ok) {
-                om.added = true;
-                localStatus = { kind: 'ok', text: M.added(res.result.name) };
-              } else localStatus = { kind: 'error', text: (ar.errors[res.error.code] || ar.errors.unknown).title };
-              refresh();
-            });
-          }
-          return el(
-            'div',
-            { class: 'ollama-row' },
-            el('b', { dir: 'ltr' }, om.name),
-            om.ok ? el('span', { class: 'muted small' }, formatBytes(om.size)) : null,
-            om.vision ? el('span', { class: 'tag' }, M.vision) : null,
-            el('span', { class: 'spacer' }),
-            action,
-          );
-        }),
-      );
-  }
   return el(
     'section',
-    { class: 'set-card add-model' },
+    { class: 'set-card add-model local-models' },
     el('h2', null, M.localTitle),
     el('p', { class: 'muted small' }, M.localHint),
-    el('div', { class: 'row' }, addFile, scan),
+    el('div', { class: 'row wrap' }, addFile, scanButton('folder', M.scanFolder), scanButton('lmstudio', M.scanLmStudio), scanButton('ollama', M.scanOllama)),
+    el('p', { class: 'faint small' }, M.dropHint),
     localStatus ? el('div', { class: `add-status ${localStatus.kind}` }, localStatus.text) : null,
-    list,
+    scanList(),
   );
+}
+
+// Drop .gguf files anywhere on the models page to add them.
+function setupDrop(root) {
+  root.dataset.drop = M.dropHere;
+  const isFiles = (e) => e.dataTransfer && [...e.dataTransfer.types].includes('Files');
+  root.addEventListener('dragover', (e) => {
+    if (!isFiles(e)) return;
+    e.preventDefault();
+    root.classList.add('drop-on');
+  });
+  root.addEventListener('dragleave', (e) => {
+    if (!root.contains(e.relatedTarget)) root.classList.remove('drop-on');
+  });
+  root.addEventListener('drop', async (e) => {
+    if (!isFiles(e)) return;
+    e.preventDefault();
+    root.classList.remove('drop-on');
+    const files = [...e.dataTransfer.files];
+    const gguf = files.filter((f) => /\.gguf$/i.test(f.name));
+    if (!gguf.length) {
+      localStatus = { kind: 'error', text: ar.errors['not-gguf'].title };
+      render();
+      return;
+    }
+    let n = 0;
+    let last = null;
+    for (const f of gguf) {
+      last = await window.blazma.modelsAddDropped(f);
+      if (last.ok) n++;
+    }
+    if (gguf.length === 1) localResult(last);
+    else localStatus = { kind: n ? 'ok' : 'error', text: M.addedMany(n) };
+    refresh();
+  });
 }
 
 async function refresh() {
@@ -285,6 +352,7 @@ export function setModelsVisible(v) {
 }
 
 export function initModels() {
+  setupDrop($('models-root'));
   window.blazma.onSetupState((s) => {
     state = s;
     render();

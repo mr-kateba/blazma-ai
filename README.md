@@ -85,12 +85,20 @@
 | Gemma 4 26B A4B | Google · أمريكا | `unsloth/gemma-4-26B-A4B-it-GGUF:UD-Q4_K_XL` | 18.21 GB | Apache-2.0 | كرت 18 جيجابايت |
 | Gemma 4 31B | Google · أمريكا | `unsloth/gemma-4-31B-it-GGUF:Q4_K_M` | 19.52 GB | Apache-2.0 | كرت 20 جيجابايت |
 | Qwen3.6 35B A3B | Alibaba · Qwen · الصين | `unsloth/Qwen3.6-35B-A3B-GGUF:UD-Q4_K_M` | 23.04 GB | Apache-2.0 | كرت 23 جيجابايت |
+| Hunyuan MT 7B | Tencent · الصين | `mradermacher/Hunyuan-MT-7B-GGUF:Q4_K_M` | 4.62 GB | Tencent Hunyuan Community License (لا تشمل الاتحاد الأوروبي وبريطانيا وكوريا الجنوبية) | كرت 6 جيجابايت |
+| Hunyuan 7B | Tencent · الصين | `bartowski/tencent_Hunyuan-7B-Instruct-GGUF:Q4_K_M` | 4.62 GB | Tencent Hunyuan Community License (لا تشمل الاتحاد الأوروبي وبريطانيا وكوريا الجنوبية) | كرت 6 جيجابايت |
+| Aya Expanse 8B | Cohere · كندا | `bartowski/aya-expanse-8b-GGUF:Q4_K_M` | 5.06 GB | CC-BY-NC-4.0 (للاستخدام غير التجاري فقط) | كرت 6 جيجابايت |
+| Step 3.7 Flash | StepFun · الصين | `unsloth/Step-3.7-Flash-GGUF:UD-Q2_K_XL` | 65.79 GB | Apache-2.0 | كرت 63 جيجابايت |
+| Qwen3.8 Flash Next | Alibaba · Qwen · الصين | `unsloth/Qwen3.8-Flash-Next-GGUF:UD-Q2_K_XL` | 78.87 GB | Qwen Community License | كرت 75 جيجابايت |
+| DeepSeek V4 Flash | DeepSeek · الصين | `unsloth/DeepSeek-V4-Flash-0731-GGUF:UD-Q2_K_XL` | 96.83 GB | MIT | كرت 92 جيجابايت |
 
-- 19 موديلاً، منها 10 صينية (Qwen وXiaomi وBaidu وZhipu)، و3 عربية المنشأ (ALLaM من السعودية، وFalcon من الإمارات، وFanar من قطر).
+- 25 موديلاً، منها 15 صينية (Qwen وXiaomi وBaidu وZhipu وTencent وDeepSeek وStepFun)، و3 عربية المنشأ (ALLaM من السعودية، وFalcon من الإمارات، وFanar من قطر).
 - البرنامج يقترح فقط من الموديلات الأربعة المجرّبة (Gemma 4 12B وQwen3.5 9B و4B و2B). الباقي تختاره من صفحة الموديلات.
-- جرّبنا بالعربية على المعالج: Gemma 4 E2B وALLaM 7B وFalcon H1 7B (إجابات سليمة)، وQwen3.5 0.8B (عربيته ضعيفة). الموديلات الأكبر لم تُجرَّب هنا لعدم وجود كرت شاشة.
-- Ling 3.0 tiny من Ant Group لم يُضَف: المحرك الحالي يتوقف عند تحميله على المعالج.
-- الموديلات العملاقة (DeepSeek V4 Flash وGLM 5.3 Flash وغيرها) تحتاج أكثر من 110 جيجابايت فلم تُضَف، ويمكن إضافتها يدوياً.
+- جرّبنا بالعربية على المعالج: Gemma 4 E2B وALLaM 7B وFalcon H1 7B وAya Expanse 8B (إجابات سليمة)، وHunyuan MT 7B (ترجمة دقيقة في الاتجاهين)، وQwen3.5 0.8B وHunyuan 7B (ضعيفان بالعربية، ومذكور في وصفهما). الموديلات الأكبر لم تُجرَّب هنا لعدم وجود كرت شاشة.
+- العملاقة (DeepSeek V4 Flash وQwen3.8 Flash Next وStep 3.7 Flash) بضغط 2 بت (66 إلى 97 جيجابايت)، لأجهزة العمل القوية.
+- **لم يُضَف:** Ling 3.0 (يعطي كلاماً مكسّراً أو يتوقف في المحرك الحالي)، وGLM 5.3 Flash (يحتاج نسخة من llama.cpp لم تُعتمد بعد)، وKimi K3 (1500 جيجابايت).
+- **أي موديل آخر:** صفحة الموديلات تشغّل أي ملف GGUF موجود عندك: ملف، أو مجلد كامل (يُفحص بمجلداته الفرعية)، أو موديلات LM Studio (`~/.lmstudio/models`) وOllama، أو بالسحب والإفلات. الموديل المقسوم إلى أجزاء (`-00001-of-0000N`) يُضاف بجزئه الأول، والملفات تبقى في مكانها.
+- **الواجهة البرمجية (API):** من الإعدادات تقدر تسمح لبرامجك الأخرى على نفس الجهاز باستخدام الموديل الذي يعمل، بصيغة OpenAI على `http://127.0.0.1:<المنفذ>/v1` وبمفتاح ثابت. معطّلة افتراضياً.
 - **طبقات الكرت (تلقائي):** إذا لم يتسع الموديل في ذاكرة الكرت، يترك محرك llama.cpp جزءاً منه في ذاكرة الجهاز فيعمل أبطأ بدل أن يفشل. موديلات MoE (التي تشغّل جزءاً صغيراً من معاملاتها لكل كلمة) تبقى سريعة نسبياً بهذه الطريقة.
 - الأحجام والرخص من صفحات الموديلات على Hugging Face.
 - إعدادات التوليد لكل موديل (temperature وtop_p وtop_k وغيرها) مأخوذة من صفحة الموديل الأصلي. الموديل الذي لا تذكر صفحته إعدادات يستخدم إعدادات المحرك الافتراضية.

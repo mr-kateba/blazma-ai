@@ -3,7 +3,7 @@
 // The only bridge between the renderer and the main process. Keep this list
 // in sync with src/main/ipc.js and never expose ipcRenderer itself.
 
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 contextBridge.exposeInMainWorld(
   'blazma',
@@ -19,8 +19,15 @@ contextBridge.exposeInMainWorld(
     modelsAddLocalFile: () => ipcRenderer.invoke('models:addLocalFile'),
     modelsScanOllama: () => ipcRenderer.invoke('models:scanOllama'),
     modelsAddOllama: (key) => ipcRenderer.invoke('models:addOllama', String(key)),
+    modelsScanFolder: () => ipcRenderer.invoke('models:scanFolder'),
+    modelsScanLmStudio: () => ipcRenderer.invoke('models:scanLmStudio'),
+    modelsAddScanned: (key) => ipcRenderer.invoke('models:addScanned', String(key)),
+    // Dropped files: the path is read here, since the page cannot see it.
+    modelsAddDropped: (file) => ipcRenderer.invoke('models:addDropped', webUtils.getPathForFile(file)),
     modelsRemoveCustom: (id) => ipcRenderer.invoke('models:removeCustom', String(id)),
     stopServer: () => ipcRenderer.invoke('server:stop'),
+    apiSetEnabled: (on) => ipcRenderer.invoke('api:setEnabled', Boolean(on)),
+    apiNewKey: () => ipcRenderer.invoke('api:newKey'),
     getConnection: () => ipcRenderer.invoke('server:getConnection'),
     getChatSettings: () => ipcRenderer.invoke('chat:getSettings'),
     webSearch: (query) => ipcRenderer.invoke('web:search', String(query)),

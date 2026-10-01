@@ -11,6 +11,8 @@ const DEFAULTS = Object.freeze({
   modelsDir: '',
   activeModelId: '',
   temperature: null, // null = use the model's recommended value
+  apiEnabled: false, // other programs on this computer may use the server (fixed key below)
+  apiKey: '',
   webSearch: true, // the model may search the web (tool calls run in main/web.js)
   shareDeviceInfo: false, // add a hardware summary to the system prompt (monitor.modelSummary)
   monitorIntervalMs: 2000,
@@ -30,6 +32,8 @@ const VALIDATORS = {
   modelsDir: (v) => typeof v === 'string',
   activeModelId: (v) => typeof v === 'string',
   temperature: (v) => v === null || (typeof v === 'number' && v >= 0 && v <= 2),
+  apiEnabled: (v) => typeof v === 'boolean',
+  apiKey: (v) => v === '' || /^bz-[0-9a-f]{48}$/.test(v),
   systemPrompt: (v) => typeof v === 'string' && v.length <= 20000,
   webSearch: (v) => typeof v === 'boolean',
   shareDeviceInfo: (v) => typeof v === 'boolean',

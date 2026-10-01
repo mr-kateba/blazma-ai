@@ -397,6 +397,130 @@
         "presence_penalty": 1.5
       },
       "vision": true
+    },
+    {
+      "id": "hunyuan-mt-7b",
+      "name": "Hunyuan MT 7B",
+      "hf": "mradermacher/Hunyuan-MT-7B-GGUF:Q4_K_M",
+      "sizeBytes": 4624950272,
+      "minVramMB": 6144,
+      "license": "Tencent Hunyuan Community License (لا تشمل الاتحاد الأوروبي وبريطانيا وكوريا الجنوبية)",
+      "maker": "Tencent",
+      "origin": "cn",
+      "tags": [
+        "translate"
+      ],
+      "note": "موديل ترجمة من Tencent بين 33 لغة منها العربية. في اختبارنا ترجم من الإنجليزية إلى العربية والعكس ترجمة دقيقة. للترجمة فقط، وليس للمحادثة العامة.",
+      "thinking": false,
+      "sampling": {
+        "temperature": 0.7,
+        "top_p": 0.6,
+        "top_k": 20,
+        "repeat_penalty": 1.05
+      },
+      "vision": false
+    },
+    {
+      "id": "hunyuan-7b",
+      "name": "Hunyuan 7B",
+      "hf": "bartowski/tencent_Hunyuan-7B-Instruct-GGUF:Q4_K_M",
+      "sizeBytes": 4621992960,
+      "minVramMB": 6144,
+      "license": "Tencent Hunyuan Community License (لا تشمل الاتحاد الأوروبي وبريطانيا وكوريا الجنوبية)",
+      "maker": "Tencent",
+      "origin": "cn",
+      "tags": [],
+      "note": "موديل عام من Tencent. في اختبارنا أخطأ في سؤال بسيط بالعربية وأظهر وسوم <answer> في الرد، فهو أنسب للصينية والإنجليزية.",
+      "thinking": false,
+      "sampling": {
+        "temperature": 0.7,
+        "top_p": 0.8,
+        "top_k": 20,
+        "repeat_penalty": 1.05
+      },
+      "vision": false
+    },
+    {
+      "id": "aya-expanse-8b",
+      "name": "Aya Expanse 8B",
+      "hf": "bartowski/aya-expanse-8b-GGUF:Q4_K_M",
+      "sizeBytes": 5056982720,
+      "minVramMB": 6656,
+      "license": "CC-BY-NC-4.0 (للاستخدام غير التجاري فقط)",
+      "maker": "Cohere",
+      "origin": "ca",
+      "tags": [
+        "arabic"
+      ],
+      "note": "من Cohere، مدرَّب على 23 لغة منها العربية، وأجاب بعربية سليمة في اختبارنا. يتذكر من المحادثة 8192 رمزاً.",
+      "thinking": false,
+      "sampling": {
+        "stop": [
+          "<|END_OF_TURN_TOKEN|>"
+        ]
+      },
+      "vision": false,
+      "maxContext": 8192
+    },
+    {
+      "id": "step-3.7-flash",
+      "name": "Step 3.7 Flash",
+      "hf": "unsloth/Step-3.7-Flash-GGUF:UD-Q2_K_XL",
+      "sizeBytes": 65785473536,
+      "minVramMB": 64512,
+      "license": "Apache-2.0",
+      "maker": "StepFun",
+      "origin": "cn",
+      "tags": [
+        "code"
+      ],
+      "note": "موديل عملاق (197 مليار معامل) من StepFun، مضغوط بقوة (2 بت) ليصغر حجمه، فقد تقل دقته قليلاً. يحتاج كرتاً كبيراً مع ذاكرة جهاز 96 جيجابايت تقريباً.",
+      "thinking": true,
+      "sampling": {},
+      "vision": false
+    },
+    {
+      "id": "qwen3.8-flash-next",
+      "name": "Qwen3.8 Flash Next",
+      "hf": "unsloth/Qwen3.8-Flash-Next-GGUF:UD-Q2_K_XL",
+      "sizeBytes": 78869128864,
+      "minVramMB": 76800,
+      "license": "Qwen Community License",
+      "maker": "Alibaba · Qwen",
+      "origin": "cn",
+      "tags": [
+        "code"
+      ],
+      "note": "موديل عملاق من Qwen (6 مليارات نشطة لكل كلمة)، مضغوط بقوة (2 بت) ليصغر حجمه، فقد تقل دقته قليلاً. يحتاج كرتاً كبيراً مع ذاكرة جهاز 128 جيجابايت تقريباً.",
+      "thinking": true,
+      "sampling": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 20,
+        "min_p": 0.0,
+        "presence_penalty": 0.0
+      },
+      "vision": false
+    },
+    {
+      "id": "deepseek-v4-flash",
+      "name": "DeepSeek V4 Flash",
+      "hf": "unsloth/DeepSeek-V4-Flash-0731-GGUF:UD-Q2_K_XL",
+      "sizeBytes": 96832508352,
+      "minVramMB": 94208,
+      "license": "MIT",
+      "maker": "DeepSeek",
+      "origin": "cn",
+      "tags": [
+        "code"
+      ],
+      "note": "موديل DeepSeek العملاق (284 مليار معامل)، مضغوط بقوة (2 بت) ليصغر حجمه، فقد تقل دقته قليلاً. يحتاج كرتاً كبيراً مع ذاكرة جهاز 128 جيجابايت أو أكثر.",
+      "thinking": true,
+      "sampling": {
+        "temperature": 1.0,
+        "top_p": 1.0
+      },
+      "vision": false
     }
   ],
   "_sampling_source": "Values from each model's Hugging Face card (best-practice / recommended sampling sections). Models whose card gives no recommendation have empty sampling and use llama.cpp's defaults.",
