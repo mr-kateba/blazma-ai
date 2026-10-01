@@ -25,6 +25,8 @@ const paths = require('./paths');
 // Settings the renderer may change (more are added with the settings page).
 const EDITABLE_SETTINGS = [
   'monitorIntervalMs',
+  'lhmEnabled',
+  'lhmPort',
   'gpuTempWarn',
   'gpuTempDanger',
   'webSearch',

@@ -216,6 +216,12 @@ function monitorSection(info) {
       await refreshDeviceInfo();
     } else await saveTemps();
   });
+  const lhmPort = el('input', { type: 'number', min: '1', max: '65535', class: 'set-number', dir: 'ltr', value: String(values.lhmPort) });
+  lhmPort.addEventListener('change', () => {
+    const v = Number(lhmPort.value);
+    if (!Number.isInteger(v) || v < 1 || v > 65535) toast(S.invalid, 'error');
+    else save({ lhmPort: v });
+  });
   return section(
     'monitor',
     S.monitorTitle,
@@ -224,6 +230,8 @@ function monitorSection(info) {
     item(S.auto, S.autoNote(info.thresholds.gpuTempWarn, info.thresholds.gpuTempDanger), autoToggle),
     item(S.warn, null, warn),
     item(S.danger, null, danger),
+    item(S.lhm, S.lhmDesc, toggle(values.lhmEnabled, (on) => save({ lhmEnabled: on }))),
+    item(S.lhmPort, S.lhmPortDesc, lhmPort),
   );
 }
 

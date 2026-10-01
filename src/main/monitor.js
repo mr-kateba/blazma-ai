@@ -10,10 +10,13 @@ const { powerMonitor } = require('electron');
 const settings = require('./settings');
 const gpu = require('./hardware/gpu');
 const system = require('./hardware/system');
+const lhm = require('./hardware/lhm');
 
 const HISTORY_SEC = 300;
 const BACKGROUND_MS = 10000;
 const STORAGE_EVERY_MS = 30000;
+// When LibreHardwareMonitor is not answering, ask again only this often.
+const LHM_RETRY_MS = 10000;
 
 class Monitor extends EventEmitter {
   constructor(setup) {
@@ -28,6 +31,8 @@ class Monitor extends EventEmitter {
     this.limits = null;
     this.storageCache = null;
     this.storageAt = 0;
+    this.lhm = { status: 'off', tempC: null, powerW: null };
+    this.lhmAt = 0;
     this.alertState = {};
     this.gpuIndex = null;
   }
@@ -77,6 +82,18 @@ class Monitor extends EventEmitter {
     this.timer = null;
   }
 
+  // CPU temperature and power, when LibreHardwareMonitor's web server runs.
+  async readLhm() {
+    const s = settings.get();
+    if (!s.lhmEnabled) {
+      this.lhm = { status: 'disabled', tempC: null, powerW: null };
+      return;
+    }
+    if (this.lhm.status !== 'ok' && Date.now() - this.lhmAt < LHM_RETRY_MS) return;
+    this.lhmAt = Date.now();
+    this.lhm = await lhm.readCpu(s.lhmPort);
+  }
+
   serverPid() {
     const child = this.setup.server.child;
     return child && child.pid ? child.pid : null;
@@ -95,6 +112,7 @@ class Monitor extends EventEmitter {
       ]);
       const cpu = system.cpuUsage();
       const st = await system.staticInfo();
+      await this.readLhm();
       if (Date.now() - this.storageAt > STORAGE_EVERY_MS) {
         this.storageCache = await system.storage(settings.modelsDir());
         this.storageAt = Date.now();
@@ -107,6 +125,9 @@ class Monitor extends EventEmitter {
           ...cpu,
           // Current clock as Task Manager computes it: % Processor Performance x base clock.
           clockMHz: w.cpuPerfPct != null && st.cpu.maxClockMHz ? (w.cpuPerfPct / 100) * st.cpu.maxClockMHz : null,
+          tempC: this.lhm.tempC,
+          powerW: this.lhm.powerW,
+          sensor: this.lhm.status, // 'ok' | 'off' | 'auth' | 'no-sensor' | 'disabled'
         },
         ram: system.memory(),
         server: {
@@ -192,7 +213,9 @@ class Monitor extends EventEmitter {
       lines.push('No NVIDIA GPU detected; the model runs on the CPU.');
     }
     const cpu = fresh && fresh.cpu ? `, usage ${Math.round(fresh.cpu.total)}%` : '';
-    lines.push(`CPU: ${st.cpu.name || 'unknown'}${st.cpu.cores ? `, ${st.cpu.cores} cores` : ''}, ${st.cpu.threads} threads${cpu}. CPU temperature is not available on Windows without a sensor driver.`);
+    const cpuTemp = fresh && fresh.cpu && fresh.cpu.tempC != null ? `, temperature ${Math.round(fresh.cpu.tempC)}°C` : '';
+    const cpuNote = cpuTemp ? '' : ' CPU temperature is not available on Windows without a sensor driver.';
+    lines.push(`CPU: ${st.cpu.name || 'unknown'}${st.cpu.cores ? `, ${st.cpu.cores} cores` : ''}, ${st.cpu.threads} threads${cpu}${cpuTemp}.${cpuNote}`);
     lines.push(`RAM: ${gb(ram.usedBytes)}/${gb(ram.totalBytes)} GB used${mem.type ? `, ${mem.type}` : ''}${mem.speedMTs ? ` ${mem.speedMTs} MT/s` : ''}`);
     if (st.os && st.os.caption) lines.push(`OS: ${st.os.caption}`);
     return lines.join('\n');

@@ -16,6 +16,8 @@ const DEFAULTS = Object.freeze({
   webSearch: true, // the model may search the web (tool calls run in main/web.js)
   shareDeviceInfo: false, // add a hardware summary to the system prompt (monitor.modelSummary)
   monitorIntervalMs: 2000,
+  lhmEnabled: true, // read CPU temperature/power from LibreHardwareMonitor's web server (127.0.0.1)
+  lhmPort: 8085,
   gpuTempWarn: null, // null = derived from the card's own limits (monitor.js)
   gpuTempDanger: null,
   systemPrompt:
@@ -38,6 +40,8 @@ const VALIDATORS = {
   webSearch: (v) => typeof v === 'boolean',
   shareDeviceInfo: (v) => typeof v === 'boolean',
   monitorIntervalMs: (v) => [1000, 2000, 5000].includes(v),
+  lhmEnabled: (v) => typeof v === 'boolean',
+  lhmPort: (v) => isInt(v, 1, 65535),
   gpuTempWarn: (v) => v === null || isInt(v, 30, 110),
   gpuTempDanger: (v) => v === null || isInt(v, 30, 110),
 };
