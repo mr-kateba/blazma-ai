@@ -5,6 +5,7 @@ import { ar, errorText, formatBytes, formatDuration } from '../i18n/ar.js';
 import { el, detectDir } from '../lib/dom.js';
 import { renderMarkdown } from '../lib/markdown.js';
 import { readSse } from '../lib/sse.js';
+import { extractTextToolCalls, visibleText } from '../lib/toolcalls.js';
 import { store } from '../lib/store.js';
 import { speak, stopSpeaking } from '../lib/speech.js';
 import { startRecording } from '../lib/recorder.js';
@@ -423,7 +424,7 @@ function messageNode(msg, index) {
       ),
     );
   }
-  if (!isUser && msg.content) body.append(renderMarkdown(msg.content, mdLabels));
+  if (!isUser && msg.content) body.append(renderMarkdown(msg.streaming ? visibleText(msg.content) : msg.content, mdLabels));
   if (!isUser && !msg.streaming && msg.sources && msg.sources.length) {
     const seen = new Set();
     const unique = msg.sources.filter((src) => !seen.has(src.url) && seen.add(src.url)).slice(0, 6);
@@ -892,6 +893,8 @@ async function streamReply({ reply, system, conn, chatSettings, webOn, signal })
       ...chatSettings.sampling,
       // Gemma 4's template defaults thinking to off, Qwen3.5's to on; always say which.
       chat_template_kwargs: { enable_thinking: chatSettings.thinking },
+      // Several searches in one reply are read as calls, not left as text.
+      ...(webOn ? { parallel_tool_calls: true } : {}),
     };
     // The last round has no tools, so the model must answer with what it found.
     if (webOn && round < MAX_TOOL_ROUNDS) payload.tools = TOOLS;
@@ -944,6 +947,14 @@ async function streamReply({ reply, system, conn, chatSettings, webOn, signal })
       renderLast();
     }
 
+    // Calls the server left in the text (lib/toolcalls.js) are run too, and
+    // their raw syntax is not shown.
+    const leaked = extractTextToolCalls(roundContent);
+    if (leaked.calls.length || leaked.content !== roundContent.trim()) {
+      reply.content = reply.content.slice(0, reply.content.length - roundContent.length) + leaked.content;
+      roundContent = leaked.content;
+      if (webOn) for (const c of leaked.calls) toolCalls.push({ id: '', type: 'function', function: { name: c.name, arguments: c.arguments } });
+    }
     const calls = toolCalls.filter(Boolean);
     if (!calls.length) break;
     calls.forEach((c, i) => {

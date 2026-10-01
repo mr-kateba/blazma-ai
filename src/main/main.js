@@ -3,8 +3,8 @@
 const path = require('node:path');
 const settings = require('./settings');
 const { app, BrowserWindow, Menu, Notification, nativeTheme, session } = require('electron');
-const { registerScheme, handleAppProtocol, handleStudioProtocol, setServerPort, APP_ORIGIN } = require('./protocol');
-const studio = require('./studio');
+const { registerScheme, handleAppProtocol, setServerPort, APP_ORIGIN } = require('./protocol');
+const vscode = require('./vscode');
 const { registerIpc } = require('./ipc');
 const { Setup } = require('./setup');
 const { Monitor } = require('./monitor');
@@ -64,18 +64,21 @@ function createWindow() {
   mainWindow.on('closed', () => {
     mainWindow = null;
   });
+  // A reloaded page starts without the programming page shown.
+  mainWindow.webContents.on('did-start-loading', () => vscode.hideView());
   mainWindow.loadURL(`${APP_ORIGIN}/index.html`);
 }
 
 function hardenWebContents() {
   app.on('web-contents-created', (_event, contents) => {
+    // The app's pages stay on app://blazma; the VS Code view (vscode.js)
+    // stays on its local server and keeps its own frames (webviews).
     contents.on('will-navigate', (event, url) => {
-      if (!url.startsWith(`${APP_ORIGIN}/`)) event.preventDefault();
+      if (!url.startsWith(`${APP_ORIGIN}/`) && !vscode.allowsNavigation(contents, url)) event.preventDefault();
     });
     contents.on('will-attach-webview', (event) => event.preventDefault());
-    // The studio preview iframe may only show its own files.
     contents.on('will-frame-navigate', (details) => {
-      if (!details.isMainFrame && !details.url.startsWith('studio://preview/')) details.preventDefault();
+      if (!details.isMainFrame && !vscode.ownsContents(contents)) details.preventDefault();
     });
     contents.setWindowOpenHandler(() => ({ action: 'deny' }));
   });
@@ -102,7 +105,6 @@ if (!app.requestSingleInstanceLock()) {
     Menu.setApplicationMenu(null);
     hardenWebContents();
     handleAppProtocol();
-    handleStudioProtocol(studio.previewResponse);
     registerIpc({ setup, monitor, getWindow: () => mainWindow });
 
     // The CSP served with the page names the server port, so pick it first.
@@ -128,7 +130,7 @@ if (!app.requestSingleInstanceLock()) {
   // Every helper program started by the app ends with it: the embedding
   // server (مكتبتي), whisper-server (voice), sd-server (drawing) and llama-server.
   const stopHelpers = () => {
-    for (const mod of ['./knowledge', './voice', './images']) {
+    for (const mod of ['./knowledge', './voice', './images', './vscode']) {
       try {
         require(mod).stop();
       } catch {

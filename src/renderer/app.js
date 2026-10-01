@@ -103,10 +103,7 @@ async function maybeTour(state) {
 }
 const offTourWatch = window.blazma.onSetupState(maybeTour);
 window.blazma.getSetupState().then(maybeTour);
-// "فتح في الاستوديو" on a code block in the chat.
-window.addEventListener('blazma:open-in-studio', (e) => {
-  showPage('studio');
-  openCodeInStudio(e.detail.code, e.detail.lang);
-});
+// "افتح في VS Code" on a code block in the chat (saved, then the page opens).
+window.addEventListener('blazma:open-in-studio', (e) => openCodeInStudio(e.detail.code, e.detail.lang));
 showPage('chat');
 showVersion();

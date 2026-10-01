@@ -18,7 +18,7 @@ async function waitIdle(win) { await win.waitForTimeout(1200); await win.waitFor
   console.log('list after 1st chat:', await win.locator('.chat-item-title').allTextContents());
   console.log('code block buttons:', await win.locator('.md-code-head button').allTextContents());
   await app.evaluate(({ dialog }, p) => { dialog.showSaveDialog = async () => ({ canceled: false, filePath: p }); }, SP + '/saved-code.py');
-  if (await win.locator('.md-code-head button').count()) { await win.locator('.md-code-head button').first().click(); await win.waitForTimeout(500); console.log('saved file:', fs.existsSync(SP + '/saved-code.py') ? fs.readFileSync(SP + '/saved-code.py', 'utf8').slice(0, 80) : 'missing'); }
+  if (await win.locator('.md-code-head button').count()) { await win.locator('.md-code-head button:has-text("حفظ كملف")').first().click(); await win.waitForTimeout(500); console.log('saved file:', fs.existsSync(SP + '/saved-code.py') ? fs.readFileSync(SP + '/saved-code.py', 'utf8').slice(0, 80) : 'missing'); }
 
   // regenerate
   const before = await win.locator('.msg-ai .msg-body').last().innerText();

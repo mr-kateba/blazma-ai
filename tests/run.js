@@ -12,11 +12,12 @@ const path = require('node:path');
 const { spawn, spawnSync } = require('node:child_process');
 
 const WORK = path.join(__dirname, '.work');
-const ALL = ['chat', 'chats', 'ui', 'branches', 'close-busy', 'persona', 'files', 'vision', 'models', 'catalog', 'local', 'idle', 'theme', 'kb', 'voice', 'image', 'import', 'api', 'lhm', 'overlay', 'python', 'vs', 'agent', 'device'];
+const ALL = ['chat', 'chats', 'ui', 'branches', 'close-busy', 'persona', 'files', 'vision', 'models', 'catalog', 'local', 'idle', 'theme', 'kb', 'voice', 'image', 'vscode', 'import', 'api', 'lhm', 'overlay', 'device'];
 const NEEDS = {
   kb: ['models/Qwen3-Embedding-0.6B-Q8_0.gguf'],
   voice: ['whisper/whisper-bin-ubuntu-x64/whisper-server', 'whisper/ar-sample.wav'],
   image: ['sdcpp/sd-server', 'images/z_image_turbo-Q3_K.gguf'],
+  vscode: ['vscodium/linux/out/server-main.js'],
 };
 const TIMEOUT_MS = 30 * 60 * 1000;
 

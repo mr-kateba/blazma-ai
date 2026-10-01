@@ -12,8 +12,9 @@ const SP = process.argv[2], exe = require('path').resolve(__dirname, '../../dist
     console.log(f, res.ok ? 'OK: ' + res.result.text.split('\n')[1] : 'ERROR ' + JSON.stringify(res.error));
   }
   await win.click('.nav-item[data-page="studio"]');
-  const monaco = await win.waitForSelector('.monaco-editor', { timeout: 30000 }).then(() => true).catch(() => false);
-  console.log('monaco in packaged app:', monaco);
+  // Without VSCodium downloaded the page offers to install it.
+  const codePage = await win.waitForSelector('.code-install, .code-bar', { timeout: 30000 }).then(() => true).catch(() => false);
+  console.log('VS Code page in packaged app:', codePage);
   await win.screenshot({ path: SP + '/packaged.png' });
   console.log('catalog models:', (await win.evaluate(() => window.blazma.getSetupState().then(s => s.models.map(m => m.id)))).join(','));
   console.log(logs.join('\n') || 'no errors');
