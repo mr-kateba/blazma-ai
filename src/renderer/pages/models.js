@@ -14,6 +14,31 @@ let addStatus = null; // { kind: 'info'|'ok'|'error', text }
 let notice = null;
 let ollama = null; // last scan: { dir, found, models }
 let localStatus = null;
+let filter = 'all';
+try {
+  filter = localStorage.getItem('blazma.models.filter') || 'all';
+} catch {
+  /* storage unavailable: start with all */
+}
+
+const ARABIC_ORIGINS = ['sa', 'ae', 'qa'];
+const FILTERS = {
+  all: () => true,
+  fits: (m) => m.fit === 'ok',
+  cn: (m) => m.origin === 'cn',
+  arabic: (m) => (m.tags || []).includes('arabic') || ARABIC_ORIGINS.includes(m.origin),
+  code: (m) => (m.tags || []).includes('code'),
+  vision: (m) => m.vision,
+};
+
+// Size groups by the graphics memory a model needs to run fully on the card.
+function groupOf(m) {
+  if (m.custom || m.local) return 'mine';
+  if (m.cpu || m.minVramMB <= 6144) return 'small';
+  if (m.minVramMB <= 12288) return 'mid';
+  if (m.minVramMB <= 16384) return 'big';
+  return 'xl';
+}
 
 function progressFor(m) {
   if (!state || state.modelId !== m.id) return null;
@@ -33,11 +58,13 @@ function modelCard(m) {
   if (isActive) tags.push(el('span', { class: 'tag tag-ok' }, M.active));
   if (m.downloaded && !isActive) tags.push(el('span', { class: 'tag' }, ar.setup.downloaded));
   if (m.vision) tags.push(el('span', { class: 'tag' }, M.vision));
+  if ((m.tags || []).includes('code')) tags.push(el('span', { class: 'tag' }, M.code));
   if (m.source === 'ollama') tags.push(el('span', { class: 'tag' }, M.fromOllama));
   else if (m.local) tags.push(el('span', { class: 'tag' }, M.localFile));
   else if (m.custom) tags.push(el('span', { class: 'tag' }, M.custom));
   if (m.local && !m.downloaded) tags.push(el('span', { class: 'tag tag-warn' }, M.fileMissing));
-  if (!m.fits) tags.push(el('span', { class: 'tag tag-warn' }, state.hardware && state.hardware.nvidia ? ar.setup.notFit : ar.setup.slowOnCpu));
+  if (m.fit === 'too-big') tags.push(el('span', { class: 'tag tag-warn' }, ar.setup.tooBig));
+  else if (m.fit === 'slow') tags.push(el('span', { class: 'tag tag-warn' }, state.hardware && state.hardware.nvidia ? ar.setup.usesRam : ar.setup.slowOnCpu));
 
   const actions = el('div', { class: 'row' });
   if (isActive) {
@@ -93,6 +120,7 @@ function modelCard(m) {
     'div',
     { class: `model-card${isActive ? ' active' : ''}` },
     el('div', { class: 'model-option-head' }, el('b', { dir: 'ltr' }, m.name), el('span', { class: 'muted' }, formatBytes(m.sizeBytes)), ...tags),
+    m.maker ? el('div', { class: 'model-maker small' }, M.maker(m.maker, M.countries[m.origin] || '')) : null,
     m.note ? el('div', { class: 'muted small' }, m.note) : null,
     el('div', { class: 'faint small', dir: 'ltr' }, m.local ? m.path : m.hf),
     m.local && m.hasTemplate === false ? el('div', { class: 'small warn-text' }, M.noTemplate) : null,
@@ -131,7 +159,9 @@ function render() {
     hwLine,
     notice ? el('div', { class: 'notice' }, notice) : null,
     el('h2', { class: 'section-title' }, M.catalog),
-    el('div', { class: 'model-grid' }, ...state.models.map(modelCard)),
+    filterBar(),
+    ...catalogGroups(),
+    el('p', { class: 'faint small giants' }, M.giants),
     localSection(),
     el(
       'section',
@@ -143,6 +173,39 @@ function render() {
     ),
   ];
   $('models-root').replaceChildren(...children.filter(Boolean));
+}
+
+function filterBar() {
+  return el(
+    'div',
+    { class: 'model-filters', role: 'tablist' },
+    ...Object.keys(FILTERS).map((key) => {
+      const count = state.models.filter(FILTERS[key]).length;
+      const b = el('button', { type: 'button', class: `chip${filter === key ? ' on' : ''}`, role: 'tab', 'aria-selected': String(filter === key) }, M.filters[key], el('span', { class: 'chip-count' }, String(count)));
+      b.addEventListener('click', () => {
+        filter = key;
+        try {
+          localStorage.setItem('blazma.models.filter', key);
+        } catch {
+          /* remembered for this session only */
+        }
+        render();
+      });
+      return b;
+    }),
+  );
+}
+
+function catalogGroups() {
+  const list = state.models.filter(FILTERS[filter] || FILTERS.all);
+  if (!list.length) return [el('p', { class: 'muted' }, M.noMatch)];
+  const out = [];
+  for (const g of ['small', 'mid', 'big', 'xl', 'mine']) {
+    const items = list.filter((m) => groupOf(m) === g).sort((a, b) => (a.sizeBytes || 0) - (b.sizeBytes || 0));
+    if (!items.length) continue;
+    out.push(el('h3', { class: 'model-group-title' }, M.groups[g]), el('div', { class: 'model-grid' }, ...items.map(modelCard)));
+  }
+  return out;
 }
 
 // Models already on this computer: a GGUF file, or Ollama's downloads.

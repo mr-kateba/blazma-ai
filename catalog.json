@@ -15,7 +15,13 @@
         "top_p": 0.95,
         "top_k": 64
       },
-      "vision": true
+      "vision": true,
+      "maker": "Google",
+      "origin": "us",
+      "tags": [
+        "arabic"
+      ],
+      "featured": true
     },
     {
       "id": "qwen3.5-9b",
@@ -33,7 +39,13 @@
         "min_p": 0.0,
         "presence_penalty": 1.5
       },
-      "vision": true
+      "vision": true,
+      "maker": "Alibaba · Qwen",
+      "origin": "cn",
+      "tags": [
+        "arabic"
+      ],
+      "featured": true
     },
     {
       "id": "qwen3.5-4b",
@@ -51,7 +63,13 @@
         "min_p": 0.0,
         "presence_penalty": 1.5
       },
-      "vision": true
+      "vision": true,
+      "maker": "Alibaba · Qwen",
+      "origin": "cn",
+      "tags": [
+        "arabic"
+      ],
+      "featured": true
     },
     {
       "id": "qwen3.5-2b",
@@ -70,9 +88,318 @@
         "min_p": 0.0,
         "presence_penalty": 1.5
       },
+      "vision": true,
+      "maker": "Alibaba · Qwen",
+      "origin": "cn",
+      "tags": [
+        "arabic"
+      ],
+      "featured": true
+    },
+    {
+      "id": "qwen3.5-0.8b",
+      "name": "Qwen3.5 0.8B",
+      "hf": "unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M",
+      "sizeBytes": 739863648,
+      "minVramMB": 0,
+      "cpu": true,
+      "license": "Apache-2.0",
+      "maker": "Alibaba · Qwen",
+      "origin": "cn",
+      "tags": [],
+      "note": "أصغر موديل في القائمة، يعمل على أي جهاز. عربيته ضعيفة في اختبارنا، فهو للأجهزة الضعيفة جداً أو للتجربة.",
+      "thinking": false,
+      "sampling": {
+        "temperature": 0.7,
+        "top_p": 0.8,
+        "top_k": 20,
+        "min_p": 0.0,
+        "presence_penalty": 1.5
+      },
+      "vision": true
+    },
+    {
+      "id": "gemma-4-e2b",
+      "name": "Gemma 4 E2B",
+      "hf": "unsloth/gemma-4-E2B-it-GGUF:Q4_K_M",
+      "sizeBytes": 4093572000,
+      "minVramMB": 0,
+      "cpu": true,
+      "license": "Apache-2.0",
+      "maker": "Google",
+      "origin": "us",
+      "tags": [
+        "arabic"
+      ],
+      "note": "صغير وسريع على المعالج، وأجاب بعربية سليمة في اختبارنا. يفهم الصور.",
+      "thinking": true,
+      "sampling": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 64
+      },
+      "vision": true
+    },
+    {
+      "id": "allam-7b",
+      "name": "ALLaM 7B",
+      "hf": "bartowski/ALLaM-AI_ALLaM-7B-Instruct-preview-GGUF:Q4_K_M",
+      "sizeBytes": 4263194400,
+      "minVramMB": 5632,
+      "license": "Apache-2.0",
+      "maker": "سدايا",
+      "origin": "sa",
+      "tags": [
+        "arabic"
+      ],
+      "note": "من المركز الوطني للذكاء الاصطناعي في سدايا، مدرَّب خصيصاً للعربية (نسخة تجريبية). أجاب بعربية سليمة في اختبارنا. يتذكر من المحادثة 4096 رمزاً فقط.",
+      "thinking": false,
+      "sampling": {
+        "temperature": 0.6,
+        "top_p": 0.95,
+        "top_k": 50
+      },
+      "vision": false,
+      "maxContext": 4096
+    },
+    {
+      "id": "falcon-h1-7b",
+      "name": "Falcon H1 7B",
+      "hf": "tiiuae/Falcon-H1-7B-Instruct-GGUF:Q4_K_M",
+      "sizeBytes": 4598344960,
+      "minVramMB": 6144,
+      "license": "Falcon LLM License",
+      "maker": "TII",
+      "origin": "ae",
+      "tags": [
+        "arabic"
+      ],
+      "note": "من معهد الابتكار التكنولوجي في أبوظبي، يدعم 18 لغة منها العربية. أجاب بعربية سليمة في اختبارنا.",
+      "thinking": false,
+      "sampling": {},
+      "vision": false
+    },
+    {
+      "id": "gemma-4-e4b",
+      "name": "Gemma 4 E4B",
+      "hf": "unsloth/gemma-4-E4B-it-GGUF:Q4_K_M",
+      "sizeBytes": 5968723904,
+      "minVramMB": 7680,
+      "license": "Apache-2.0",
+      "maker": "Google",
+      "origin": "us",
+      "tags": [
+        "arabic"
+      ],
+      "note": "أكبر وأدق من E2B، لكروت 8 جيجابايت. يفهم الصور، ومدرَّب على أكثر من 140 لغة.",
+      "thinking": true,
+      "sampling": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 64
+      },
+      "vision": true
+    },
+    {
+      "id": "mimo-v2.6-9b",
+      "name": "MiMo V2.6 9B",
+      "hf": "bartowski/MiMo-V2.6-Distill-Qwen-9B-GGUF:Q4_K_M",
+      "sizeBytes": 6762754112,
+      "minVramMB": 8192,
+      "license": "MIT",
+      "maker": "Xiaomi",
+      "origin": "cn",
+      "tags": [
+        "code"
+      ],
+      "note": "من Xiaomi، مبني على Qwen3.5 9B ومدرَّب أكثر على البرمجة واستخدام الأدوات. يفهم الصور.",
+      "thinking": true,
+      "sampling": {},
+      "vision": true
+    },
+    {
+      "id": "gpt-oss-20b",
+      "name": "gpt-oss 20B",
+      "hf": "unsloth/gpt-oss-20b-GGUF:Q4_K_M",
+      "sizeBytes": 11624759488,
+      "minVramMB": 12800,
+      "license": "Apache-2.0",
+      "maker": "OpenAI",
+      "origin": "us",
+      "tags": [
+        "code"
+      ],
+      "note": "موديل OpenAI المفتوح، يفكّر قبل الإجابة وقوي في البرمجة. من نوع MoE (3.6 مليار نشطة من 21) فيبقى سريعاً حتى مع الاستعانة بذاكرة الجهاز.",
+      "thinking": true,
+      "sampling": {},
+      "vision": false
+    },
+    {
+      "id": "ernie-4.5-21b",
+      "name": "ERNIE 4.5 21B Thinking",
+      "hf": "unsloth/ERNIE-4.5-21B-A3B-Thinking-GGUF:Q4_K_M",
+      "sizeBytes": 13331018624,
+      "minVramMB": 14336,
+      "license": "Apache-2.0",
+      "maker": "Baidu",
+      "origin": "cn",
+      "tags": [],
+      "note": "من Baidu، يفكّر قبل الإجابة. من نوع MoE (3 مليارات نشطة من 21) فيبقى سريعاً حتى مع الاستعانة بذاكرة الجهاز.",
+      "thinking": true,
+      "sampling": {},
+      "vision": false
+    },
+    {
+      "id": "fanar-2-27b",
+      "name": "Fanar 2 27B",
+      "hf": "mradermacher/Fanar-2-27B-Instruct-i1-GGUF:i1-Q4_K_M",
+      "sizeBytes": 16546689600,
+      "minVramMB": 17408,
+      "license": "Apache-2.0",
+      "maker": "QCRI",
+      "origin": "qa",
+      "tags": [
+        "arabic"
+      ],
+      "note": "من معهد قطر لبحوث الحوسبة، مدرَّب على العربية والإنجليزية فوق Gemma 3. لكروت 24 جيجابايت.",
+      "thinking": false,
+      "sampling": {
+        "temperature": 0.7
+      },
+      "vision": false
+    },
+    {
+      "id": "qwen3.8-27b",
+      "name": "Qwen3.8 27B",
+      "hf": "unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M",
+      "sizeBytes": 17395586656,
+      "minVramMB": 18432,
+      "license": "Apache-2.0",
+      "maker": "Alibaba · Qwen",
+      "origin": "cn",
+      "tags": [
+        "code"
+      ],
+      "note": "أحدث موديل من Qwen، قوي في البرمجة والتفكير ويفهم الصور. لكروت 24 جيجابايت.",
+      "thinking": true,
+      "sampling": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 20,
+        "min_p": 0.0,
+        "presence_penalty": 0.0
+      },
+      "vision": true
+    },
+    {
+      "id": "glm-4.7-flash",
+      "name": "GLM 4.7 Flash",
+      "hf": "unsloth/GLM-4.7-Flash-GGUF:UD-Q4_K_XL",
+      "sizeBytes": 17520169312,
+      "minVramMB": 18432,
+      "license": "MIT",
+      "maker": "Zhipu · Z.ai",
+      "origin": "cn",
+      "tags": [
+        "code"
+      ],
+      "note": "من Zhipu، قوي في البرمجة والمهام متعددة الخطوات. من نوع MoE (3 مليارات نشطة من 30) فيبقى سريعاً حتى مع الاستعانة بذاكرة الجهاز.",
+      "thinking": true,
+      "sampling": {
+        "temperature": 1.0,
+        "top_p": 0.95
+      },
+      "vision": false
+    },
+    {
+      "id": "qwen3-coder-30b",
+      "name": "Qwen3 Coder 30B",
+      "hf": "unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:UD-Q4_K_XL",
+      "sizeBytes": 17665334432,
+      "minVramMB": 18432,
+      "license": "Apache-2.0",
+      "maker": "Alibaba · Qwen",
+      "origin": "cn",
+      "tags": [
+        "code"
+      ],
+      "note": "مخصص للبرمجة من Qwen، يجيب مباشرة بدون تفكير طويل. من نوع MoE (3 مليارات نشطة من 30) فيبقى سريعاً حتى مع الاستعانة بذاكرة الجهاز.",
+      "thinking": false,
+      "sampling": {
+        "temperature": 0.7,
+        "top_p": 0.8,
+        "top_k": 20,
+        "repeat_penalty": 1.05
+      },
+      "vision": false
+    },
+    {
+      "id": "gemma-4-26b-a4b",
+      "name": "Gemma 4 26B A4B",
+      "hf": "unsloth/gemma-4-26B-A4B-it-GGUF:UD-Q4_K_XL",
+      "sizeBytes": 18205808832,
+      "minVramMB": 18944,
+      "license": "Apache-2.0",
+      "maker": "Google",
+      "origin": "us",
+      "tags": [
+        "arabic"
+      ],
+      "note": "من نوع MoE (3.8 مليار نشطة من 26) فيبقى سريعاً حتى مع الاستعانة بذاكرة الجهاز. يفهم الصور.",
+      "thinking": true,
+      "sampling": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 64
+      },
+      "vision": true
+    },
+    {
+      "id": "gemma-4-31b",
+      "name": "Gemma 4 31B",
+      "hf": "unsloth/gemma-4-31B-it-GGUF:Q4_K_M",
+      "sizeBytes": 19524459936,
+      "minVramMB": 20480,
+      "license": "Apache-2.0",
+      "maker": "Google",
+      "origin": "us",
+      "tags": [
+        "arabic"
+      ],
+      "note": "أكبر موديلات Gemma 4 وأدقها، ويفهم الصور. لكروت 24 جيجابايت.",
+      "thinking": true,
+      "sampling": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 64
+      },
+      "vision": true
+    },
+    {
+      "id": "qwen3.6-35b-a3b",
+      "name": "Qwen3.6 35B A3B",
+      "hf": "unsloth/Qwen3.6-35B-A3B-GGUF:UD-Q4_K_M",
+      "sizeBytes": 23037351616,
+      "minVramMB": 23552,
+      "license": "Apache-2.0",
+      "maker": "Alibaba · Qwen",
+      "origin": "cn",
+      "tags": [
+        "code"
+      ],
+      "note": "من نوع MoE (3 مليارات نشطة من 35)، فيعمل بسرعة مقبولة على كرت 12 أو 16 جيجابايت مع الاستعانة بذاكرة الجهاز. يفهم الصور.",
+      "thinking": true,
+      "sampling": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 20,
+        "min_p": 0.0,
+        "presence_penalty": 1.5
+      },
       "vision": true
     }
   ],
-  "_sampling_source": "Values from each model's Hugging Face card (Qwen/Qwen3.5-9B README 'Best Practices'; google/gemma-4-12B-it README 'Sampling Parameters').",
-  "_vision_source": "All four repos ship mmproj-*.gguf vision projectors (checked on Hugging Face); llama.cpp downloads the one closest in quantization when --no-mmproj is not passed."
+  "_sampling_source": "Values from each model's Hugging Face card (best-practice / recommended sampling sections). Models whose card gives no recommendation have empty sampling and use llama.cpp's defaults.",
+  "_vision_source": "Vision models ship mmproj-*.gguf projectors (checked on Hugging Face); llama.cpp downloads the one closest in quantization when --no-mmproj is not passed.",
+  "_sizes_source": "sizeBytes for added models = the files llama.cpp picks for repo:quant (model + projector), from the Hugging Face tree API; minVramMB = that size + 1.5 GB for context, rounded up to 512 MB."
 }

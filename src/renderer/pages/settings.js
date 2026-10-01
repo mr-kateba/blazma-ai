@@ -110,8 +110,8 @@ function engineSection(state) {
     (v) => save({ contextSize: Number(v) }, { engine: true }),
   );
   const gpu = select(
-    [[99, S.engine.gpuAll], [0, S.engine.gpuNone], ...[8, 16, 24, 32, 40].map((n) => [n, S.engine.gpuLayersN(n)])],
-    [0, 8, 16, 24, 32, 40].includes(values.gpuLayers) ? values.gpuLayers : 99,
+    [[-1, S.engine.gpuAuto], [99, S.engine.gpuAll], [0, S.engine.gpuNone], ...[8, 16, 24, 32, 40].map((n) => [n, S.engine.gpuLayersN(n)])],
+    [-1, 0, 8, 16, 24, 32, 40].includes(values.gpuLayers) ? values.gpuLayers : 99,
     (v) => save({ gpuLayers: Number(v) }, { engine: true }),
   );
   const kv = select(
