@@ -31,7 +31,7 @@ const ask = async (port, key) => {
   // key survives a restart of the engine
   await win.evaluate(() => window.blazma.restartServer ? window.blazma.restartServer() : null);
   // new key
-  win.on('dialog', (d) => d.accept());
+  win.on('dialog', (d) => d.accept()); await win.evaluate(() => new MutationObserver(() => { const b = document.querySelector('.dlg-ok'); if (b) b.click(); }).observe(document.body, { childList: true })); // accept in-app confirmations (lib/dialog.js)
   await win.click('#set-api button:has-text("مفتاح جديد")'); await waitReady(win);
   const v2 = await win.evaluate(() => window.blazma.getSettings());
   const c2 = await win.evaluate(() => window.blazma.getConnection());

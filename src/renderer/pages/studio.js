@@ -18,6 +18,7 @@ import { createTerminal } from '../studio/terminal.js';
 import { createPythonRunner } from '../studio/python.js';
 import { createPalette } from '../studio/palette.js';
 import { languageOf } from '../studio/highlight.js';
+import { confirmDialog } from '../lib/dialog.js';
 
 const S = ar.studio;
 const NAME_RE = /^[A-Za-z0-9_\-./]{1,120}$/;
@@ -201,12 +202,18 @@ function saveLayout() {
 async function saveNow() {
   clearTimeout(saveTimer);
   if (!project || !dirty.size) return;
-  const res = await window.blazma.studioSave(project);
+  // What is being saved; an edit made while the save is on its way stays
+  // marked unsaved and is saved next.
+  const saving = project;
+  const snapshot = new Map([...dirty].map((path) => [path, saving.files[path]]));
+  const res = await window.blazma.studioSave(saving);
   if (res && res.ok === false) {
     terminal.print(S.saveFailed, 'error');
     return;
   }
-  dirty.clear();
+  if (project !== saving) return;
+  for (const [path, content] of snapshot) if (project.files[path] === content) dirty.delete(path);
+  if (dirty.size) scheduleSave();
   renderTabs();
   updateStatus();
 }
@@ -280,10 +287,14 @@ async function renameProject() {
 }
 
 async function deleteProject() {
-  if (!window.confirm(S.confirmDeleteProject(project.name))) return;
+  // The project named in the question is the one deleted, even if another
+  // was opened meanwhile.
+  const target = project;
+  if (!(await confirmDialog({ text: S.confirmDeleteProject(target.name), danger: true }))) return;
+  if (project !== target) return;
   clearTimeout(saveTimer);
   dirty.clear();
-  await window.blazma.studioDelete(project.id);
+  await window.blazma.studioDelete(target.id);
   project = null;
   const list = await window.blazma.studioList();
   if (list.length) await openProject(list[0].id);
@@ -630,11 +641,11 @@ function startRename(path, isDir) {
   });
 }
 
-function confirmDeleteFile(path) {
-  if (window.confirm(S.confirmDeleteFile(path))) deleteFile(path);
+async function confirmDeleteFile(path) {
+  if (await confirmDialog({ text: S.confirmDeleteFile(path), danger: true })) deleteFile(path);
 }
-function confirmDeleteFolder(path) {
-  if (window.confirm(S.confirmDeleteFolder(path))) deleteFolder(path);
+async function confirmDeleteFolder(path) {
+  if (await confirmDialog({ text: S.confirmDeleteFolder(path), danger: true })) deleteFolder(path);
 }
 
 function fileMenu(e, path) {

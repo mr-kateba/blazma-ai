@@ -1,11 +1,14 @@
-// Settings page: chat, engine, "جهازي", general, updates and about.
-// Changes are saved as soon as they are made. Engine settings (context,
-// GPU layers, port) apply after restarting the engine, offered in place.
+// Settings page: one tab at a time (general, chat, library, model and
+// performance, monitoring, developers, updates, about). Everyday options come
+// first; technical ones sit under "خيارات متقدمة", and long explanations
+// behind a "؟" with a tooltip. Changes are saved at once; engine settings
+// apply after restarting the engine, offered in place.
 
 import { ar } from '../i18n/ar.js';
 import { el } from '../lib/dom.js';
 import { refreshDeviceInfo } from './device.js';
 import { refreshOverlaySettings } from './overlay.js';
+import { confirmDialog } from '../lib/dialog.js';
 
 const S = ar.settingsPage;
 const $ = (id) => document.getElementById(id);
@@ -49,17 +52,24 @@ function toggle(checked, onChange, { disabled = false } = {}) {
   return el('label', { class: `switch${disabled ? ' disabled' : ''}` }, input, el('span', { class: 'switch-track' }, el('span', { class: 'switch-thumb' })));
 }
 
-function item(title, desc, control, extra = null) {
+// help: a longer explanation, shown in a tooltip on a "؟" next to the title.
+function item(title, desc, control, extra = null, help = null) {
+  const head = el('div', { class: 'set-title' }, title, help ? el('span', { class: 'set-help', tabindex: '0', title: help, 'aria-label': help }, '؟') : null);
   return el(
     'div',
     { class: 'set-item' },
-    el('div', { class: 'set-text' }, el('div', { class: 'set-title' }, title), desc ? el('div', { class: 'set-desc' }, desc) : null, extra),
+    el('div', { class: 'set-text' }, head, desc ? el('div', { class: 'set-desc' }, desc) : null, extra),
     control ? el('div', { class: 'set-control' }, control) : null,
   );
 }
 
 function section(id, title, desc, ...items) {
-  return el('section', { class: 'set-section', id: `set-${id}`, 'data-section': id }, el('h2', null, title), desc ? el('p', { class: 'set-section-desc' }, desc) : null, el('div', { class: 'set-box' }, ...items));
+  return el('section', { class: 'set-section', id: `set-${id}`, 'data-section': id, hidden: id !== currentTab }, el('h2', null, title), desc ? el('p', { class: 'set-section-desc' }, desc) : null, el('div', { class: 'set-box' }, ...items));
+}
+
+// Technical options, folded away.
+function advanced(...items) {
+  return el('details', { class: 'set-advanced' }, el('summary', null, S.advanced), el('div', { class: 'set-box' }, ...items));
 }
 
 function select(options, value, onChange) {
@@ -80,30 +90,28 @@ function chatSection() {
   });
   const resetPrompt = el('button', { type: 'button', class: 'btn ghost small' }, S.restoreDefault);
   resetPrompt.addEventListener('click', async () => {
+    clearTimeout(promptTimer); // text typed just before must not overwrite the default
     prompt.value = values.defaults.systemPrompt;
     await save({ systemPrompt: values.defaults.systemPrompt });
   });
 
-  const auto = values.temperature === null;
-  const range = el('input', { type: 'range', min: '0', max: '2', step: '0.1', value: String(values.temperature ?? 0.7), disabled: auto, dir: 'ltr' });
-  const rangeValue = el('span', { class: 'range-value', dir: 'ltr' }, auto ? '—' : String(values.temperature));
-  range.addEventListener('input', () => (rangeValue.textContent = range.value));
-  range.addEventListener('change', () => save({ temperature: Number(range.value) }));
-  const tempAuto = toggle(auto, async (on) => {
-    range.disabled = on;
-    rangeValue.textContent = on ? '—' : range.value;
-    await save({ temperature: on ? null : Number(range.value) });
-  });
+  // Creativity: the model's own recommendation, or a named level.
+  const levels = [[0.2, S.chat.tempPrecise], [0.5, S.chat.tempBalanced], [0.7, S.chat.tempDefault], [1, S.chat.tempCreative], [1.3, S.chat.tempWild]];
+  if (values.temperature !== null && !levels.some(([v]) => v === values.temperature)) levels.push([values.temperature, String(values.temperature)]);
+  const temp = select(
+    [['auto', S.chat.tempAuto], ...levels],
+    values.temperature === null ? 'auto' : values.temperature,
+    (v) => save({ temperature: v === 'auto' ? null : Number(v) }),
+  );
 
   return section(
     'chat',
     S.chat.title,
     S.chat.desc,
-    item(S.chat.prompt, S.chat.promptDesc, null, el('div', { class: 'set-stack' }, prompt, el('div', { class: 'row' }, resetPrompt))),
-    item(S.chat.tempAuto, S.chat.tempAutoDesc, tempAuto),
-    item(S.chat.temp, S.chat.tempDesc, el('div', { class: 'range-row' }, range, rangeValue)),
     item(S.chat.web, S.chat.webDesc, toggle(values.webSearch, (on) => save({ webSearch: on }))),
     item(S.chat.device, S.chat.deviceDesc, toggle(values.shareDeviceInfo, (on) => save({ shareDeviceInfo: on }))),
+    item(S.chat.temp, S.chat.tempDesc, temp),
+    item(S.chat.prompt, S.chat.promptDesc, null, el('div', { class: 'set-stack' }, prompt, el('div', { class: 'row' }, resetPrompt))),
   );
 }
 
@@ -162,17 +170,6 @@ function engineSection(state) {
     S.engine.title,
     S.engine.desc,
     el('div', { id: 'engine-banner' }),
-    item(S.engine.ctx, S.engine.ctxDesc, ctx),
-    item(S.engine.kv, S.engine.kvDesc, kv),
-    item(
-      S.engine.spec,
-      S.engine.specDesc,
-      select(
-        [['off', S.engine.specOff], ['ngram', S.engine.specNgram], ['draft', S.engine.specDraft]],
-        values.speculative,
-        (v) => save({ speculative: v }, { engine: true }),
-      ),
-    ),
     item(
       S.engine.idle,
       S.engine.idleDesc,
@@ -182,10 +179,25 @@ function engineSection(state) {
         (v) => save({ idleUnloadMin: Number(v) }, { engine: true }),
       ),
     ),
-    item(S.engine.gpu, S.engine.gpuDesc, gpu),
-    item(S.engine.port, S.engine.portDesc, port),
+    item(S.engine.ctx, S.engine.ctxDesc, ctx),
     item(S.engine.dir, S.engine.dirDesc, null, el('div', { class: 'set-stack' }, dirText, el('div', { class: 'row' }, choose, openDir, resetDir))),
-    item(S.engine.version, engineInfo, null),
+    advanced(
+      item(
+        S.engine.spec,
+        S.engine.specDesc,
+        select(
+          [['off', S.engine.specOff], ['ngram', S.engine.specNgram], ['draft', S.engine.specDraft]],
+          values.speculative,
+          (v) => save({ speculative: v }, { engine: true }),
+        ),
+        null,
+        S.engine.specHelp,
+      ),
+      item(S.engine.kv, S.engine.kvDesc, kv, null, S.engine.kvHelp),
+      item(S.engine.gpu, S.engine.gpuDesc, gpu, null, S.engine.gpuHelp),
+      item(S.engine.port, S.engine.portDesc, port),
+      item(S.engine.version, engineInfo, null),
+    ),
   );
 }
 
@@ -217,8 +229,8 @@ function monitorSection(info) {
       refreshOverlaySettings();
     },
   );
-  const warn = el('input', { type: 'number', min: '30', max: '110', class: 'set-number', dir: 'ltr', value: String(values.gpuTempWarn ?? info.thresholds.gpuTempWarn), disabled: auto });
-  const danger = el('input', { type: 'number', min: '30', max: '110', class: 'set-number', dir: 'ltr', value: String(values.gpuTempDanger ?? info.thresholds.gpuTempDanger), disabled: auto });
+  const warn = el('input', { type: 'number', min: '30', max: '110', class: 'set-number', dir: 'ltr', value: String(values.gpuTempWarn ?? info.thresholds.gpuTempWarn) });
+  const danger = el('input', { type: 'number', min: '30', max: '110', class: 'set-number', dir: 'ltr', value: String(values.gpuTempDanger ?? info.thresholds.gpuTempDanger) });
   const saveTemps = async () => {
     const w = Number(warn.value);
     const d = Number(danger.value);
@@ -231,9 +243,10 @@ function monitorSection(info) {
   };
   warn.addEventListener('change', saveTemps);
   danger.addEventListener('change', saveTemps);
+  // Off: the two limits appear under the switch.
+  const temps = el('div', { class: 'row temps-row', hidden: auto }, el('label', null, S.warnShort, warn), el('label', null, S.dangerShort, danger));
   const autoToggle = toggle(auto, async (on) => {
-    warn.disabled = on;
-    danger.disabled = on;
+    temps.hidden = on;
     if (on) {
       await save({ gpuTempWarn: null, gpuTempDanger: null });
       await refreshDeviceInfo();
@@ -248,11 +261,7 @@ function monitorSection(info) {
   return section(
     'monitor',
     S.monitorTitle,
-    null,
-    item(S.interval, S.intervalDesc, interval),
-    item(S.auto, S.autoNote(info.thresholds.gpuTempWarn, info.thresholds.gpuTempDanger), autoToggle),
-    item(S.warn, null, warn),
-    item(S.danger, null, danger),
+    S.monitorDesc,
     item(S.overlay, S.overlayDesc, toggle(values.overlayEnabled, async (on) => {
       await save({ overlayEnabled: on });
       refreshOverlaySettings();
@@ -265,8 +274,12 @@ function monitorSection(info) {
         refreshOverlaySettings();
       },
     )),
-    item(S.lhm, S.lhmDesc, toggle(values.lhmEnabled, (on) => save({ lhmEnabled: on }))),
-    item(S.lhmPort, S.lhmPortDesc, lhmPort),
+    item(S.interval, S.intervalDesc, interval),
+    item(S.auto, S.autoNote(info.thresholds.gpuTempWarn, info.thresholds.gpuTempDanger), autoToggle, temps),
+    advanced(
+      item(S.lhm, S.lhmDesc, toggle(values.lhmEnabled, (on) => save({ lhmEnabled: on })), null, S.lhmHelp),
+      item(S.lhmPort, S.lhmPortDesc, lhmPort),
+    ),
   );
 }
 
@@ -280,7 +293,7 @@ function kbSection(kb) {
     ? kb.folders.map((f) => {
         const rm = el('button', { type: 'button', class: 'btn ghost small' }, K.remove);
         rm.addEventListener('click', async () => {
-          if (!window.confirm(K.confirmRemove)) return;
+          if (!(await confirmDialog({ text: K.confirmRemove, ok: K.remove, danger: true }))) return;
           await window.blazma.kbRemoveFolder(f);
           render();
         });
@@ -360,7 +373,7 @@ function apiSection(conn) {
     });
     const renew = el('button', { type: 'button', class: 'btn ghost small' }, A.newKey);
     renew.addEventListener('click', async () => {
-      if (!window.confirm(A.confirmNewKey)) return;
+      if (!(await confirmDialog({ text: A.confirmNewKey, danger: true }))) return;
       values = await window.blazma.apiNewKey();
       toast(A.restarting);
       setTimeout(render, 300);
@@ -397,6 +410,11 @@ function generalSection() {
     S.general.title,
     null,
     item(S.general.theme, S.general.themeDesc, theme),
+    item(S.general.tour, S.general.tourDesc, (() => {
+      const b = el('button', { type: 'button', class: 'btn small' }, S.general.tourStart);
+      b.addEventListener('click', () => window.dispatchEvent(new Event('blazma:start-tour')));
+      return b;
+    })()),
     item(
       S.general.login,
       login.supported ? S.general.loginDesc : S.general.loginUnsupported,
@@ -443,7 +461,7 @@ function renderUpdates() {
       install = el('button', { type: 'button', class: 'btn primary small', disabled: appDownloading }, appReady ? S.updates.appInstallNow : appDownloading ? S.updates.appDownloading(appPct) : S.updates.appDownload);
       install.addEventListener('click', async () => {
         if (appReady) {
-          if (window.confirm(S.updates.appConfirmRestart)) window.blazma.installAppUpdate();
+          if (await confirmDialog({ text: S.updates.appConfirmRestart, ok: S.updates.appInstallNow })) window.blazma.installAppUpdate();
           return;
         }
         appDownloading = true;
@@ -499,7 +517,35 @@ function aboutSection(appInfo) {
 
 // ---------- page ----------
 
-const SECTIONS = ['chat', 'kb', 'engine', 'api', 'monitor', 'general', 'updates', 'about'];
+const SECTIONS = ['general', 'chat', 'kb', 'engine', 'monitor', 'api', 'updates', 'about'];
+let currentTab = (() => {
+  try {
+    return SECTIONS.includes(localStorage.getItem('blazma.settingsTab')) ? localStorage.getItem('blazma.settingsTab') : 'general';
+  } catch {
+    return 'general';
+  }
+})();
+
+function showTab(id) {
+  if (!SECTIONS.includes(id)) return;
+  currentTab = id;
+  try {
+    localStorage.setItem('blazma.settingsTab', id);
+  } catch {
+    /* not kept */
+  }
+  for (const sec of document.querySelectorAll('.set-section')) sec.hidden = sec.dataset.section !== id;
+  for (const b of document.querySelectorAll('.set-toc button')) {
+    b.classList.toggle('active', b.dataset.target === id);
+    if (b.dataset.target === id) b.setAttribute('aria-current', 'page');
+    else b.removeAttribute('aria-current');
+  }
+  const content = document.querySelector('.content');
+  if (content) content.scrollTop = 0;
+}
+
+// Other pages open a tab directly (e.g. the library button in the chat).
+window.addEventListener('blazma:settings-tab', (e) => showTab(e.detail));
 
 async function render() {
   const [v, info, state, appInfo, conn, kb] = await Promise.all([window.blazma.getSettings(), window.blazma.monitorInfo(), window.blazma.getSetupState(), window.blazma.getAppInfo(), window.blazma.getConnection(), window.blazma.kbStatus()]);
@@ -508,28 +554,16 @@ async function render() {
     'nav',
     { class: 'set-toc', 'aria-label': S.tocLabel },
     ...SECTIONS.map((id) => {
-      const b = el('button', { type: 'button', 'data-target': id }, S.toc[id]);
-      b.addEventListener('click', () => $(`set-${id}`).scrollIntoView({ behavior: 'smooth', block: 'start' }));
+      const b = el('button', { type: 'button', 'data-target': id }, el('span', { class: 'set-toc-icon', 'aria-hidden': 'true' }, S.tocIcons[id]), S.toc[id]);
+      b.addEventListener('click', () => showTab(id));
       return b;
     }),
   );
-  const body = el('div', { class: 'set-body' }, chatSection(), kbSection(kb), engineSection(state), apiSection(conn), monitorSection(info), generalSection(), updatesSection(), aboutSection(appInfo));
+  const body = el('div', { class: 'set-body' }, generalSection(), chatSection(), kbSection(kb), engineSection(state), monitorSection(info), apiSection(conn), updatesSection(), aboutSection(appInfo));
   $('settings-root').replaceChildren(el('div', { class: 'set-layout' }, toc, body));
   renderEngineBanner();
   renderUpdates();
-
-  // Highlight the section in view.
-  const buttons = toc.querySelectorAll('button');
-  const observer = new IntersectionObserver(
-    (entries) => {
-      for (const entry of entries) {
-        if (!entry.isIntersecting) continue;
-        for (const b of buttons) b.classList.toggle('active', b.dataset.target === entry.target.dataset.section);
-      }
-    },
-    { root: document.querySelector('.content'), rootMargin: '-10% 0px -70% 0px' },
-  );
-  for (const s of body.querySelectorAll('.set-section')) observer.observe(s);
+  showTab(currentTab);
 }
 
 export function setSettingsVisible(v) {

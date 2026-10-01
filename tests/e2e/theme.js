@@ -23,6 +23,7 @@ const page = async (win, name) => { await win.click(`.nav-item[data-page="${name
   check('dark by default', !(await light(win)) && (await bgLum(win)) < 0.1, (await bgLum(win)).toFixed(3));
 
   await page(win, 'settings');
+  await win.click('.set-toc button[data-target="general"]'); await win.waitForTimeout(300);
   const sel = win.locator('select:has(option[value="light"])');
   check('theme choice in settings', (await sel.count()) === 1);
   await sel.selectOption('light'); await win.waitForTimeout(800);

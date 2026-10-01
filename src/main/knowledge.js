@@ -43,9 +43,16 @@ const indexFile = () => path.join(dir(), 'index.json');
 // ---------- the embedding server ----------
 
 let server = null; // { child, port, key, ready }
+let starting = null; // the start in progress, shared by callers meanwhile
 
 async function ensureServer() {
   if (server && server.ready && server.child.exitCode === null) return server;
+  if (!starting) starting = startServer().finally(() => (starting = null));
+  return starting;
+}
+
+async function startServer() {
+  stop(); // a previous server that died or never became ready
   const engine = installedEngine();
   if (!engine) throw new AppError('kb-no-engine');
   const port = await pickPort(0);

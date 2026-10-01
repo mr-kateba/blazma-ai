@@ -29,7 +29,7 @@ function cleanMessage(m, depth = 0) {
   if (m.thinkStart && m.thinkEnd) Object.assign(out, { thinkStart: m.thinkStart, thinkEnd: m.thinkEnd });
   if (m.timings) out.timings = { predicted_per_second: m.timings.predicted_per_second, predicted_n: m.timings.predicted_n };
   if (Array.isArray(m.steps) && m.steps.length) out.steps = m.steps.map((s) => ({ kind: s.kind, label: String(s.label || ''), failed: Boolean(s.failed) }));
-  if (Array.isArray(m.sources) && m.sources.length) out.sources = m.sources.map((s) => ({ title: String(s.title || ''), url: String(s.url || '') }));
+  if (Array.isArray(m.sources) && m.sources.length) out.sources = m.sources.map((s) => ({ title: String(s.title || ''), url: String(s.url || ''), ...(typeof s.file === 'string' && s.file ? { file: s.file } : {}) }));
   // Attached files keep their extracted text, so a reopened chat still has them.
   if (Array.isArray(m.files) && m.files.length) {
     out.files = m.files.slice(0, 5).map((f) => ({
@@ -50,6 +50,11 @@ function cleanMessage(m, depth = 0) {
   return out;
 }
 
+// Title and date of each chat, read again only when its file changed (chat
+// files can be large with pictures in them, and the list is asked for after
+// every save).
+const listCache = new Map(); // file -> { mtimeMs, size, meta }
+
 function list() {
   let files = [];
   try {
@@ -57,11 +62,21 @@ function list() {
   } catch {
     return [];
   }
-  return files
-    .map((f) => readJson(path.join(dir(), f), null))
-    .filter((c) => c && ID_RE.test(c.id))
-    .map((c) => ({ id: c.id, title: c.title, updatedAt: c.updatedAt }))
-    .sort((a, b) => b.updatedAt - a.updatedAt);
+  const out = [];
+  for (const f of files) {
+    const file = path.join(dir(), f);
+    const st = fs.statSync(file, { throwIfNoEntry: false });
+    if (!st) continue;
+    let hit = listCache.get(file);
+    if (!hit || hit.mtimeMs !== st.mtimeMs || hit.size !== st.size) {
+      const c = readJson(file, null);
+      hit = { mtimeMs: st.mtimeMs, size: st.size, meta: c && ID_RE.test(c.id) ? { id: c.id, title: c.title, updatedAt: c.updatedAt } : null };
+      listCache.set(file, hit);
+    }
+    if (hit.meta) out.push(hit.meta);
+  }
+  for (const file of listCache.keys()) if (!files.includes(path.basename(file))) listCache.delete(file);
+  return out.sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 function get(id) {

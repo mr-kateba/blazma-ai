@@ -8,6 +8,7 @@
 import { el, detectDir } from '../lib/dom.js';
 import { readSse } from '../lib/sse.js';
 import { diffLines, diffStats, diffHunks } from './diff.js';
+import { confirmDialog } from '../lib/dialog.js';
 
 const MAX_ROUNDS = 16;
 const READ_LIMIT_LINES = 400;
@@ -494,10 +495,10 @@ export function createAgent(A, ctx) {
         return view;
       }),
     );
-    undo.addEventListener('click', () => {
+    undo.addEventListener('click', async () => {
       const now = ctx.files();
       const touchedLater = changes.some((ch) => now[ch.path] !== ch.after);
-      if (touchedLater && !window.confirm(A.undoConfirm)) return;
+      if (touchedLater && !(await confirmDialog({ text: A.undoConfirm }))) return;
       ctx.restore(changes.map((ch) => ({ path: ch.path, content: ch.before })));
       node.classList.add('undone');
       undo.disabled = true;
@@ -635,6 +636,8 @@ export function createAgent(A, ctx) {
           scroll();
         };
         for await (const chunk of readSse(res)) {
+          // The engine failed mid-reply (see lib/sse.js): shown as a failure.
+          if (chunk.error) throw new Error(String(chunk.error.message || 'stream error'));
           const delta = chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
           if (!delta) continue;
           if (delta.reasoning_content) reasoning += delta.reasoning_content;

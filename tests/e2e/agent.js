@@ -8,7 +8,7 @@ const tc = (name, args) => ({ name, args: JSON.stringify(args) });
   const app = await _electron.launch({ executablePath: root + '/node_modules/electron/dist/electron', args: [root, '--no-sandbox'], cwd: root, env });
   const win = await app.firstWindow(); await win.waitForLoadState('load');
   const logs = []; win.on('pageerror', e => !/boom is not defined/.test(e.message) && logs.push('pageerror: ' + e.message)); // boom: a runtime error written on purpose for /fix
-  win.on('dialog', d => d.accept());
+  win.on('dialog', d => d.accept()); await win.evaluate(() => new MutationObserver(() => { const b = document.querySelector('.dlg-ok'); if (b) b.click(); }).observe(document.body, { childList: true })); // accept in-app confirmations (lib/dialog.js)
   for (let i = 0; i < 600 && (await win.evaluate(() => window.blazma.getSetupState().then(s => s.phase))) !== 'ready'; i++) await win.waitForTimeout(300);
   // Scripted model: each request takes the next reply from window.__script.
   await win.evaluate(() => {

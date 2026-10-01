@@ -125,15 +125,29 @@ if (!app.requestSingleInstanceLock()) {
   app.on('window-all-closed', () => app.quit());
 
   // Never leave llama-server running (and holding GPU memory) after we exit.
+  // Every helper program started by the app ends with it: the embedding
+  // server (مكتبتي), whisper-server (voice), sd-server (drawing) and llama-server.
+  const stopHelpers = () => {
+    for (const mod of ['./knowledge', './voice', './images']) {
+      try {
+        require(mod).stop();
+      } catch {
+        /* already stopped */
+      }
+    }
+  };
   app.on('will-quit', () => {
-    require('./knowledge').stop();
-    require('./voice').stop();
+    stopHelpers();
     monitor.shutdown();
     setup.shutdownSync();
   });
-  process.on('exit', () => setup.shutdownSync());
+  process.on('exit', () => {
+    stopHelpers();
+    setup.shutdownSync();
+  });
   process.on('uncaughtException', (err) => {
     console.error(err);
+    stopHelpers();
     setup.shutdownSync();
     app.exit(1);
   });

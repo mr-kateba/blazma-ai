@@ -38,9 +38,10 @@ const MAX_WAV_BYTES = 40 * 1024 * 1024; // about 20 minutes of 16 kHz mono audio
 
 const root = () => path.join(paths.userData(), 'voice');
 
-let server = null; // { child, port, model }
+let server = null; // { child, port, model, ready }
 let idleTimer = null;
 let installing = null;
+let starting = null; // the start in progress, shared by callers meanwhile
 
 function findExe(dir, depth = 3) {
   if (fs.existsSync(path.join(dir, EXE))) return path.join(dir, EXE);
@@ -124,7 +125,12 @@ async function install(onProgress = () => {}) {
 
 async function ensureServer() {
   const model = modelFile(settings.get().voiceModel);
-  if (server && server.child.exitCode === null && server.model === model) return server;
+  if (server && server.ready && server.child.exitCode === null && server.model === model) return server;
+  if (!starting) starting = startServer(model).finally(() => (starting = null));
+  return starting;
+}
+
+async function startServer(model) {
   stop();
   const exe = installedExe();
   if (!exe || !fs.existsSync(model)) throw new AppError('voice-missing');
@@ -149,7 +155,10 @@ async function ensureServer() {
       req.on('error', () => resolve(false));
       req.on('timeout', () => req.destroy());
     });
-    if (up) return server;
+    if (up) {
+      server.ready = true;
+      return server;
+    }
     await new Promise((r) => setTimeout(r, 400));
   }
   stop();

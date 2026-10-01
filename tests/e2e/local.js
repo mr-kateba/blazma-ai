@@ -9,7 +9,7 @@ const phase = (win) => win.evaluate(() => window.blazma.getSetupState().then(s =
   const app = await _electron.launch({ executablePath: root + '/node_modules/electron/dist/electron', args: [root, '--no-sandbox'], cwd: root, env });
   const win = await app.firstWindow(); await win.waitForLoadState('load');
   const logs = []; win.on('pageerror', e => logs.push('pageerror: ' + e.message)); win.on('console', m => m.type() === 'error' && logs.push('console: ' + m.text().slice(0, 200)));
-  win.on('dialog', d => d.accept());
+  win.on('dialog', d => d.accept()); await win.evaluate(() => new MutationObserver(() => { const b = document.querySelector('.dlg-ok'); if (b) b.click(); }).observe(document.body, { childList: true })); // accept in-app confirmations (lib/dialog.js)
   for (let i = 0; i < 600 && !(await phase(win)).startsWith('ready'); i++) await win.waitForTimeout(300);
   await win.click('.nav-item[data-page="models"]'); await win.waitForTimeout(800);
   await win.click('.btn:has-text("موديلات Ollama على جهازي")'); await win.waitForTimeout(800);

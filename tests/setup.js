@@ -134,7 +134,7 @@ function main() {
   const home = path.join(WORK, 'e2e-home', 'Blazma AI');
   mkdir(home);
   const settingsFile = path.join(home, 'settings.json');
-  if (!fs.existsSync(settingsFile)) fs.writeFileSync(settingsFile, JSON.stringify({ activeModelId: 'qwen3.5-2b' }));
+  if (!fs.existsSync(settingsFile)) fs.writeFileSync(settingsFile, JSON.stringify({ activeModelId: 'qwen3.5-2b', tourDone: true }));
   console.log('ready:', path.relative(ROOT, WORK));
 }
 

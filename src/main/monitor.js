@@ -142,6 +142,8 @@ class Monitor extends EventEmitter {
       const nv = this.nvidia();
       const pid = this.serverPid();
       if (nv) await this.gpuStream.start(nv.best.index, this.intervalMs);
+      // Every page stopped watching while the stream was starting: end it.
+      if (!this.clients.size) this.gpuStream.stop();
       this.refreshWinSample(pid);
       // VRAM per process changes slowly; asked at most every 2 seconds.
       if (nv && pid && Date.now() - (this.vramAt || 0) >= 2000) {
