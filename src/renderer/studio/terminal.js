@@ -5,7 +5,7 @@
 import { el, detectDir } from '../lib/dom.js';
 
 const BLOCKED = new Set(
-  'npx yarn pnpm pip pip3 python python3 py git sudo su apt apt-get winget choco scoop powershell pwsh cmd bash sh zsh curl wget ssh scp dotnet java javac gcc g++ clang make cmake go cargo rustc deno bun php ruby perl code-server start explorer taskkill kill chmod chown'.split(' '),
+  'npx yarn pnpm git sudo su apt apt-get winget choco scoop powershell pwsh cmd bash sh zsh curl wget ssh scp dotnet java javac gcc g++ clang make cmake go cargo rustc deno bun php ruby perl code-server start explorer taskkill kill chmod chown'.split(' '),
 );
 
 // Splits a command line into words, keeping quoted strings together.
@@ -243,6 +243,24 @@ export function createTerminal(T, ctx) {
         await ctx.runScript(p);
       },
     },
+    python: {
+      help: T.help.python,
+      async run(args) {
+        if (!args.length) return print(T.pythonUsage, 'dim');
+        if (args[0] === '-c') {
+          if (args.length < 2) return print(T.pythonUsage, 'error');
+          return ctx.runPython({ code: args[1], args: args.slice(2), cwd });
+        }
+        const p = resolve(args[0]);
+        if (!exists(p)) return print(T.noSuchFile(p), 'error');
+        if (!/\.py$/i.test(p)) return print(T.notPy(p), 'error');
+        return ctx.runPython({ entry: p, args: args.slice(1), cwd });
+      },
+    },
+    python3: { alias: true, run: (args) => COMMANDS.python.run(args) },
+    py: { alias: true, run: (args) => COMMANDS.python.run(args) },
+    pip: { alias: true, run: () => print(T.noPip, 'error') },
+    pip3: { alias: true, run: () => print(T.noPip, 'error') },
     js: {
       help: T.help.js,
       async run(args, raw) {
@@ -288,7 +306,7 @@ export function createTerminal(T, ctx) {
     const cmd = COMMANDS[name] || COMMANDS[name.toLowerCase()];
     try {
       if (cmd) await cmd.run(args, cmdLine);
-      else if (BLOCKED.has(name.toLowerCase())) print(/^py(thon3?)?$/i.test(name) ? T.noPython : T.sandboxed(cmdLine), 'error');
+      else if (BLOCKED.has(name.toLowerCase())) print(T.sandboxed(cmdLine), 'error');
       else print(T.unknown(name), 'error');
     } catch (err) {
       print(String(err && err.message ? err.message : err), 'error');

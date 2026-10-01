@@ -15,13 +15,14 @@ import { loadMonaco, createMonacoEditor } from '../studio/monaco.js';
 import { createAgent } from '../studio/agent.js';
 import { diffLines } from '../studio/diff.js';
 import { createTerminal } from '../studio/terminal.js';
+import { createPythonRunner } from '../studio/python.js';
 import { createPalette } from '../studio/palette.js';
 import { languageOf } from '../studio/highlight.js';
 
 const S = ar.studio;
 const NAME_RE = /^[A-Za-z0-9_\-./]{1,120}$/;
 const RUNNABLE = /\.(html?|css|m?js|json|svg|txt|md)$/i;
-const LANG_NAMES = { html: 'HTML', css: 'CSS', js: 'JavaScript', json: 'JSON', md: 'Markdown', text: S.plainText };
+const LANG_NAMES = { html: 'HTML', css: 'CSS', js: 'JavaScript', json: 'JSON', md: 'Markdown', python: 'Python', text: S.plainText };
 const LAYOUT_KEY = 'blazma.studio.layout';
 
 // Static, trusted SVG markup only.
@@ -96,6 +97,13 @@ const TEMPLATES = [
         'body {\n  margin: 0;\n  padding: 20px;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  background: #10131a;\n  color: #e8eaef;\n  font-family: system-ui, sans-serif;\n}\n\ncanvas {\n  background: #1b2030;\n  border-radius: 8px;\n}\n\n.hint {\n  color: #9097a6;\n}\n',
       'game.js':
         "const canvas = document.getElementById('game');\nconst ctx = canvas.getContext('2d');\nconst player = { x: 40, y: 40, size: 22, speed: 3 };\nconst keys = new Set();\nlet coin = randomCoin();\nlet score = 0;\n\nfunction randomCoin() {\n  return { x: 20 + Math.random() * (canvas.width - 40), y: 20 + Math.random() * (canvas.height - 40), r: 8 };\n}\n\naddEventListener('keydown', (e) => keys.add(e.key));\naddEventListener('keyup', (e) => keys.delete(e.key));\n\nfunction update() {\n  if (keys.has('ArrowUp')) player.y -= player.speed;\n  if (keys.has('ArrowDown')) player.y += player.speed;\n  if (keys.has('ArrowLeft')) player.x -= player.speed;\n  if (keys.has('ArrowRight')) player.x += player.speed;\n  player.x = Math.max(0, Math.min(canvas.width - player.size, player.x));\n  player.y = Math.max(0, Math.min(canvas.height - player.size, player.y));\n\n  const cx = player.x + player.size / 2;\n  const cy = player.y + player.size / 2;\n  if (Math.hypot(cx - coin.x, cy - coin.y) < coin.r + player.size / 2) {\n    score++;\n    document.getElementById('score').textContent = 'النقاط: ' + score;\n    console.log('نقطة!', score);\n    coin = randomCoin();\n  }\n}\n\nfunction draw() {\n  ctx.clearRect(0, 0, canvas.width, canvas.height);\n  ctx.fillStyle = '#ff6d00';\n  ctx.fillRect(player.x, player.y, player.size, player.size);\n  ctx.fillStyle = '#f5c542';\n  ctx.beginPath();\n  ctx.arc(coin.x, coin.y, coin.r, 0, Math.PI * 2);\n  ctx.fill();\n}\n\nfunction loop() {\n  update();\n  draw();\n  requestAnimationFrame(loop);\n}\nloop();\n",
+    }),
+  },
+  {
+    id: 'python',
+    files: () => ({
+      'main.py':
+        '# شغّل هذا الملف بـ F5، أو من الطرفية: python main.py\n# بايثون هنا يعمل بدون إنترنت، مع مكتبة بايثون القياسية كاملة.\n\nimport random\nfrom datetime import date\n\n\ndef greet(name):\n    return f"أهلاً يا {name}!"\n\n\nprint(greet("صديقي"))\nprint("تاريخ اليوم:", date.today())\nprint("رقم عشوائي:", random.randint(1, 100))\n\nnumbers = [3, 1, 4, 1, 5, 9, 2, 6]\nprint("مرتبة:", sorted(numbers), "المجموع:", sum(numbers))\n',
     }),
   },
   {
@@ -1012,7 +1020,49 @@ async function run() {
   return true;
 }
 
+// A Python project (no index.html) or an open .py file runs in the terminal.
+function pythonEntry() {
+  if (!project) return null;
+  if (active && /\.py$/i.test(active)) return active;
+  if (project.files['index.html'] !== undefined) return null;
+  return ['main.py', 'app.py'].find((p) => project.files[p] !== undefined) || Object.keys(project.files).find((p) => /\.py$/i.test(p)) || null;
+}
+
+let python = null;
+
+// Runs Python (python-worker.js) and prints its output in the terminal.
+// Files the script writes in the project are saved back to it.
+async function runPython({ entry = null, code = null, args = [], cwd = '' }) {
+  if (!python) python = createPythonRunner();
+  showPanel('terminal');
+  const T = S.term;
+  let sawEof = false;
+  const res = await python.run(
+    { files: project ? { ...project.files } : {}, entry, code, args, cwd },
+    {
+      onLoading: () => terminal.print(T.pythonLoading, 'dim'),
+      onOutput: (stream, text) => {
+        if (stream === 'stderr' && /EOFError/.test(text)) sawEof = true;
+        terminal.print(text, stream === 'stderr' ? 'error' : '');
+      },
+    },
+  );
+  if (res.timedOut) terminal.print(T.pythonTimeout, 'error');
+  else if (res.stopped) terminal.print(T.pythonStopped, 'warn');
+  if (res.error) terminal.print(res.error, 'error');
+  if (sawEof) terminal.print(T.pythonInput, 'dim');
+  if (res.exit > 1) terminal.print(T.pythonExit(res.exit), 'warn');
+  const changed = Object.entries(res.changed || {});
+  if (project && changed.length) {
+    for (const [path, content] of changed) writeFile(path, content);
+    terminal.print(T.pythonSaved(changed.map(([p]) => p).join('، ')), 'ok');
+  }
+  return res.exit === 0;
+}
+
 async function runFromUi() {
+  const py = pythonEntry();
+  if (py) return terminal.exec(`python ${py}`);
   if (!layout.previewVisible) setPreviewVisible(true);
   const ok = await run();
   if (!ok) showPanel('console');
@@ -1025,6 +1075,7 @@ async function runScript(path) {
 }
 
 async function runFile(path) {
+  if (/\.py$/i.test(path)) return terminal.exec(`python ${path}`);
   if (/\.m?js$/i.test(path)) {
     showPanel('terminal');
     return terminal.exec(`node ${path}`);
@@ -1518,6 +1569,7 @@ async function setup() {
       return run();
     },
     runScript,
+    runPython,
     evalInPreview,
     exportProject,
     askAi: (text) => askAi(text),

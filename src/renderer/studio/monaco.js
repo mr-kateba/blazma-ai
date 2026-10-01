@@ -8,7 +8,7 @@ import { el } from '../lib/dom.js';
 import { languageOf } from './highlight.js';
 
 const BASE = 'vendor/monaco/vs';
-const MONACO_LANG = { html: 'html', js: 'javascript', css: 'css', json: 'json', md: 'markdown', text: 'plaintext' };
+const MONACO_LANG = { html: 'html', js: 'javascript', css: 'css', json: 'json', md: 'markdown', python: 'python', text: 'plaintext' };
 const FONT = "'Cascadia Mono', Consolas, 'Plex Arabic Code', 'Courier New', monospace";
 
 let loading = null;

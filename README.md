@@ -258,6 +258,8 @@ npm start
 - الموديلات: Qwen3.5 من Alibaba Cloud، وGemma 4 من Google، وكلاهما برخصة Apache-2.0. ملفات GGUF من [Unsloth](https://huggingface.co/unsloth).
 - الخط: IBM Plex Sans Arabic، رخصة SIL Open Font License 1.1 ([src/renderer/fonts/OFL.txt](src/renderer/fonts/OFL.txt)).
 - قراءة PDF: [pdf.js](https://github.com/mozilla/pdf.js) (Apache-2.0). قراءة Word: [mammoth](https://github.com/mwilliamson/mammoth.js) (BSD-2-Clause).
+- بايثون في الاستوديو: [Pyodide](https://github.com/pyodide/pyodide) (MPL-2.0).
+- حرارة المعالج وطاقته (اختياري، يثبّته المستخدم بنفسه): [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) (MPL-2.0).
 - محرر الكود في الاستوديو: [Monaco Editor](https://github.com/microsoft/monaco-editor) من Microsoft، رخصة MIT. يأتي مع التطبيق ويعمل بدون إنترنت. رخص مكوّناته في `node_modules/monaco-editor/ThirdPartyNotices.txt`.
 
 </div>

@@ -89,7 +89,7 @@ const TOOLS = [
     function: {
       name: 'run_command',
       description:
-        "Run a command in the studio terminal and return its output. The terminal works only on the project files and the sandboxed preview (not the operating system). Commands: ls, tree, cat, touch, mkdir, rm, mv, cp, echo, node <file.js> (runs a script and shows its console output), js <expression> (evaluates inside the running page).",
+        "Run a command in the studio terminal and return its output. The terminal works only on the project files and the sandboxed preview (not the operating system). Commands: ls, tree, cat, touch, mkdir, rm, mv, cp, echo, node <file.js> (runs a script and shows its console output), python <file.py> or python -c 'code' (CPython with the standard library only, no pip, no network, no input()), js <expression> (evaluates inside the running page).",
       parameters: { type: 'object', properties: { command: { type: 'string' } }, required: ['command'] },
     },
   },

@@ -12,6 +12,7 @@ export function languageOf(path) {
   if (ext === 'css') return 'css';
   if (ext === 'json') return 'json';
   if (ext === 'md') return 'md';
+  if (ext === 'py') return 'python';
   return 'text';
 }
 
