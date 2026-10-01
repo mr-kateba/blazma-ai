@@ -6,7 +6,7 @@ const { readJson, writeJson } = require('./jsonfile');
 const DEFAULTS = Object.freeze({
   port: 18080,
   contextSize: 8192,
-  gpuLayers: 99,
+  gpuLayers: -1, // -1 = automatic: llama.cpp --fit keeps what fits on the card, the rest in RAM
   kvCache: 'q8_0', // conversation memory precision: f16 (full), q8_0 (half the memory), q4_0
   modelsDir: '',
   activeModelId: '',
@@ -25,7 +25,7 @@ const isInt = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
 const VALIDATORS = {
   port: (v) => isInt(v, 1024, 65535),
   contextSize: (v) => isInt(v, 512, 262144),
-  gpuLayers: (v) => isInt(v, 0, 999),
+  gpuLayers: (v) => isInt(v, -1, 999),
   kvCache: (v) => ['f16', 'q8_0', 'q4_0'].includes(v),
   modelsDir: (v) => typeof v === 'string',
   activeModelId: (v) => typeof v === 'string',

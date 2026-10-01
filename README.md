@@ -64,15 +64,36 @@
 
 ## الموديلات
 
-| الموديل | الملف على Hugging Face | الحجم | الرخصة | متى يُقترح |
-|---|---|---|---|---|
-| Gemma 4 12B | `unsloth/gemma-4-12b-it-GGUF:UD-Q4_K_XL` | 7.37 GB | Apache-2.0 | كروت 10 جيجابايت فأكثر (**الافتراضي**) |
-| Qwen3.5 9B | `unsloth/Qwen3.5-9B-GGUF:Q4_K_M` | 5.68 GB | Apache-2.0 | كروت 8 جيجابايت |
-| Qwen3.5 4B | `unsloth/Qwen3.5-4B-GGUF:Q4_K_M` | 2.74 GB | Apache-2.0 | كروت 4 جيجابايت |
-| Qwen3.5 2B | `unsloth/Qwen3.5-2B-GGUF:Q4_K_M` | 1.28 GB | Apache-2.0 | أجهزة بدون كرت NVIDIA (يعمل على المعالج) |
+| الموديل | الجهة | الملف على Hugging Face | حجم التنزيل | الرخصة | يعمل كاملاً على |
+|---|---|---|---|---|---|
+| Gemma 4 12B | Google · أمريكا | `unsloth/gemma-4-12b-it-GGUF:UD-Q4_K_XL` | 7.37 GB | Apache-2.0 | كرت 10 جيجابايت (مُجرَّب ومقترح) |
+| Qwen3.5 9B | Alibaba · Qwen · الصين | `unsloth/Qwen3.5-9B-GGUF:Q4_K_M` | 5.68 GB | Apache-2.0 | كرت 8 جيجابايت (مُجرَّب ومقترح) |
+| Qwen3.5 4B | Alibaba · Qwen · الصين | `unsloth/Qwen3.5-4B-GGUF:Q4_K_M` | 2.74 GB | Apache-2.0 | كرت 4 جيجابايت (مُجرَّب ومقترح) |
+| Qwen3.5 2B | Alibaba · Qwen · الصين | `unsloth/Qwen3.5-2B-GGUF:Q4_K_M` | 1.28 GB | Apache-2.0 | المعالج أو أي كرت (مُجرَّب ومقترح) |
+| Qwen3.5 0.8B | Alibaba · Qwen · الصين | `unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M` | 0.74 GB | Apache-2.0 | المعالج أو أي كرت |
+| Gemma 4 E2B | Google · أمريكا | `unsloth/gemma-4-E2B-it-GGUF:Q4_K_M` | 4.09 GB | Apache-2.0 | المعالج أو أي كرت |
+| ALLaM 7B | سدايا · السعودية | `bartowski/ALLaM-AI_ALLaM-7B-Instruct-preview-GGUF:Q4_K_M` | 4.26 GB | Apache-2.0 | كرت 6 جيجابايت |
+| Falcon H1 7B | TII · الإمارات | `tiiuae/Falcon-H1-7B-Instruct-GGUF:Q4_K_M` | 4.60 GB | Falcon LLM License | كرت 6 جيجابايت |
+| Gemma 4 E4B | Google · أمريكا | `unsloth/gemma-4-E4B-it-GGUF:Q4_K_M` | 5.97 GB | Apache-2.0 | كرت 8 جيجابايت |
+| MiMo V2.6 9B | Xiaomi · الصين | `bartowski/MiMo-V2.6-Distill-Qwen-9B-GGUF:Q4_K_M` | 6.76 GB | MIT | كرت 8 جيجابايت |
+| gpt-oss 20B | OpenAI · أمريكا | `unsloth/gpt-oss-20b-GGUF:Q4_K_M` | 11.62 GB | Apache-2.0 | كرت 12 جيجابايت |
+| ERNIE 4.5 21B Thinking | Baidu · الصين | `unsloth/ERNIE-4.5-21B-A3B-Thinking-GGUF:Q4_K_M` | 13.33 GB | Apache-2.0 | كرت 14 جيجابايت |
+| Fanar 2 27B | QCRI · قطر | `mradermacher/Fanar-2-27B-Instruct-i1-GGUF:i1-Q4_K_M` | 16.55 GB | Apache-2.0 | كرت 17 جيجابايت |
+| Qwen3.8 27B | Alibaba · Qwen · الصين | `unsloth/Qwen3.8-27B-GGUF:UD-Q4_K_M` | 17.40 GB | Apache-2.0 | كرت 18 جيجابايت |
+| GLM 4.7 Flash | Zhipu · Z.ai · الصين | `unsloth/GLM-4.7-Flash-GGUF:UD-Q4_K_XL` | 17.52 GB | MIT | كرت 18 جيجابايت |
+| Qwen3 Coder 30B | Alibaba · Qwen · الصين | `unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:UD-Q4_K_XL` | 17.67 GB | Apache-2.0 | كرت 18 جيجابايت |
+| Gemma 4 26B A4B | Google · أمريكا | `unsloth/gemma-4-26B-A4B-it-GGUF:UD-Q4_K_XL` | 18.21 GB | Apache-2.0 | كرت 18 جيجابايت |
+| Gemma 4 31B | Google · أمريكا | `unsloth/gemma-4-31B-it-GGUF:Q4_K_M` | 19.52 GB | Apache-2.0 | كرت 20 جيجابايت |
+| Qwen3.6 35B A3B | Alibaba · Qwen · الصين | `unsloth/Qwen3.6-35B-A3B-GGUF:UD-Q4_K_M` | 23.04 GB | Apache-2.0 | كرت 23 جيجابايت |
 
+- 19 موديلاً، منها 10 صينية (Qwen وXiaomi وBaidu وZhipu)، و3 عربية المنشأ (ALLaM من السعودية، وFalcon من الإمارات، وFanar من قطر).
+- البرنامج يقترح فقط من الموديلات الأربعة المجرّبة (Gemma 4 12B وQwen3.5 9B و4B و2B). الباقي تختاره من صفحة الموديلات.
+- جرّبنا بالعربية على المعالج: Gemma 4 E2B وALLaM 7B وFalcon H1 7B (إجابات سليمة)، وQwen3.5 0.8B (عربيته ضعيفة). الموديلات الأكبر لم تُجرَّب هنا لعدم وجود كرت شاشة.
+- Ling 3.0 tiny من Ant Group لم يُضَف: المحرك الحالي يتوقف عند تحميله على المعالج.
+- الموديلات العملاقة (DeepSeek V4 Flash وGLM 5.3 Flash وغيرها) تحتاج أكثر من 110 جيجابايت فلم تُضَف، ويمكن إضافتها يدوياً.
+- **طبقات الكرت (تلقائي):** إذا لم يتسع الموديل في ذاكرة الكرت، يترك محرك llama.cpp جزءاً منه في ذاكرة الجهاز فيعمل أبطأ بدل أن يفشل. موديلات MoE (التي تشغّل جزءاً صغيراً من معاملاتها لكل كلمة) تبقى سريعة نسبياً بهذه الطريقة.
 - الأحجام والرخص من صفحات الموديلات على Hugging Face.
-- إعدادات التوليد لكل موديل (temperature وtop_p وtop_k وغيرها) مأخوذة من صفحة الموديل الأصلي.
+- إعدادات التوليد لكل موديل (temperature وtop_p وtop_k وغيرها) مأخوذة من صفحة الموديل الأصلي. الموديل الذي لا تذكر صفحته إعدادات يستخدم إعدادات المحرك الافتراضية.
 - على المعالج نوقف مرحلة التفكير، لأنها قد تؤخر الرد لدقائق.
 - **صفحة الموديلات:**
   - تبدّل بين الموديلات بدون إعادة تشغيل البرنامج. الموديل غير المنزّل ينزل أولاً مع شريط تقدّم.

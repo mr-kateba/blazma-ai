@@ -85,6 +85,16 @@ class Setup extends EventEmitter {
     else this.update({ phase: 'choose' });
   }
 
+  // How a model fits this computer: 'ok' (all on the card, or a small CPU
+  // model), 'slow' (part in system memory, or on the CPU without a card), or
+  // 'too-big'. The RAM share leaves room for Windows and other programs.
+  fitLevel(m, vram) {
+    const ramMB = Math.round(os.totalmem() / 1024 / 1024);
+    const needMB = Math.round((m.sizeBytes || 0) / 1024 / 1024) + 1536;
+    if (m.cpu || (vram && m.minVramMB <= vram)) return 'ok';
+    return needMB <= vram + ramMB * 0.6 ? 'slow' : 'too-big';
+  }
+
   modelList() {
     const manifest = models.manifest();
     const vram = this.nvidia && this.nvidia.available ? this.nvidia.best.vramMB : 0;
@@ -98,7 +108,14 @@ class Setup extends EventEmitter {
       cpu: Boolean(m.cpu),
       custom: Boolean(m.custom),
       vision: Boolean(m.vision),
-      fits: m.cpu ? true : m.minVramMB <= vram,
+      fits: this.fitLevel(m, vram) === 'ok',
+      fit: this.fitLevel(m, vram),
+      minVramMB: m.minVramMB || 0,
+      maker: m.maker || null,
+      origin: m.origin || null,
+      tags: Array.isArray(m.tags) ? m.tags : [],
+      featured: Boolean(m.featured),
+      thinking: Boolean(m.thinking),
       downloaded: m.local ? fs.existsSync(m.path) : models.isComplete(manifest[m.hf]),
       onDisk: m.local ? 0 : models.sizeOnDisk(m.hf),
       local: Boolean(m.local),
@@ -208,12 +225,13 @@ class Setup extends EventEmitter {
     }
     if (run !== this.runId) return;
 
-    const useGpu = this.nvidia.available && !model.cpu && engine.kind !== 'cpu';
+    const useGpu = this.nvidia.available && engine.kind !== 'cpu';
     this.server.start({
       exe: engine.exe,
       hf: model.hf,
       modelsDir: settings.modelsDir(),
-      contextSize: settings.get().contextSize,
+      // Some models were trained on a short context (ALLaM: 4096).
+      contextSize: Math.min(settings.get().contextSize, model.maxContext || Infinity),
       gpuLayers: useGpu ? settings.get().gpuLayers : 0,
       kvCache: settings.get().kvCache,
       port: this.port,

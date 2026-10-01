@@ -102,11 +102,14 @@ function modelChooser(state) {
     selectedModelId = state.recommendedId;
   }
   const list = el('div', { class: 'model-list', role: 'radiogroup' });
-  for (const m of state.models) {
+  // The first screen shows the models we tested (and any already downloaded);
+  // the full list is on the models page.
+  const shown = state.models.filter((m) => m.featured || m.downloaded || m.id === selectedModelId);
+  for (const m of shown) {
     const tags = [];
     if (m.id === state.recommendedId) tags.push(el('span', { class: 'tag tag-accent' }, ar.setup.recommended));
     if (m.downloaded) tags.push(el('span', { class: 'tag' }, ar.setup.downloaded));
-    if (!m.fits) tags.push(el('span', { class: 'tag tag-warn' }, state.hardware.nvidia ? ar.setup.notFit : ar.setup.slowOnCpu));
+    if (m.fit && m.fit !== 'ok') tags.push(el('span', { class: 'tag tag-warn' }, fitLabel(m, state.hardware)));
     const option = el(
       'button',
       {
@@ -130,13 +133,20 @@ function modelChooser(state) {
     );
     list.append(option);
   }
+  const hidden = state.models.length - shown.length;
   const chosen = state.models.find((m) => m.id === selectedModelId);
   const startBtn = el(
     'button',
     { type: 'button', class: 'btn primary big', onclick: () => window.blazma.startSetup(selectedModelId) },
     chosen && chosen.downloaded ? ar.setup.startDownloaded : ar.setup.start,
   );
-  return [list, startBtn];
+  return [list, hidden > 0 ? el('p', { class: 'muted small' }, ar.setup.moreModels(hidden)) : null, startBtn];
+}
+
+// Why a model may be slow or not run on this computer (setup.fitLevel).
+export function fitLabel(m, hardware) {
+  if (m.fit === 'too-big') return ar.setup.tooBig;
+  return hardware && hardware.nvidia ? ar.setup.usesRam : ar.setup.slowOnCpu;
 }
 
 function phaseView(state) {
@@ -249,7 +259,7 @@ function openModelMenu() {
     el('div', { class: 'model-menu-head' }, ar.chat.switchModel),
     ...items.map((m) => {
       const current = m.id === setupState.modelId;
-      const row = el('button', { type: 'button', class: `model-menu-item${current ? ' current' : ''}`, role: 'menuitem' }, el('span', { dir: 'ltr' }, m.name), current ? el('span', { class: 'tag tag-ok' }, ar.chat.currentModel) : m.fits ? null : el('span', { class: 'tag tag-warn' }, ar.setup.notFit));
+      const row = el('button', { type: 'button', class: `model-menu-item${current ? ' current' : ''}`, role: 'menuitem' }, el('span', { dir: 'ltr' }, m.name), current ? el('span', { class: 'tag tag-ok' }, ar.chat.currentModel) : m.fits ? null : el('span', { class: 'tag tag-warn' }, fitLabel(m, setupState.hardware)));
       row.addEventListener('click', () => {
         closeModelMenu();
         if (!current) window.blazma.modelsUse(m.id);

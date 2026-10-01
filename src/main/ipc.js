@@ -125,7 +125,7 @@ function registerIpc({ setup, monitor, getWindow }) {
     const sampling = { ...((model && model.sampling) || {}) };
     if (s.temperature !== null) sampling.temperature = s.temperature;
     // On the CPU, thinking first can mean minutes before the answer starts.
-    const onGpu = Boolean(setup.snapshot().hardware && setup.snapshot().hardware.nvidia) && !(model && model.cpu);
+    const onGpu = Boolean(setup.snapshot().hardware && setup.snapshot().hardware.nvidia);
     return {
       systemPrompt: s.systemPrompt,
       sampling,

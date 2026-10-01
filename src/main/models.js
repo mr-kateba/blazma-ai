@@ -32,7 +32,10 @@ function findModel(id) {
 // first) that fits the card; the CPU model when there is no NVIDIA GPU or the
 // card is too small for every GPU model.
 function recommend(nvidia) {
-  const models = getCatalog();
+  // Only models we tested are recommended; the rest are listed to choose from.
+  const all = getCatalog();
+  const featured = all.filter((m) => m.featured);
+  const models = featured.length ? featured : all;
   const cpuModel = models.find((m) => m.cpu) || null;
   if (!nvidia || !nvidia.available) return cpuModel;
   return models.find((m) => !m.cpu && m.minVramMB <= nvidia.best.vramMB) || cpuModel;

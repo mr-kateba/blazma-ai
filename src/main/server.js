@@ -91,7 +91,10 @@ class LlamaServer extends EventEmitter {
     const args = [
       ...source,
       '--jinja',
-      '-ngl', String(options.gpuLayers),
+      // Automatic (-1): no -ngl, so llama.cpp's --fit (on by default) puts
+      // all layers on the card when they fit, and otherwise keeps the rest
+      // (MoE expert weights first) in system memory instead of failing.
+      ...(options.gpuLayers >= 0 ? ['-ngl', String(options.gpuLayers)] : []),
       '-c', String(options.contextSize),
       '--host', '127.0.0.1',
       '--port', String(options.port),
@@ -153,7 +156,7 @@ class LlamaServer extends EventEmitter {
         code,
         signal,
         expected,
-        errorCode: expected ? null : classifyLog(tail, { gpu: options.gpuLayers > 0 }),
+        errorCode: expected ? null : classifyLog(tail, { gpu: options.gpuLayers !== 0 }),
         log: tail,
       });
     });
