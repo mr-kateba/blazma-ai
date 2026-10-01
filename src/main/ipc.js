@@ -15,6 +15,7 @@ const web = require('./web');
 const chats = require('./chats');
 const studio = require('./studio');
 const updates = require('./updates');
+const documents = require('./documents');
 const paths = require('./paths');
 
 // Settings the renderer may change (more are added with the settings page).
@@ -28,6 +29,7 @@ const EDITABLE_SETTINGS = [
   'temperature',
   'contextSize',
   'gpuLayers',
+  'kvCache',
   'port',
 ];
 
@@ -109,6 +111,7 @@ function registerIpc({ setup, monitor, getWindow }) {
       vision: Boolean(setup.snapshot().vision),
       webSearch: s.webSearch,
       shareDeviceInfo: s.shareDeviceInfo,
+      contextSize: s.contextSize,
     };
   });
 
@@ -122,6 +125,7 @@ function registerIpc({ setup, monitor, getWindow }) {
         systemPrompt: settings.DEFAULTS.systemPrompt,
         contextSize: settings.DEFAULTS.contextSize,
         gpuLayers: settings.DEFAULTS.gpuLayers,
+        kvCache: settings.DEFAULTS.kvCache,
         port: settings.DEFAULTS.port,
       },
       launchAtLogin: { supported: loginSupported(), enabled: loginSupported() ? app.getLoginItemSettings().openAtLogin : false },
@@ -165,6 +169,7 @@ function registerIpc({ setup, monitor, getWindow }) {
     return settingsView();
   });
   handle('server:restart', () => setup.restart());
+  handle('files:extract', (name, bytes) => wrap(() => documents.extractFile(name, bytes)));
 
   // Updates: only when the user presses the button.
   handle('updates:check', async () => {

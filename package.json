@@ -24,7 +24,12 @@
       "catalog.json",
       "package.json",
       "!node_modules/monaco-editor/esm/**",
-      "!node_modules/monaco-editor/dev/**"
+      "!node_modules/monaco-editor/dev/**",
+      "!node_modules/pdfjs-dist/build/**",
+      "!node_modules/pdfjs-dist/web/**",
+      "!node_modules/pdfjs-dist/types/**",
+      "!node_modules/pdfjs-dist/image_decoders/**",
+      "!node_modules/pdfjs-dist/**/*.map"
     ],
     "win": {
       "target": "nsis"
@@ -39,6 +44,8 @@
     "electron-builder": "^26.15.3"
   },
   "dependencies": {
-    "monaco-editor": "0.57.0"
+    "mammoth": "1.13.0",
+    "monaco-editor": "0.57.0",
+    "pdfjs-dist": "6.3.289"
   }
 }

@@ -199,6 +199,7 @@ class Setup extends EventEmitter {
       modelsDir: settings.modelsDir(),
       contextSize: settings.get().contextSize,
       gpuLayers: useGpu ? settings.get().gpuLayers : 0,
+      kvCache: settings.get().kvCache,
       port: this.port,
       offline: complete,
       vision: Boolean(entry.vision),
