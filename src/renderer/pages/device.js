@@ -136,12 +136,18 @@ function cpuSection(s) {
       card(D.usage, c ? `${num(c.total)}%` : null, { why: D.why.waiting }),
       card(D.cores, info.cpu.threads ? `${info.cpu.cores ?? '—'} / ${info.cpu.threads}` : null, { why: winOnly }),
       card(D.cpuClock, c && c.clockMHz != null ? `${num(c.clockMHz / 1000, 2)} جيجاهرتز` : null, { why: s ? winOnly : D.why.waiting }),
-      card(D.cpuTemp, null, { why: D.why.cpuSensor }),
-      card(D.cpuPower, null, { why: D.why.cpuSensor }),
+      card(D.cpuTemp, c && c.tempC != null ? `${num(c.tempC)}°` : null, { why: sensorWhy(c) }),
+      card(D.cpuPower, c && c.powerW != null ? `${num(c.powerW)} واط` : null, { why: sensorWhy(c) }),
     ),
     coreBars && el('div', { class: 'dev-sub' }, D.perCore),
     coreBars,
   );
+}
+
+// Why the CPU temperature/power is missing (LibreHardwareMonitor's state).
+function sensorWhy(c) {
+  if (!c) return D.why.waiting;
+  return D.why.lhm[c.sensor] || D.why.cpuSensor;
 }
 
 function ramSection(s) {

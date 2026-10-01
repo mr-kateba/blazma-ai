@@ -29,7 +29,7 @@ function buildReport({ info, last, bench, setupState }) {
       ? {
           at: new Date(last.t).toISOString(),
           gpu: last.gpu,
-          cpu: last.cpu && { totalPct: last.cpu.total, perCorePct: last.cpu.perCore, clockMHz: last.cpu.clockMHz },
+          cpu: last.cpu && { totalPct: last.cpu.total, perCorePct: last.cpu.perCore, clockMHz: last.cpu.clockMHz, temperatureC: last.cpu.tempC ?? null, powerW: last.cpu.powerW ?? null, sensorSource: last.cpu.tempC != null || last.cpu.powerW != null ? 'LibreHardwareMonitor' : null },
           ram: last.ram,
           server: last.server,
           storage: last.storage && { drive: last.storage.drive, freeBytes: last.storage.freeBytes, modelsBytes: last.storage.modelsBytes },
@@ -38,8 +38,8 @@ function buildReport({ info, last, bench, setupState }) {
       : null,
     lastBenchmark: bench || null,
     notAvailable: {
-      cpuTemperature: 'Windows has no standard interface for CPU temperature without a hardware sensor driver.',
-      cpuPower: 'Windows has no standard interface for CPU power without a hardware sensor driver.',
+      cpuTemperature: 'Windows has no standard interface for CPU temperature without a hardware sensor driver; read from LibreHardwareMonitor when it runs with its web server on.',
+      cpuPower: 'Windows has no standard interface for CPU power without a hardware sensor driver; read from LibreHardwareMonitor when it runs with its web server on.',
       totalSystemPower: 'Not measurable without external hardware; only GPU board power is reported.',
     },
   };
