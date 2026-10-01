@@ -46,6 +46,8 @@ const idle = async (win) => { await win.waitForTimeout(1200); await win.waitForS
   await win.locator('.chat-item').first().click(); await win.waitForTimeout(600);
   console.log('after restart pill:', await win.innerText('#persona-pill'), '| file chip:', await win.locator('.msg-user .file-chip').allInnerTexts());
   await win.evaluate(() => window.blazma.updateSettings({ webSearch: true }));
+  // Leave the general persona for the tests that follow.
+  await win.evaluate(() => localStorage.removeItem('blazma.persona'));
   console.log(logs.join('\n') || 'no errors');
   await app.close();
 })().catch(e => { console.error('FAIL', e); process.exit(1); });

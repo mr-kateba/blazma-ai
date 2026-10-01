@@ -135,6 +135,7 @@ function registerIpc({ setup, monitor, getWindow }) {
       if (wasRunning) setup.restart();
     }
   });
+  handle('images:cancel', () => images.cancel());
   handle('images:save', async (dataUrl) => {
     const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
     if (!m) return { ok: false };
@@ -173,8 +174,9 @@ function registerIpc({ setup, monitor, getWindow }) {
   handle('kb:search', (question) => wrap(() => knowledge.search(String(question || ''))));
   // Shows a source file in Explorer; only files that are in the index.
   handle('kb:reveal', (file) => {
+    // Only a file that is in the index (a source shown under a reply).
     const f = String(file || '');
-    if (knowledge.status().folders.some((d) => f.startsWith(d))) shell.showItemInFolder(f);
+    if (knowledge.isIndexed(f)) shell.showItemInFolder(f);
   });
   // Every GGUF in a folder the user picks, or in LM Studio's models folder.
   handle('models:scanFolder', async () => {
@@ -260,10 +262,21 @@ function registerIpc({ setup, monitor, getWindow }) {
     const clean = {};
     for (const k of EDITABLE_SETTINGS) if (patch && k in patch) clean[k] = patch[k];
     settings.update(clean);
-    // The renderer and Monaco follow it through prefers-color-scheme.
-    if (clean.theme) nativeTheme.themeSource = settings.get().theme;
+    if (clean.theme) {
+      nativeTheme.themeSource = settings.get().theme;
+      sendTheme();
+    }
     return settingsView();
   });
+  // Light or dark for the page (<html data-theme>). Sent explicitly: the
+  // page's prefers-color-scheme did not follow themeSource in every test.
+  // nativeTheme "updated" covers Windows switching while on "system".
+  const sendTheme = () => {
+    const w = getWindow();
+    if (w && !w.isDestroyed()) w.webContents.send('theme:changed', { dark: nativeTheme.shouldUseDarkColors });
+  };
+  nativeTheme.on('updated', sendTheme);
+  handle('theme:get', () => ({ dark: nativeTheme.shouldUseDarkColors }));
   // The folder for new model downloads. Files already downloaded stay where they are.
   handle('settings:chooseModelsDir', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(getWindow(), {

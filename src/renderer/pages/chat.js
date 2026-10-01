@@ -324,6 +324,7 @@ function renderStatus(state) {
 
 function onState(state) {
   const prevPhase = setupState && setupState.phase;
+  const wasHeld = imageHold;
   setupState = state;
   visionEnabled = Boolean(state.vision);
   if (!visionEnabled && pendingImages.length) {
@@ -331,14 +332,18 @@ function onState(state) {
     renderPreview();
   }
   const ready = state.phase === 'ready';
-  $('setup-panel').hidden = ready;
-  $('chat-area').hidden = !ready;
+  // While a picture is drawn the chat model steps aside (main/ipc.js) and is
+  // loaded again after: the conversation stays on screen meanwhile.
+  if (imageHold && (ready || ['error', 'waiting-network'].includes(state.phase))) imageHold = false;
+  const showChat = ready || (imageHold && ['stopped', 'engine', 'model-resolve', 'loading'].includes(state.phase));
+  $('setup-panel').hidden = showChat;
+  $('chat-area').hidden = !showChat;
   renderStatus(state);
-  if (!ready) {
+  if (!showChat) {
     if (state.phase !== 'model-download') speedSample = null;
     renderSetup(state);
     if (abortController) abortController.abort();
-  } else if (prevPhase !== 'ready') {
+  } else if (ready && prevPhase !== 'ready' && !wasHeld) {
     renderMessages();
     $('chat-input').focus();
   }
@@ -378,7 +383,7 @@ function messageNode(msg, index) {
       ),
     );
   }
-  if (!isUser && msg.generatingImage) body.append(el('p', { class: 'muted pulse' }, ar.chat.imageWorking));
+  if (!isUser && msg.generatingImage) body.append(el('p', { class: 'muted pulse' }, ar.chat.imageWorking), el('p', { class: 'muted small image-elapsed', dir: 'rtl' }));
   if (isUser && msg.files && msg.files.length) {
     body.append(el('div', { class: 'msg-files' }, ...msg.files.map((f) => fileChip(f))));
   }
@@ -443,7 +448,7 @@ function messageNode(msg, index) {
   if (msg.error) body.append(el('div', { class: 'msg-error' }, msg.error));
 
   const footer = el('div', { class: 'msg-footer' });
-  if (!msg.streaming) {
+  if (!msg.streaming && !msg.generatingImage) {
     const copy = el('button', { type: 'button', class: 'icon-btn' }, ar.actions.copy);
     copy.addEventListener('click', () =>
       navigator.clipboard.writeText(msg.content).then(() => {
@@ -453,9 +458,9 @@ function messageNode(msg, index) {
     );
     if (msg.content) footer.append(copy);
     if (!isUser && msg.content) footer.append(listenButton(msg));
-    if (!abortController) {
+    if (!abortController && !imageBusy) {
       if (isUser) footer.append(el('button', { type: 'button', class: 'icon-btn', onclick: () => startEdit(index) }, ar.chat.edit));
-      else if (index === messages.length - 1) footer.append(el('button', { type: 'button', class: 'icon-btn', onclick: regenerate }, ar.chat.regenerate));
+      else if (index === messages.length - 1 && !msg.imagePrompt) footer.append(el('button', { type: 'button', class: 'icon-btn', onclick: regenerate }, ar.chat.regenerate));
     }
     if (msg.alts && msg.alts.length > 1) footer.append(branchNav(msg, index));
     if (msg.timings && msg.timings.predicted_per_second) {
@@ -907,6 +912,7 @@ async function generate() {
 // ---------- image generation ----------
 
 let imageBusy = false;
+let imageHold = false; // keep the chat shown until the chat model is back (onState)
 
 // The image model reads English best, so an Arabic description is first
 // translated by the chat model (while it is still loaded).
@@ -938,12 +944,18 @@ async function englishPrompt(text) {
 
 async function makeImage(text) {
   imageBusy = true;
+  imageHold = true;
   setBusy(true);
   if (!messages.length) $('chat-log').replaceChildren();
   messages.push({ role: 'user', content: `${ar.chat.imagePrefix} ${text}` });
-  const reply = { role: 'assistant', content: '', generatingImage: true };
+  const reply = { role: 'assistant', content: '', generatingImage: true, imagePrompt: text };
   messages.push(reply);
   renderMessages();
+  const started = Date.now();
+  const tick = setInterval(() => {
+    const t = document.querySelector('.image-elapsed');
+    if (t) t.textContent = ar.chat.imageElapsed(Math.floor((Date.now() - started) / 1000));
+  }, 1000);
   try {
     const prompt = await englishPrompt(text);
     const res = await window.blazma.imagesGenerate(prompt);
@@ -951,8 +963,10 @@ async function makeImage(text) {
       reply.images = [res.result.dataUrl];
       reply.imagePrompt = prompt;
       reply.content = ar.chat.imageDone(res.result.size);
-    } else reply.error = (ar.errors[res.error.code] || ar.errors.unknown).title;
+    } else if (res.error.code === 'image-cancelled') reply.stopped = true;
+    else reply.error = (ar.errors[res.error.code] || ar.errors.unknown).title;
   } finally {
+    clearInterval(tick);
     delete reply.generatingImage;
     imageBusy = false;
     setBusy(false);
@@ -993,7 +1007,7 @@ function branchesAt(k) {
 }
 
 function switchBranch(k, to) {
-  if (abortController) return;
+  if (abortController || imageBusy) return;
   syncBranches();
   const alts = messages[k].alts;
   if (!alts || !alts[to] || !alts[to].length) return;
@@ -1017,7 +1031,7 @@ function branchNav(msg, index) {
 // ---------- regenerate / edit ----------
 
 function regenerate() {
-  if (abortController || !messages.length || messages[messages.length - 1].role !== 'assistant') return;
+  if (abortController || imageBusy || !messages.length || messages[messages.length - 1].role !== 'assistant') return;
   const index = messages.length - 1;
   pendingBranch = { index, alts: branchesAt(index) };
   messages.pop();
@@ -1026,7 +1040,7 @@ function regenerate() {
 }
 
 function startEdit(index) {
-  if (abortController) return;
+  if (abortController || imageBusy) return;
   editingIndex = index;
   renderMessages();
 }
@@ -1267,7 +1281,11 @@ export function initChat() {
   $('composer').addEventListener('submit', (e) => {
     e.preventDefault();
     const text = input.value.trim();
-    if ((!text && !pendingImages.length && !pendingFiles.length) || abortController) return;
+    if ((!text && !pendingImages.length && !pendingFiles.length) || abortController || imageBusy) return;
+    if (setupState && setupState.phase !== 'ready') {
+      showComposerNote(ar.chat.waitModel, 5000);
+      return;
+    }
     if (pendingFiles.some((f) => f.reading)) {
       showComposerNote(ar.chat.fileStillReading);
       return;
@@ -1428,7 +1446,10 @@ export function initChat() {
     e.preventDefault();
     addAttachments([...e.dataTransfer.files]);
   });
-  $('btn-stop-gen').addEventListener('click', () => abortController && abortController.abort());
+  $('btn-stop-gen').addEventListener('click', () => {
+    if (abortController) abortController.abort();
+    else if (imageBusy) window.blazma.imagesCancel();
+  });
   $('btn-new-chat').addEventListener('click', newChat);
   let searchTimer = null;
   $('chat-search').addEventListener('input', () => {

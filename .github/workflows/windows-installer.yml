@@ -3,6 +3,8 @@
 # - Push a tag like v0.1.0, or run it by hand with "release" ticked: the
 #   installer is also uploaded to a DRAFT GitHub release (notes from
 #   docs/releases/v<version>.md), which stays private until someone publishes it.
+#   Running it again updates that draft (files replaced, commit and notes
+#   updated); a release that is already published is never changed.
 name: Windows installer
 
 on:
@@ -37,8 +39,18 @@ jobs:
         shell: bash
         run: |
           VERSION=$(node -p "require('./package.json').version")
+          FILES="dist/*.exe dist/*.exe.blockmap dist/latest.yml"
           # latest.yml and the blockmap let the app update itself (electron-updater).
-          gh release create "v$VERSION" dist/*.exe dist/*.exe.blockmap dist/latest.yml --draft --target "$GITHUB_SHA" --title "Blazma AI $VERSION" --notes-file "docs/releases/v$VERSION.md"
+          DRAFT=$(gh release view "v$VERSION" --json isDraft -q .isDraft 2>/dev/null || echo none)
+          if [ "$DRAFT" = none ]; then
+            gh release create "v$VERSION" $FILES --draft --target "$GITHUB_SHA" --title "Blazma AI $VERSION" --notes-file "docs/releases/v$VERSION.md"
+          elif [ "$DRAFT" = true ]; then
+            gh release edit "v$VERSION" --target "$GITHUB_SHA" --title "Blazma AI $VERSION" --notes-file "docs/releases/v$VERSION.md"
+            gh release upload "v$VERSION" $FILES --clobber
+          else
+            echo "::error::v$VERSION is already published; raise the version in package.json first."
+            exit 1
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/upload-artifact@v7

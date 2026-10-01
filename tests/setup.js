@@ -4,8 +4,12 @@
 // - a fake nvidia-smi (fixtures/fakebin), a fake Ollama folder, a fake
 //   LM Studio folder, and folders with split, broken and incomplete models;
 // - a link to a llama-server you built: LLAMA_SERVER=/path/to/llama-server.
+// With FEATURES=1 also (about 7 GB) what kb, voice and image tests need:
+// the Qwen3-Embedding model, whisper.cpp's Linux build with a small model and
+// two speech samples, and stable-diffusion.cpp's Linux build with Z-Image
+// Turbo files (smaller Q3 versions than the app downloads).
 //
-// Usage: LLAMA_SERVER=~/llama.cpp/build/bin/llama-server node tests/setup.js
+// Usage: LLAMA_SERVER=~/llama.cpp/build/bin/llama-server [FEATURES=1] node tests/setup.js
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -41,6 +45,36 @@ function download(url, to) {
   console.log('downloading', url);
   execFileSync('curl', ['-sSL', '--fail', '-o', `${to}.part`, url], { stdio: 'inherit' });
   fs.renameSync(`${to}.part`, to);
+}
+
+function features() {
+  const hf = (repo, file) => `https://huggingface.co/${repo}/resolve/main/${file}`;
+  mkdir(path.join(WORK, 'models'));
+  download(hf('Qwen/Qwen3-Embedding-0.6B-GGUF', 'Qwen3-Embedding-0.6B-Q8_0.gguf'), path.join(WORK, 'models', 'Qwen3-Embedding-0.6B-Q8_0.gguf'));
+
+  const w = path.join(WORK, 'whisper');
+  mkdir(w);
+  download('https://github.com/ggml-org/whisper.cpp/releases/download/b5130/whisper-bin-ubuntu-x64.tar.gz', path.join(w, 'w.tar.gz'));
+  if (!fs.existsSync(path.join(w, 'whisper-bin-ubuntu-x64', 'whisper-server'))) execFileSync('tar', ['-xzf', path.join(w, 'w.tar.gz'), '-C', w]);
+  download(hf('ggerganov/whisper.cpp', 'ggml-small-q5_1.bin'), path.join(w, 'ggml-small-q5_1.bin'));
+  download('https://github.com/ggml-org/whisper.cpp/raw/master/samples/jfk.wav', path.join(w, 'jfk.wav'));
+  // Arabic Speech Corpus (Nawar Halabi, CC BY 4.0), test sentence 2, through
+  // the Hugging Face dataset viewer (its audio links are signed, so asked first).
+  if (!fs.existsSync(path.join(w, 'ar-sample.wav'))) {
+    const rows = JSON.parse(execFileSync('curl', ['-sSL', '--fail', 'https://datasets-server.huggingface.co/rows?dataset=tunis-ai/arabic_speech_corpus&config=default&split=test&offset=1&length=1']).toString());
+    download(rows.rows[0].row.audio[0].src, path.join(w, 'ar-sample.wav'));
+  }
+
+  const sd = path.join(WORK, 'sdcpp');
+  mkdir(sd);
+  download('https://github.com/leejet/stable-diffusion.cpp/releases/download/master-929-3f8527a/sd-master-3f8527a-bin-Linux-Ubuntu-24.04-x86_64.zip', path.join(sd, 'sd.zip'));
+  if (!fs.existsSync(path.join(sd, 'sd-server'))) execFileSync('unzip', ['-o', '-q', path.join(sd, 'sd.zip'), '-d', sd]);
+  fs.chmodSync(path.join(sd, 'sd-server'), 0o755);
+  const img = path.join(WORK, 'images');
+  mkdir(img);
+  download(hf('leejet/Z-Image-Turbo-GGUF', 'z_image_turbo-Q3_K.gguf'), path.join(img, 'z_image_turbo-Q3_K.gguf'));
+  download(hf('Comfy-Org/z_image_turbo', 'split_files/vae/ae.safetensors'), path.join(img, 'ae.safetensors'));
+  download(hf('unsloth/Qwen3-4B-Instruct-2507-GGUF', 'Qwen3-4B-Instruct-2507-Q3_K_M.gguf'), path.join(img, 'Qwen3-4B-Instruct-2507-Q3_K_M.gguf'));
 }
 
 function main() {
@@ -92,6 +126,8 @@ function main() {
     console.warn('llama-gguf-split not found next to llama-server: the split-model checks will fail.');
   }
   fs.writeFileSync(path.join(imp, 'myfolder', 'broken', 'notreally.gguf'), Buffer.alloc(1000000, 7));
+
+  if (process.env.FEATURES === '1') features();
 
   // Start with the small CPU model chosen, so the first test downloads it
   // from the mock server instead of stopping at the "choose a model" screen.

@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld(
     imagesInstall: () => ipcRenderer.invoke('images:install'),
     imagesGenerate: (prompt) => ipcRenderer.invoke('images:generate', { prompt: String(prompt) }),
     imagesSave: (dataUrl) => ipcRenderer.invoke('images:save', String(dataUrl)),
+    imagesCancel: () => ipcRenderer.invoke('images:cancel'),
     onImagesProgress(cb) {
       const listener = (_e, p) => cb(p);
       ipcRenderer.on('images:progress', listener);
@@ -78,6 +79,12 @@ contextBridge.exposeInMainWorld(
     studioPreview: (files) => ipcRenderer.invoke('studio:preview', files),
     saveTextFile: (content, lang) => ipcRenderer.invoke('file:saveText', String(content), String(lang || '')),
     getSettings: () => ipcRenderer.invoke('settings:get'),
+    getTheme: () => ipcRenderer.invoke('theme:get'),
+    onThemeChanged(cb) {
+      const listener = (_e, t) => cb(t);
+      ipcRenderer.on('theme:changed', listener);
+      return () => ipcRenderer.removeListener('theme:changed', listener);
+    },
     updateSettings: (patch) => ipcRenderer.invoke('settings:update', patch),
     chooseModelsDir: () => ipcRenderer.invoke('settings:chooseModelsDir'),
     resetModelsDir: () => ipcRenderer.invoke('settings:resetModelsDir'),

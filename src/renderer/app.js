@@ -9,6 +9,14 @@ import { el } from './lib/dom.js';
 
 const PAGES = ['chat', 'studio', 'device', 'models', 'settings'];
 
+// Light or dark, chosen in Settings → General ("system" follows Windows).
+function applyTheme({ dark }) {
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  window.dispatchEvent(new Event('blazma:theme'));
+}
+window.blazma.getTheme().then(applyTheme);
+window.blazma.onThemeChanged(applyTheme);
+
 function showPage(name) {
   if (!PAGES.includes(name)) name = PAGES[0];
   for (const section of document.querySelectorAll('.page')) {

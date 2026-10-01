@@ -39,6 +39,7 @@ const dir = () => path.join(settings.modelsDir(), 'images');
 const local = (key) => process.env[`BLAZMA_IMAGE_${key.toUpperCase()}`] || path.join(dir(), path.basename(FILES[key].file)); // env: development/testing
 
 let installing = null;
+let current = null; // the running sd-server, so the user can cancel
 
 function findExe(d, depth = 3) {
   if (fs.existsSync(path.join(d, EXE))) return path.join(d, EXE);
@@ -163,9 +164,11 @@ async function generate({ prompt, size }) {
   const child = spawn(exe, args, { cwd: path.dirname(exe), windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'], env: { ...process.env, LD_LIBRARY_PATH: path.dirname(exe) } });
   let log = '';
   child.stderr.on('data', (d) => (log = (log + d).slice(-4000)));
+  current = child;
   try {
     const started = Date.now();
     for (;;) {
+      if (child.cancelled) throw new AppError('image-cancelled');
       if (child.exitCode !== null) throw new AppError('image-failed', log.slice(-800));
       const r = await call(port, 'GET', '/v1/models', null, 2000).catch(() => null);
       if (r && r.status === 200) break;
@@ -173,13 +176,22 @@ async function generate({ prompt, size }) {
       await new Promise((res) => setTimeout(res, 1000));
     }
     const extra = JSON.stringify({ sample_params: { sample_steps: STEPS } });
-    const res = await call(port, 'POST', '/v1/images/generations', { prompt: `${text} <sd_cpp_extra_args>${extra}</sd_cpp_extra_args>`, n: 1, size: dims, output_format: 'png' }, 30 * 60 * 1000);
+    const res = await call(port, 'POST', '/v1/images/generations', { prompt: `${text} <sd_cpp_extra_args>${extra}</sd_cpp_extra_args>`, n: 1, size: dims, output_format: 'png' }, 60 * 60 * 1000).catch((err) => {
+      throw child.cancelled ? new AppError('image-cancelled') : err;
+    });
     const b64 = res.json && Array.isArray(res.json.data) && res.json.data[0] && res.json.data[0].b64_json;
     if (!b64) throw new AppError('image-failed', (res.text || JSON.stringify(res.json) || '').slice(0, 400));
     return { dataUrl: `data:image/png;base64,${b64}`, size: dims };
   } finally {
+    current = null;
     if (child.exitCode === null) child.kill();
   }
 }
 
-module.exports = { status, plan, install, generate };
+function cancel() {
+  if (!current) return;
+  current.cancelled = true;
+  current.kill();
+}
+
+module.exports = { status, plan, install, generate, cancel };
