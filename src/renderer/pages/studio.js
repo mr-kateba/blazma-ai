@@ -95,7 +95,7 @@ const TEMPLATES = [
       'style.css':
         'body {\n  margin: 0;\n  padding: 20px;\n  display: flex;\n  flex-direction: column;\n  align-items: center;\n  background: #10131a;\n  color: #e8eaef;\n  font-family: system-ui, sans-serif;\n}\n\ncanvas {\n  background: #1b2030;\n  border-radius: 8px;\n}\n\n.hint {\n  color: #9097a6;\n}\n',
       'game.js':
-        "const canvas = document.getElementById('game');\nconst ctx = canvas.getContext('2d');\nconst player = { x: 40, y: 40, size: 22, speed: 3 };\nconst keys = new Set();\nlet coin = randomCoin();\nlet score = 0;\n\nfunction randomCoin() {\n  return { x: 20 + Math.random() * (canvas.width - 40), y: 20 + Math.random() * (canvas.height - 40), r: 8 };\n}\n\naddEventListener('keydown', (e) => keys.add(e.key));\naddEventListener('keyup', (e) => keys.delete(e.key));\n\nfunction update() {\n  if (keys.has('ArrowUp')) player.y -= player.speed;\n  if (keys.has('ArrowDown')) player.y += player.speed;\n  if (keys.has('ArrowLeft')) player.x -= player.speed;\n  if (keys.has('ArrowRight')) player.x += player.speed;\n  player.x = Math.max(0, Math.min(canvas.width - player.size, player.x));\n  player.y = Math.max(0, Math.min(canvas.height - player.size, player.y));\n\n  const cx = player.x + player.size / 2;\n  const cy = player.y + player.size / 2;\n  if (Math.hypot(cx - coin.x, cy - coin.y) < coin.r + player.size / 2) {\n    score++;\n    document.getElementById('score').textContent = 'النقاط: ' + score;\n    console.log('نقطة!', score);\n    coin = randomCoin();\n  }\n}\n\nfunction draw() {\n  ctx.clearRect(0, 0, canvas.width, canvas.height);\n  ctx.fillStyle = '#5b8cff';\n  ctx.fillRect(player.x, player.y, player.size, player.size);\n  ctx.fillStyle = '#f5c542';\n  ctx.beginPath();\n  ctx.arc(coin.x, coin.y, coin.r, 0, Math.PI * 2);\n  ctx.fill();\n}\n\nfunction loop() {\n  update();\n  draw();\n  requestAnimationFrame(loop);\n}\nloop();\n",
+        "const canvas = document.getElementById('game');\nconst ctx = canvas.getContext('2d');\nconst player = { x: 40, y: 40, size: 22, speed: 3 };\nconst keys = new Set();\nlet coin = randomCoin();\nlet score = 0;\n\nfunction randomCoin() {\n  return { x: 20 + Math.random() * (canvas.width - 40), y: 20 + Math.random() * (canvas.height - 40), r: 8 };\n}\n\naddEventListener('keydown', (e) => keys.add(e.key));\naddEventListener('keyup', (e) => keys.delete(e.key));\n\nfunction update() {\n  if (keys.has('ArrowUp')) player.y -= player.speed;\n  if (keys.has('ArrowDown')) player.y += player.speed;\n  if (keys.has('ArrowLeft')) player.x -= player.speed;\n  if (keys.has('ArrowRight')) player.x += player.speed;\n  player.x = Math.max(0, Math.min(canvas.width - player.size, player.x));\n  player.y = Math.max(0, Math.min(canvas.height - player.size, player.y));\n\n  const cx = player.x + player.size / 2;\n  const cy = player.y + player.size / 2;\n  if (Math.hypot(cx - coin.x, cy - coin.y) < coin.r + player.size / 2) {\n    score++;\n    document.getElementById('score').textContent = 'النقاط: ' + score;\n    console.log('نقطة!', score);\n    coin = randomCoin();\n  }\n}\n\nfunction draw() {\n  ctx.clearRect(0, 0, canvas.width, canvas.height);\n  ctx.fillStyle = '#ff6d00';\n  ctx.fillRect(player.x, player.y, player.size, player.size);\n  ctx.fillStyle = '#f5c542';\n  ctx.beginPath();\n  ctx.arc(coin.x, coin.y, coin.r, 0, Math.PI * 2);\n  ctx.fill();\n}\n\nfunction loop() {\n  update();\n  draw();\n  requestAnimationFrame(loop);\n}\nloop();\n",
     }),
   },
   {
@@ -1269,7 +1269,7 @@ function build(host) {
   const title = el(
     'div',
     { class: 'wb-title' },
-    el('div', { class: 'wb-title-start' }, el('span', { class: 'wb-logo', 'aria-hidden': 'true' }, 'B'), W.menubar),
+    el('div', { class: 'wb-title-start' }, el('img', { class: 'wb-logo', src: 'logo.svg', alt: '', 'aria-hidden': 'true' }), W.menubar),
     W.center,
     el('div', { class: 'wb-title-end' }, iconBtn('sidebar', S.cmd.toggleSidebar, () => setSideVisible(!layout.sideVisible), 'toggle on'), W.togglePanelBtn, W.togglePreviewBtn, runBtn),
   );
@@ -1345,7 +1345,7 @@ function build(host) {
   W.welcome = el(
     'div',
     { class: 'wb-welcome' },
-    el('div', { class: 'wb-welcome-logo', 'aria-hidden': 'true' }, 'B'),
+    el('img', { class: 'wb-welcome-logo', src: 'logo.svg', alt: '', 'aria-hidden': 'true' }),
     el(
       'dl',
       null,

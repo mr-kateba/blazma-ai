@@ -1,5 +1,7 @@
 <div dir="rtl">
 
+<p align="center"><img src="branding/logo.svg" width="96" alt="شعار Blazma AI"></p>
+
 # Blazma AI
 
 تطبيق ويندوز مفتوح المصدر بواجهة عربية كاملة، يجمع شيئين:
@@ -21,6 +23,8 @@
 | ![المحادثة](docs/screenshots/chat.png) | ![الاستوديو](docs/screenshots/studio.png) |
 | **جهازي** | **الموديلات** |
 | ![جهازي](docs/screenshots/device.png) | ![الموديلات](docs/screenshots/models.png) |
+
+الصور ملتقطة في بيئة اختبار على لينكس، وقراءات كرت الشاشة فيها من محاكٍ للاختبار وليست من جهاز حقيقي.
 
 ## الحالة الحالية
 
