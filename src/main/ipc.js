@@ -5,7 +5,7 @@
 
 const fs = require('node:fs');
 const crypto = require('node:crypto');
-const { app, dialog, ipcMain, shell } = require('electron');
+const { app, dialog, ipcMain, nativeTheme, shell } = require('electron');
 const { APP_ORIGIN } = require('./protocol');
 const settings = require('./settings');
 const models = require('./models');
@@ -18,6 +18,9 @@ const studio = require('./studio');
 const updates = require('./updates');
 const documents = require('./documents');
 const localmodels = require('./localmodels');
+const knowledge = require('./knowledge');
+const voice = require('./voice');
+const images = require('./images');
 const personas = require('./personas');
 const { exportChat } = require('./exporter');
 const paths = require('./paths');
@@ -27,17 +30,22 @@ const EDITABLE_SETTINGS = [
   'monitorIntervalMs',
   'lhmEnabled',
   'overlayEnabled',
+  'theme',
   'overlayCorner',
   'lhmPort',
   'gpuTempWarn',
   'gpuTempDanger',
   'webSearch',
+  'kbInChat',
+  'voiceModel',
   'shareDeviceInfo',
   'systemPrompt',
   'temperature',
   'contextSize',
   'gpuLayers',
   'kvCache',
+  'idleUnloadMin',
+  'speculative',
   'port',
 ];
 
@@ -104,6 +112,70 @@ function registerIpc({ setup, monitor, getWindow }) {
     setup.refreshModels();
     return res;
   });
+  // Image generation: stable-diffusion.cpp + Z-Image Turbo (images.js). The
+  // chat model is paused while drawing so both do not compete for memory.
+  handle('images:status', () => images.status());
+  handle('images:plan', () => wrap(() => images.plan()));
+  handle('images:install', () =>
+    wrap(() =>
+      images.install({ gpu: Boolean(setup.nvidia && setup.nvidia.available) }, (p) => {
+        const w = getWindow();
+        if (w && !w.isDestroyed()) w.webContents.send('images:progress', p);
+      }),
+    ),
+  );
+  handle('images:generate', async (req) => {
+    const wasRunning = ['ready', 'loading'].includes(setup.snapshot().phase);
+    if (wasRunning) await setup.stopServer();
+    try {
+      const vram = setup.nvidia && setup.nvidia.available ? setup.nvidia.best.vramMB : 0;
+      const size = vram >= 8000 ? '1024x1024' : vram >= 4000 ? '768x768' : '512x512';
+      return await wrap(() => images.generate({ prompt: String((req && req.prompt) || ''), size }));
+    } finally {
+      if (wasRunning) setup.restart();
+    }
+  });
+  handle('images:save', async (dataUrl) => {
+    const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
+    if (!m) return { ok: false };
+    const { canceled, filePath } = await dialog.showSaveDialog(getWindow(), { title: 'حفظ الصورة', defaultPath: 'blazma-image.png', filters: [{ name: 'PNG', extensions: ['png'] }] });
+    if (canceled || !filePath) return { ok: true, result: null };
+    fs.writeFileSync(filePath, Buffer.from(m[1], 'base64'));
+    return { ok: true, result: filePath };
+  });
+  // Voice input: whisper.cpp on this computer (voice.js).
+  handle('voice:status', () => voice.status());
+  handle('voice:install', () =>
+    wrap(() =>
+      voice.install((p) => {
+        const w = getWindow();
+        if (w && !w.isDestroyed()) w.webContents.send('voice:progress', p);
+      }),
+    ),
+  );
+  handle('voice:transcribe', (wav) => wrap(() => voice.transcribe(wav instanceof Uint8Array ? wav : new Uint8Array(wav || []))));
+  // "مكتبتي": the user's document folders, indexed for answers (knowledge.js).
+  handle('kb:status', () => knowledge.status());
+  handle('kb:addFolder', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(getWindow(), { title: 'اختر مجلد مستندات', properties: ['openDirectory'] });
+    if (canceled || !filePaths[0]) return { ok: true, result: null };
+    return wrap(() => knowledge.addFolder(filePaths[0]));
+  });
+  handle('kb:removeFolder', (folder) => wrap(() => knowledge.removeFolder(String(folder || ''))));
+  handle('kb:update', () =>
+    wrap(() =>
+      knowledge.update((p) => {
+        const w = getWindow();
+        if (w && !w.isDestroyed()) w.webContents.send('kb:progress', p);
+      }),
+    ),
+  );
+  handle('kb:search', (question) => wrap(() => knowledge.search(String(question || ''))));
+  // Shows a source file in Explorer; only files that are in the index.
+  handle('kb:reveal', (file) => {
+    const f = String(file || '');
+    if (knowledge.status().folders.some((d) => f.startsWith(d))) shell.showItemInFolder(f);
+  });
   // Every GGUF in a folder the user picks, or in LM Studio's models folder.
   handle('models:scanFolder', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(getWindow(), {
@@ -159,6 +231,7 @@ function registerIpc({ setup, monitor, getWindow }) {
       thinking: Boolean(model && model.thinking && onGpu),
       vision: Boolean(setup.snapshot().vision),
       webSearch: s.webSearch,
+      kbInChat: s.kbInChat,
       shareDeviceInfo: s.shareDeviceInfo,
       contextSize: s.contextSize,
     };
@@ -187,6 +260,8 @@ function registerIpc({ setup, monitor, getWindow }) {
     const clean = {};
     for (const k of EDITABLE_SETTINGS) if (patch && k in patch) clean[k] = patch[k];
     settings.update(clean);
+    // The renderer and Monaco follow it through prefers-color-scheme.
+    if (clean.theme) nativeTheme.themeSource = settings.get().theme;
     return settingsView();
   });
   // The folder for new model downloads. Files already downloaded stay where they are.
@@ -246,6 +321,15 @@ function registerIpc({ setup, monitor, getWindow }) {
     return { app: appRes, engine: engineRes };
   });
   handle('updates:engine', () => wrap(() => setup.updateEngine()));
+  handle('updates:downloadApp', () =>
+    wrap(() =>
+      updates.downloadApp((pct) => {
+        const w = getWindow();
+        if (w && !w.isDestroyed()) w.webContents.send('updates:progress', pct);
+      }),
+    ),
+  );
+  handle('updates:installApp', () => wrap(() => updates.installApp()));
   handle('updates:openRelease', (url) => {
     if (typeof url === 'string' && url.startsWith(updates.APP_RELEASES_PAGE)) shell.openExternal(url);
   });

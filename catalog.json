@@ -45,7 +45,8 @@
       "tags": [
         "arabic"
       ],
-      "featured": true
+      "featured": true,
+      "draft": "unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M"
     },
     {
       "id": "qwen3.5-4b",
@@ -69,7 +70,8 @@
       "tags": [
         "arabic"
       ],
-      "featured": true
+      "featured": true,
+      "draft": "unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M"
     },
     {
       "id": "qwen3.5-2b",
@@ -94,7 +96,8 @@
       "tags": [
         "arabic"
       ],
-      "featured": true
+      "featured": true,
+      "draft": "unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M"
     },
     {
       "id": "qwen3.5-0.8b",
@@ -525,5 +528,6 @@
   ],
   "_sampling_source": "Values from each model's Hugging Face card (best-practice / recommended sampling sections). Models whose card gives no recommendation have empty sampling and use llama.cpp's defaults.",
   "_vision_source": "Vision models ship mmproj-*.gguf projectors (checked on Hugging Face); llama.cpp downloads the one closest in quantization when --no-mmproj is not passed.",
-  "_sizes_source": "sizeBytes for added models = the files llama.cpp picks for repo:quant (model + projector), from the Hugging Face tree API; minVramMB = that size + 1.5 GB for context, rounded up to 512 MB."
+  "_sizes_source": "sizeBytes for added models = the files llama.cpp picks for repo:quant (model + projector), from the Hugging Face tree API; minVramMB = that size + 1.5 GB for context, rounded up to 512 MB.",
+  "_draft_source": "draft: a smaller model of the same family (same tokenizer) used for speculative decoding (--spec-draft-hf with --spec-type draft-simple, common/arg.cpp)."
 }

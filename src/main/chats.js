@@ -17,8 +17,12 @@ const fileFor = (id) => {
   return path.join(dir(), `${id}.json`);
 };
 
-// Only the fields the chat page renders are kept.
-function cleanMessage(m) {
+const MAX_BRANCHES = 20;
+const MAX_BRANCH_DEPTH = 4;
+
+// Only the fields the chat page renders are kept. Branches (earlier versions
+// of the conversation from this message on) are cleaned the same way.
+function cleanMessage(m, depth = 0) {
   const out = { role: m.role === 'assistant' ? 'assistant' : 'user', content: String(m.content || '') };
   if (Array.isArray(m.images) && m.images.length) out.images = m.images.filter((s) => typeof s === 'string' && s.startsWith('data:image/')).slice(0, 4);
   if (m.reasoning) out.reasoning = String(m.reasoning);
@@ -36,8 +40,13 @@ function cleanMessage(m) {
       pages: Number(f.pages) || null,
     }));
   }
+  if (typeof m.imagePrompt === 'string') out.imagePrompt = m.imagePrompt.slice(0, 2000);
   if (m.error) out.error = String(m.error);
   if (m.stopped) out.stopped = true;
+  if (Array.isArray(m.alts) && m.alts.length > 1 && depth < MAX_BRANCH_DEPTH) {
+    out.alts = m.alts.slice(0, MAX_BRANCHES).map((tail) => (Array.isArray(tail) ? tail.slice(0, 500).map((x) => cleanMessage(x, depth + 1)) : []));
+    out.altIndex = Math.min(Math.max(0, Number(m.altIndex) || 0), out.alts.length - 1);
+  }
   return out;
 }
 
@@ -62,7 +71,7 @@ function get(id) {
 function save(chat) {
   const now = Date.now();
   const existing = get(chat.id);
-  const messages = (chat.messages || []).map(cleanMessage);
+  const messages = (chat.messages || []).map((m) => cleanMessage(m));
   const firstUser = messages.find((m) => m.role === 'user' && m.content.trim());
   const title =
     (existing && existing.title) ||

@@ -15,7 +15,9 @@
     "start": "electron .",
     "dist": "electron-builder --win nsis --x64 --publish never",
     "diag": "node scripts/diag.js",
-    "release": "electron-builder --win nsis --x64 --publish always"
+    "release": "electron-builder --win nsis --x64 --publish always",
+    "test:setup": "node tests/setup.js",
+    "test": "node tests/run.js"
   },
   "build": {
     "appId": "com.blazma.ai",
@@ -78,9 +80,11 @@
   },
   "devDependencies": {
     "electron": "^44.4.5",
-    "electron-builder": "^26.15.3"
+    "electron-builder": "^26.15.3",
+    "playwright-core": "1.56.1"
   },
   "dependencies": {
+    "electron-updater": "6.8.9",
     "mammoth": "1.13.0",
     "monaco-editor": "0.57.0",
     "pdfjs-dist": "6.3.289",

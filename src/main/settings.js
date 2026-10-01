@@ -7,15 +7,20 @@ const DEFAULTS = Object.freeze({
   port: 18080,
   contextSize: 8192,
   gpuLayers: -1, // -1 = automatic: llama.cpp --fit keeps what fits on the card, the rest in RAM
-  kvCache: 'q8_0', // conversation memory precision: f16 (full), q8_0 (half the memory), q4_0
+  kvCache: 'q8_0',
+  idleUnloadMin: 0,
+  speculative: 'off', // 'off' | 'ngram' (no extra model) | 'draft' (a small helper model when there is one) // minutes without use before the model leaves memory (0 = never) // conversation memory precision: f16 (full), q8_0 (half the memory), q4_0
   modelsDir: '',
   activeModelId: '',
   temperature: null, // null = use the model's recommended value
   apiEnabled: false, // other programs on this computer may use the server (fixed key below)
   apiKey: '',
-  webSearch: true, // the model may search the web (tool calls run in main/web.js)
+  webSearch: true,
+  kbInChat: false,
+  voiceModel: 'small', // speech to text: 'small' (faster) or 'turbo' (more accurate) // answer from the user's documents (knowledge.js) // the model may search the web (tool calls run in main/web.js)
   shareDeviceInfo: false, // add a hardware summary to the system prompt (monitor.modelSummary)
   monitorIntervalMs: 2000,
+  theme: 'dark', // 'dark' | 'light' | 'system' (follows Windows)
   overlayEnabled: false, // the mini hardware monitor in the chat
   overlayCorner: 'top-left',
   lhmEnabled: true, // read CPU temperature/power from LibreHardwareMonitor's web server (127.0.0.1)
@@ -33,6 +38,8 @@ const VALIDATORS = {
   contextSize: (v) => isInt(v, 512, 262144),
   gpuLayers: (v) => isInt(v, -1, 999),
   kvCache: (v) => ['f16', 'q8_0', 'q4_0'].includes(v),
+  idleUnloadMin: (v) => [0, 5, 15, 30, 60].includes(v),
+  speculative: (v) => ['off', 'ngram', 'draft'].includes(v),
   modelsDir: (v) => typeof v === 'string',
   activeModelId: (v) => typeof v === 'string',
   temperature: (v) => v === null || (typeof v === 'number' && v >= 0 && v <= 2),
@@ -40,8 +47,11 @@ const VALIDATORS = {
   apiKey: (v) => v === '' || /^bz-[0-9a-f]{48}$/.test(v),
   systemPrompt: (v) => typeof v === 'string' && v.length <= 20000,
   webSearch: (v) => typeof v === 'boolean',
+  kbInChat: (v) => typeof v === 'boolean',
+  voiceModel: (v) => ['small', 'turbo'].includes(v),
   shareDeviceInfo: (v) => typeof v === 'boolean',
   monitorIntervalMs: (v) => [500, 1000, 2000, 5000].includes(v),
+  theme: (v) => ['dark', 'light', 'system'].includes(v),
   overlayEnabled: (v) => typeof v === 'boolean',
   overlayCorner: (v) => ['top-left', 'top-right', 'bottom-left', 'bottom-right'].includes(v),
   lhmEnabled: (v) => typeof v === 'boolean',

@@ -2,8 +2,11 @@
 
 // "التحقق من التحديثات" on the settings page. Runs only when the user asks:
 // one request to GitHub for the app's latest release and one for llama.cpp's.
-// Nothing is installed automatically; the engine update is a separate click
-// (setup.updateEngine), and a new app version opens its GitHub page.
+// Nothing is installed automatically: the engine update is a separate click
+// (setup.updateEngine), and a new app version is downloaded and installed by
+// electron-updater (MIT) only when the user presses "تنزيل وتثبيت". It reads
+// latest.yml from the GitHub release and checks the installer's sha512; the
+// app is not code-signed, so there is no publisher name to check.
 
 const { app, net } = require('electron');
 const engine = require('./engine');
@@ -37,7 +40,7 @@ async function checkApp() {
   const json = await res.json();
   const latest = String(json.tag_name || '');
   const url = typeof json.html_url === 'string' && json.html_url.startsWith(APP_RELEASES_PAGE) ? json.html_url : null;
-  return { current, latest, newer: Boolean(latest) && compareVersions(latest, current) > 0, url };
+  return { current, latest, newer: Boolean(latest) && compareVersions(latest, current) > 0, url, canInstall: appUpdateSupported() };
 }
 
 async function checkEngine(nvidia) {
@@ -48,4 +51,39 @@ async function checkEngine(nvidia) {
   return { installed: installed ? installed.tag : null, variant: installed ? installed.variant : null, latest: release.tag, newer };
 }
 
-module.exports = { checkApp, checkEngine, compareVersions, APP_RELEASES_PAGE };
+// Installing in place works for the installed Windows app only.
+function appUpdateSupported() {
+  return app.isPackaged && process.platform === 'win32';
+}
+
+let updater = null;
+function getUpdater() {
+  if (!appUpdateSupported()) throw new AppError('update-unsupported');
+  if (!updater) {
+    ({ autoUpdater: updater } = require('electron-updater'));
+    updater.autoDownload = false;
+    updater.autoInstallOnAppQuit = false;
+  }
+  return updater;
+}
+
+async function downloadApp(onProgress = () => {}) {
+  const u = getUpdater();
+  const check = await u.checkForUpdates();
+  if (!check || !check.isUpdateAvailable) return { version: null };
+  const listener = (p) => onProgress(Math.floor(p.percent || 0));
+  u.on('download-progress', listener);
+  try {
+    await u.downloadUpdate();
+  } finally {
+    u.removeListener('download-progress', listener);
+  }
+  return { version: check.updateInfo.version };
+}
+
+// Closes the app (which stops llama-server) and runs the new installer.
+function installApp() {
+  getUpdater().quitAndInstall(false, true);
+}
+
+module.exports = { checkApp, checkEngine, compareVersions, APP_RELEASES_PAGE, appUpdateSupported, downloadApp, installApp };

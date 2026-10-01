@@ -15,6 +15,9 @@ let engineDirty = false;
 let toastTimer = null;
 let updatesState = null; // last check result
 let updating = false;
+let appDownloading = false;
+let appReady = false;
+let appPct = 0;
 
 // ---------- small building blocks ----------
 
@@ -161,6 +164,24 @@ function engineSection(state) {
     el('div', { id: 'engine-banner' }),
     item(S.engine.ctx, S.engine.ctxDesc, ctx),
     item(S.engine.kv, S.engine.kvDesc, kv),
+    item(
+      S.engine.spec,
+      S.engine.specDesc,
+      select(
+        [['off', S.engine.specOff], ['ngram', S.engine.specNgram], ['draft', S.engine.specDraft]],
+        values.speculative,
+        (v) => save({ speculative: v }, { engine: true }),
+      ),
+    ),
+    item(
+      S.engine.idle,
+      S.engine.idleDesc,
+      select(
+        [[0, S.engine.idleNever], ...[5, 15, 30, 60].map((n) => [n, S.engine.idleAfter(n)])],
+        values.idleUnloadMin,
+        (v) => save({ idleUnloadMin: Number(v) }, { engine: true }),
+      ),
+    ),
     item(S.engine.gpu, S.engine.gpuDesc, gpu),
     item(S.engine.port, S.engine.portDesc, port),
     item(S.engine.dir, S.engine.dirDesc, null, el('div', { class: 'set-stack' }, dirText, el('div', { class: 'row' }, choose, openDir, resetDir))),
@@ -249,6 +270,57 @@ function monitorSection(info) {
   );
 }
 
+// "مكتبتي": folders of the user's documents, indexed so the chat can answer
+// from them (main/knowledge.js).
+let kbBusy = false;
+function kbSection(kb) {
+  const K = S.kb;
+  const statusLine = el('div', { class: 'set-desc', id: 'kb-status' }, kb.files ? K.status(kb.files, kb.chunks, kb.updatedAt, kb.failed) : K.empty);
+  const folders = kb.folders.length
+    ? kb.folders.map((f) => {
+        const rm = el('button', { type: 'button', class: 'btn ghost small' }, K.remove);
+        rm.addEventListener('click', async () => {
+          if (!window.confirm(K.confirmRemove)) return;
+          await window.blazma.kbRemoveFolder(f);
+          render();
+        });
+        return el('div', { class: 'kb-folder' }, el('span', { dir: 'ltr', class: 'kb-path' }, f), rm);
+      })
+    : [el('p', { class: 'muted small' }, K.noFolders)];
+  const add = el('button', { type: 'button', class: 'btn' }, K.add);
+  add.addEventListener('click', async () => {
+    const res = await window.blazma.kbAddFolder();
+    if (res.ok && res.result) {
+      render();
+      toast(K.added);
+    }
+  });
+  const update = el('button', { type: 'button', class: 'btn primary', disabled: kbBusy || !kb.folders.length }, kbBusy ? K.updating : K.update);
+  update.addEventListener('click', async () => {
+    kbBusy = true;
+    update.disabled = true;
+    update.textContent = K.updating;
+    const off = window.blazma.onKbProgress((p) => {
+      const line = document.getElementById('kb-status');
+      if (line) line.textContent = p.file ? K.progress(p.done, p.total, p.file) : K.finishing;
+    });
+    const res = await window.blazma.kbUpdate();
+    off();
+    kbBusy = false;
+    if (!res.ok) toast((ar.errors[res.error.code] || ar.errors.unknown).title, 'error');
+    else toast(K.updated);
+    render();
+  });
+  return section(
+    'kb',
+    K.title,
+    K.desc,
+    item(K.folders, null, null, el('div', { class: 'kb-folders' }, ...folders)),
+    item(K.index, statusLine, el('div', { class: 'row' }, add, update)),
+    item(K.use, K.useDesc, toggle(values.kbInChat, (on) => save({ kbInChat: on }))),
+  );
+}
+
 // Other programs on this computer can use the running model through the
 // same OpenAI-compatible server the chat uses (127.0.0.1 only).
 function copyButton(text) {
@@ -315,10 +387,16 @@ function generalSection() {
   const login = values.launchAtLogin;
   const openData = el('button', { type: 'button', class: 'btn ghost small' }, S.openFolder);
   openData.addEventListener('click', () => window.blazma.openFolder('data'));
+  const theme = select(
+    [['dark', S.general.themeDark], ['light', S.general.themeLight], ['system', S.general.themeSystem]],
+    values.theme,
+    (v) => save({ theme: v }),
+  );
   return section(
     'general',
     S.general.title,
     null,
+    item(S.general.theme, S.general.themeDesc, theme),
     item(
       S.general.login,
       login.supported ? S.general.loginDesc : S.general.loginUnsupported,
@@ -358,9 +436,31 @@ function renderUpdates() {
   if (!a.ok) rows.push(el('div', { class: 'upd-row error' }, S.updates.appLabel, ': ', errorText(a.error)));
   else if (!a.result.latest) rows.push(el('div', { class: 'upd-row' }, S.updates.appLabel, ': ', S.updates.noReleases(a.result.current)));
   else if (a.result.newer) {
-    const open = el('button', { type: 'button', class: 'btn primary small' }, S.updates.openDownload);
+    const open = el('button', { type: 'button', class: a.result.canInstall ? 'btn ghost small' : 'btn primary small' }, S.updates.openDownload);
     open.addEventListener('click', () => window.blazma.openRelease(a.result.url));
-    rows.push(el('div', { class: 'upd-row new' }, el('span', null, S.updates.appLabel, ': ', S.updates.appNew(a.result.latest, a.result.current)), a.result.url ? open : null));
+    let install = null;
+    if (a.result.canInstall) {
+      install = el('button', { type: 'button', class: 'btn primary small', disabled: appDownloading }, appReady ? S.updates.appInstallNow : appDownloading ? S.updates.appDownloading(appPct) : S.updates.appDownload);
+      install.addEventListener('click', async () => {
+        if (appReady) {
+          if (window.confirm(S.updates.appConfirmRestart)) window.blazma.installAppUpdate();
+          return;
+        }
+        appDownloading = true;
+        renderUpdates();
+        const off = window.blazma.onUpdateProgress((pct) => {
+          appPct = pct;
+          renderUpdates();
+        });
+        const res = await window.blazma.downloadAppUpdate();
+        off();
+        appDownloading = false;
+        if (res.ok && res.result.version) appReady = true;
+        else if (!res.ok) toast(errorText(res.error), 'error');
+        renderUpdates();
+      });
+    }
+    rows.push(el('div', { class: 'upd-row new' }, el('span', null, S.updates.appLabel, ': ', S.updates.appNew(a.result.latest, a.result.current)), el('span', { class: 'row' }, install, a.result.url ? open : null)));
   } else rows.push(el('div', { class: 'upd-row ok' }, S.updates.appLabel, ': ', S.updates.upToDate(a.result.current)));
 
   const e = updatesState.engine;
@@ -399,10 +499,10 @@ function aboutSection(appInfo) {
 
 // ---------- page ----------
 
-const SECTIONS = ['chat', 'engine', 'api', 'monitor', 'general', 'updates', 'about'];
+const SECTIONS = ['chat', 'kb', 'engine', 'api', 'monitor', 'general', 'updates', 'about'];
 
 async function render() {
-  const [v, info, state, appInfo, conn] = await Promise.all([window.blazma.getSettings(), window.blazma.monitorInfo(), window.blazma.getSetupState(), window.blazma.getAppInfo(), window.blazma.getConnection()]);
+  const [v, info, state, appInfo, conn, kb] = await Promise.all([window.blazma.getSettings(), window.blazma.monitorInfo(), window.blazma.getSetupState(), window.blazma.getAppInfo(), window.blazma.getConnection(), window.blazma.kbStatus()]);
   values = v;
   const toc = el(
     'nav',
@@ -413,7 +513,7 @@ async function render() {
       return b;
     }),
   );
-  const body = el('div', { class: 'set-body' }, chatSection(), engineSection(state), apiSection(conn), monitorSection(info), generalSection(), updatesSection(), aboutSection(appInfo));
+  const body = el('div', { class: 'set-body' }, chatSection(), kbSection(kb), engineSection(state), apiSection(conn), monitorSection(info), generalSection(), updatesSection(), aboutSection(appInfo));
   $('settings-root').replaceChildren(el('div', { class: 'set-layout' }, toc, body));
   renderEngineBanner();
   renderUpdates();
