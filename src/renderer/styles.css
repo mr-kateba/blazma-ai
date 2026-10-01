@@ -1229,3 +1229,27 @@ body.compact-nav .sidebar-foot { display: none; }
 .api-value { padding: 4px 8px; border-radius: 6px; background: var(--surface-2); font-family: var(--mono); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 420px; }
 .api-example { margin: 8px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--surface-2); font-family: var(--mono); font-size: 12.5px; line-height: 1.6; overflow-x: auto; text-align: left; }
 .model-path { overflow-wrap: anywhere; text-align: right; }
+
+/* Chat: mini hardware monitor (like a game overlay) */
+.chat-main { position: relative; }
+.btn.icon-only { width: 36px; padding: 0; display: inline-grid; place-items: center; }
+.btn.icon-only svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.btn.icon-only[aria-pressed='true'] { color: var(--accent); border-color: rgba(255, 109, 0, 0.5); background: var(--accent-soft); }
+.hw-overlay { position: absolute; z-index: 20; min-width: 210px; padding: 6px 10px 8px; border-radius: 10px; border: 1px solid rgba(255, 255, 255, 0.08); background: rgba(10, 12, 16, 0.82); backdrop-filter: blur(6px); box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35); font-size: 12px; cursor: grab; user-select: none; touch-action: none; }
+.hw-overlay.dragging { cursor: grabbing; opacity: 0.9; }
+.hw-overlay.at-top-left { top: 72px; left: 16px; }
+.hw-overlay.at-top-right { top: 72px; right: 16px; }
+.hw-overlay.at-bottom-left { bottom: 96px; left: 16px; }
+.hw-overlay.at-bottom-right { bottom: 96px; right: 16px; }
+.ov-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; color: var(--accent); font-weight: 600; font-size: 11.5px; }
+.ov-close { width: 18px; height: 18px; border: 0; border-radius: 4px; background: transparent; color: var(--faint); font-size: 14px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity 0.15s; }
+.hw-overlay:hover .ov-close { opacity: 1; }
+.ov-close:hover { color: var(--text); background: rgba(255, 255, 255, 0.08); }
+.ov-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 1px 0; }
+.ov-label { color: var(--muted); }
+.ov-vals { display: inline-flex; gap: 10px; unicode-bidi: isolate; font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--text); }
+.ov-val.warn { color: var(--warn); }
+.ov-val.danger { color: var(--danger); font-weight: 700; }
+.ov-val.dim { color: var(--faint); }
+.ov-val.live { color: var(--accent); }
+.ov-val { unicode-bidi: isolate; }

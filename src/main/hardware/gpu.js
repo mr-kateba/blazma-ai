@@ -1,6 +1,7 @@
 'use strict';
 
 const path = require('node:path');
+const { spawn } = require('node:child_process');
 const { run } = require('../exec');
 
 let smiPath; // undefined = not searched yet, null = not found
@@ -111,13 +112,9 @@ function parseValue(key, raw) {
   return Number.isFinite(n) ? n : null;
 }
 
-async function sampleGpu(index) {
-  const smi = await findNvidiaSmi();
-  const fields = await queryPlan();
-  if (!smi || !fields.length) return null;
-  const r = await run(smi, [`--query-gpu=${fields.map((f) => f.field).join(',')}`, '--format=csv,noheader,nounits', '-i', String(index)]);
-  if (!r.ok) return null;
-  const values = r.stdout.trim().split(/\r?\n/)[0].split(',');
+function parseLine(fields, line) {
+  const values = line.split(',');
+  if (values.length !== fields.length) return null;
   const out = { reasons: {} };
   fields.forEach((f, i) => {
     const value = parseValue(f.key, values[i]);
@@ -125,6 +122,76 @@ async function sampleGpu(index) {
     else out[f.key] = value;
   });
   return out;
+}
+
+async function sampleGpu(index) {
+  const smi = await findNvidiaSmi();
+  const fields = await queryPlan();
+  if (!smi || !fields.length) return null;
+  const r = await run(smi, [`--query-gpu=${fields.map((f) => f.field).join(',')}`, '--format=csv,noheader,nounits', '-i', String(index)]);
+  if (!r.ok) return null;
+  return parseLine(fields, r.stdout.trim().split(/\r?\n/)[0]);
+}
+
+// Live readings: one nvidia-smi that keeps reporting every `ms` milliseconds
+// (-lms, "SELECTIVE QUERY OPTIONS" in NVIDIA's nvidia-smi documentation)
+// instead of starting the tool for every reading. Fixed arguments only.
+class GpuStream {
+  constructor() {
+    this.child = null;
+    this.key = null;
+    this.latest = null;
+    this.at = 0;
+  }
+
+  async start(index, ms) {
+    const key = `${index}:${ms}`;
+    if (this.child && this.key === key) return true;
+    this.stop();
+    const smi = await findNvidiaSmi();
+    const fields = await queryPlan();
+    if (!smi || !fields.length) return false;
+    this.key = key;
+    const child = spawn(smi, [`--query-gpu=${fields.map((f) => f.field).join(',')}`, '--format=csv,noheader,nounits', '-i', String(index), '-lms', String(ms)], {
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    this.child = child;
+    let buffer = '';
+    child.stdout.on('data', (d) => {
+      buffer += d.toString('utf8');
+      let i;
+      while ((i = buffer.indexOf('\n')) !== -1) {
+        // Other lines (e.g. driver event messages) do not have the field count.
+        const parsed = parseLine(fields, buffer.slice(0, i).trim());
+        buffer = buffer.slice(i + 1);
+        if (parsed) {
+          this.latest = parsed;
+          this.at = Date.now();
+        }
+      }
+    });
+    child.once('exit', () => {
+      if (this.child === child) {
+        this.child = null;
+        this.key = null;
+      }
+    });
+    child.once('error', () => {});
+    return true;
+  }
+
+  // The newest reading if it is recent, else null (the caller samples once).
+  read(maxAgeMs) {
+    return this.latest && Date.now() - this.at <= maxAgeMs ? this.latest : null;
+  }
+
+  stop() {
+    if (this.child) this.child.kill();
+    this.child = null;
+    this.key = null;
+    this.latest = null;
+  }
 }
 
 // Official limits the driver reports for this card (nvidia-smi -q output is
@@ -159,4 +226,4 @@ async function processVramMB(pid) {
   return null;
 }
 
-module.exports = { findNvidiaSmi, detectNvidia, queryPlan, sampleGpu, temperatureLimits, processVramMB };
+module.exports = { findNvidiaSmi, detectNvidia, queryPlan, sampleGpu, GpuStream, temperatureLimits, processVramMB };
