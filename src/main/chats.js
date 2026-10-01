@@ -26,6 +26,16 @@ function cleanMessage(m) {
   if (m.timings) out.timings = { predicted_per_second: m.timings.predicted_per_second, predicted_n: m.timings.predicted_n };
   if (Array.isArray(m.steps) && m.steps.length) out.steps = m.steps.map((s) => ({ kind: s.kind, label: String(s.label || ''), failed: Boolean(s.failed) }));
   if (Array.isArray(m.sources) && m.sources.length) out.sources = m.sources.map((s) => ({ title: String(s.title || ''), url: String(s.url || '') }));
+  // Attached files keep their extracted text, so a reopened chat still has them.
+  if (Array.isArray(m.files) && m.files.length) {
+    out.files = m.files.slice(0, 5).map((f) => ({
+      name: String(f.name || '').slice(0, 200),
+      kind: ['pdf', 'docx', 'text'].includes(f.kind) ? f.kind : 'text',
+      text: String(f.text || '').slice(0, 400000),
+      chars: Number(f.chars) || 0,
+      pages: Number(f.pages) || null,
+    }));
+  }
   if (m.error) out.error = String(m.error);
   if (m.stopped) out.stopped = true;
   return out;
@@ -57,8 +67,10 @@ function save(chat) {
   const title =
     (existing && existing.title) ||
     (firstUser ? firstUser.content.replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE) : '') ||
+    (messages.find((m) => m.files && m.files.length) || { files: [{ name: '' }] }).files[0].name.slice(0, MAX_TITLE) ||
     String(chat.fallbackTitle || '').slice(0, MAX_TITLE);
-  const data = { id: chat.id, title, createdAt: (existing && existing.createdAt) || now, updatedAt: now, messages };
+  const personaId = typeof chat.personaId === 'string' && /^[a-z0-9-]{1,64}$/.test(chat.personaId) ? chat.personaId : undefined;
+  const data = { id: chat.id, title, createdAt: (existing && existing.createdAt) || now, updatedAt: now, personaId, messages };
   writeJson(fileFor(chat.id), data);
   return { id: data.id, title: data.title, updatedAt: data.updatedAt };
 }

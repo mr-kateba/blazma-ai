@@ -17,6 +17,8 @@ const studio = require('./studio');
 const updates = require('./updates');
 const documents = require('./documents');
 const localmodels = require('./localmodels');
+const personas = require('./personas');
+const { exportChat } = require('./exporter');
 const paths = require('./paths');
 
 // Settings the renderer may change (more are added with the settings page).
@@ -189,6 +191,10 @@ function registerIpc({ setup, monitor, getWindow }) {
     return settingsView();
   });
   handle('server:restart', () => setup.restart());
+  handle('personas:list', () => personas.list());
+  handle('personas:save', (p) => wrap(() => personas.save(p || {})));
+  handle('personas:delete', (id) => personas.remove(String(id)));
+  handle('chats:export', (payload) => wrap(() => exportChat(getWindow(), payload || {})));
   handle('files:extract', (name, bytes) => wrap(() => documents.extractFile(name, bytes)));
 
   // Updates: only when the user presses the button.
