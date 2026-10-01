@@ -949,11 +949,14 @@ async function streamReply({ reply, system, conn, chatSettings, webOn, signal })
 
     // Calls the server left in the text (lib/toolcalls.js) are run too, and
     // their raw syntax is not shown.
-    const leaked = extractTextToolCalls(roundContent);
+    // Only on a round that offered tools: the last round has none, and its
+    // text is the answer.
+    const toolsOffered = Boolean(payload.tools);
+    const leaked = toolsOffered ? extractTextToolCalls(roundContent) : { calls: [], content: roundContent.trim() };
     if (leaked.calls.length || leaked.content !== roundContent.trim()) {
       reply.content = reply.content.slice(0, reply.content.length - roundContent.length) + leaked.content;
       roundContent = leaked.content;
-      if (webOn) for (const c of leaked.calls) toolCalls.push({ id: '', type: 'function', function: { name: c.name, arguments: c.arguments } });
+      for (const c of leaked.calls) toolCalls.push({ id: '', type: 'function', function: { name: c.name, arguments: c.arguments } });
     }
     const calls = toolCalls.filter(Boolean);
     if (!calls.length) break;

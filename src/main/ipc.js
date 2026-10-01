@@ -321,6 +321,7 @@ function registerIpc({ setup, monitor, getWindow }) {
   handle('api:newKey', () => {
     settings.update({ apiKey: newApiKey() });
     if (settings.get().apiEnabled) setup.restart();
+    refreshAiConfig();
     return settingsView();
   });
   handle('personas:list', () => personas.list());
@@ -374,11 +375,13 @@ function registerIpc({ setup, monitor, getWindow }) {
     const s = settings.get();
     if (!vscode.aiInstalled() || !s.apiEnabled || !s.apiKey) return false;
     const model = models.findModel(setup.snapshot().modelId || s.activeModelId);
-    vscode.writeContinueConfig({ port: setup.port || s.port, apiKey: s.apiKey, modelName: model && model.name });
+    vscode.syncContinueConfig({ port: setup.port || s.port, apiKey: s.apiKey, modelName: model && model.name });
     return true;
   };
-  let codeFolder = null; // the folder open in VS Code (null = "Blazma Projects")
-  handle('vscode:status', () => ({ ...vscode.status(), ai: vscode.aiInstalled(), aiReady: vscode.aiInstalled() && settings.get().apiEnabled, folder: codeFolder || vscode.projectsDir() }));
+  // The engine moved to another port: Continue follows.
+  setup.on('port-changed', () => refreshAiConfig());
+  let codeFolder = null; // a folder to open next time the page shows (then cleared)
+  handle('vscode:status', () => ({ ...vscode.status(), ai: vscode.aiInstalled(), aiReady: vscode.aiInstalled() && settings.get().apiEnabled, folder: vscode.currentFolder() || codeFolder || vscode.projectsDir() }));
   handle('vscode:plan', () => wrap(() => vscode.plan()));
   handle('vscode:install', () =>
     wrap(() =>
@@ -394,7 +397,9 @@ function registerIpc({ setup, monitor, getWindow }) {
       if (!b) throw new AppError('vscode-failed', 'bad bounds');
       vscode.migrateStudioProjects();
       refreshAiConfig();
-      return vscode.showView(getWindow(), b, codeFolder);
+      const folder = codeFolder;
+      codeFolder = null;
+      return vscode.showView(getWindow(), b, folder);
     }),
   );
   handle('vscode:bounds', (bounds) => vscode.setBounds(cleanBounds(bounds)));
@@ -406,9 +411,9 @@ function registerIpc({ setup, monitor, getWindow }) {
     return codeFolder;
   });
   handle('vscode:openProjects', () => {
-    codeFolder = null;
     fs.mkdirSync(vscode.projectsDir(), { recursive: true });
-    return vscode.projectsDir();
+    codeFolder = vscode.projectsDir();
+    return codeFolder;
   });
   handle('vscode:snippet', (code, lang) => {
     codeFolder = vscode.saveSnippet(String(code || '').slice(0, 2_000_000), String(lang || ''));
@@ -425,7 +430,7 @@ function registerIpc({ setup, monitor, getWindow }) {
       const s = settings.get();
       if (!s.apiEnabled || !s.apiKey) {
         settings.update({ apiEnabled: true, apiKey: s.apiKey || newApiKey() });
-        setup.restart();
+        await setup.restart(); // the port is settled after this
       }
       await vscode.installAi();
       refreshAiConfig();

@@ -183,7 +183,9 @@ window.addEventListener('resize', sendBounds);
 export async function setStudioVisible(v) {
   visible = v;
   if (v) await render();
-  else if (shown) await hideView();
+  // Always, also while VS Code is still opening: the main process then does
+  // not show it over the page that is now in front.
+  else await hideView();
 }
 
 // "افتح في VS Code" on a code block in the chat: saved as a file in its own
