@@ -4,6 +4,7 @@
 
 import { ar } from '../i18n/ar.js';
 import { el } from '../lib/dom.js';
+import { confirmDialog } from '../lib/dialog.js';
 
 const P = ar.personas;
 let custom = [];
@@ -93,7 +94,7 @@ export function openPersonaEditor(onChange) {
             edit.addEventListener('click', () => fill(p));
             const del = el('button', { type: 'button', class: 'btn ghost small' }, P.remove);
             del.addEventListener('click', async () => {
-              if (!window.confirm(P.confirmRemove(p.name))) return;
+              if (!(await confirmDialog({ text: P.confirmRemove(p.name), ok: P.remove, danger: true }))) return;
               await window.blazma.personasDelete(p.id);
               await loadPersonas();
               if (editingId === p.id) fill(null);

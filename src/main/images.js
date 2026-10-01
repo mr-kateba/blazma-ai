@@ -194,4 +194,4 @@ function cancel() {
   current.kill();
 }
 
-module.exports = { status, plan, install, generate, cancel };
+module.exports = { status, plan, install, generate, cancel, stop: cancel };

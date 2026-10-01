@@ -390,7 +390,17 @@ class Setup extends EventEmitter {
   }
 
   // Settings > engine: apply context size, GPU layers or port.
-  restart() {
+  async restart() {
+    // A port changed in the settings is taken here (the page is reloaded so
+    // its CSP names the new port).
+    const wanted = settings.get().port;
+    if (wanted !== this.port && this.state.phase !== 'model-download') {
+      const p = await pickPort(wanted);
+      if (p !== this.port) {
+        this.port = p;
+        this.emit('port-changed', p);
+      }
+    }
     const id = this.state.modelId || settings.get().activeModelId;
     if (id) this.start(id);
   }

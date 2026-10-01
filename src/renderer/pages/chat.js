@@ -9,6 +9,7 @@ import { store } from '../lib/store.js';
 import { speak, stopSpeaking } from '../lib/speech.js';
 import { startRecording } from '../lib/recorder.js';
 import { loadPersonas, personaById, openPersonaMenu } from './personas.js';
+import { confirmDialog } from '../lib/dialog.js';
 
 // Today's date and time in Arabic (Gregorian and Umm al-Qura Hijri), with
 // Western digits to match the rest of the app.
@@ -690,10 +691,19 @@ function withFiles(m, fileBudget) {
 }
 
 // OpenAI-style content: plain text, or text plus image_url parts.
+// Images go to the model only from the user's own messages, and only when
+// the running model can see images. A drawn picture (an assistant message)
+// or a photo sent earlier to a model with vision would make a model without
+// vision reject every later request in the conversation.
 function apiContent(m, fileBudget = Infinity) {
   const text = withFiles(m, fileBudget);
-  if (!m.images || !m.images.length) return text;
-  return [{ type: 'text', text: text || ar.chat.describeImage }, ...m.images.map((url) => ({ type: 'image_url', image_url: { url } }))];
+  const images = m.role === 'user' && visionEnabled ? m.images || [] : [];
+  if (!images.length) {
+    if (m.role === 'assistant' && m.imagePrompt && m.images && m.images.length) return `${text}\n[${ar.chat.imageInHistory}: ${m.imagePrompt}]`.trim();
+    if (m.images && m.images.length && !text) return ar.chat.imageNotSeen;
+    return text;
+  }
+  return [{ type: 'text', text: text || ar.chat.describeImage }, ...images.map((url) => ({ type: 'image_url', image_url: { url } }))];
 }
 
 // Tools the model may call when web search is on. Descriptions are for the
@@ -771,7 +781,21 @@ async function runTool(call, reply) {
   return `Unknown tool ${call.function.name}.`;
 }
 
+// True from the moment a message is sent until its reply has started, so a
+// second Enter during the first awaits cannot send another message.
+let sending = false;
+
 async function send(text, images = [], files = []) {
+  if (sending || abortController) return;
+  sending = true;
+  try {
+    await sendNow(text, images, files);
+  } finally {
+    sending = false;
+  }
+}
+
+async function sendNow(text, images, files) {
   if (!messages.length) $('chat-log').replaceChildren();
   if (files.length) {
     const { contextSize } = await window.blazma.getChatSettings();
@@ -787,26 +811,13 @@ async function send(text, images = [], files = []) {
 // Generates an assistant reply for the conversation as it is now (its last
 // message is the user's), then saves the conversation.
 async function generate() {
-  const conn = await window.blazma.getConnection();
-  if (!conn) return;
-  const chatSettings = await window.blazma.getChatSettings();
-  const webOn = Boolean(chatSettings.webSearch);
-  const persona = personaById(currentPersonaId);
-  let system = `${persona.prompt || chatSettings.systemPrompt}\n\n${dateContext(webOn)}`;
-  // "مكتبتي": the passages of the user's documents closest to the question.
-  let kbPassages = [];
-  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-  if (chatSettings.kbInChat && lastUser && lastUser.content.trim()) {
-    const res = await window.blazma.kbSearch(lastUser.content);
-    if (res.ok) kbPassages = res.result;
-    if (kbPassages.length) system += `\n\n${ar.chat.kbContext(kbPassages.map((p, i) => `[${i + 1}] (${p.name})\n${p.text}`).join('\n\n'))}`;
-  }
-  if (chatSettings.shareDeviceInfo) {
-    const summary = await window.blazma.deviceSummary().catch(() => null);
-    if (summary) system += `\n\n${ar.chat.deviceContext(summary)}`;
-  }
-
-  const reply = { role: 'assistant', content: '', reasoning: '', streaming: true, thinkStart: Date.now(), steps: [], sources: kbPassages.map((p) => ({ title: p.name, url: `file:${p.file}`, file: p.file })) };
+  // One reply at a time. The busy state starts at once (before the library
+  // search and the device summary), so a second Enter cannot start a second
+  // reply and the stop button works from the first moment.
+  if (abortController) return;
+  abortController = new AbortController();
+  const signal = abortController.signal;
+  const reply = { role: 'assistant', content: '', reasoning: '', streaming: true, thinkStart: Date.now(), steps: [], sources: [] };
   // A regenerated reply becomes a new branch next to the earlier ones.
   if (pendingBranch && pendingBranch.index === messages.length) {
     reply.alts = pendingBranch.alts;
@@ -818,83 +829,35 @@ async function generate() {
   renderLast();
   setBusy(true);
 
-  // Thinking text and tool traffic are not sent back as history; only the
-  // user's messages and the final answers are.
-  const history = messages
-    .slice(0, -1)
-    .filter((m) => !m.error || m.content)
-    .map((m) => ({ role: m.role, content: apiContent(m, chatSettings.contextSize * CHARS_PER_TOKEN * FILE_SHARE) }));
-  const apiMessages = [{ role: 'system', content: system }, ...history];
-
-  abortController = new AbortController();
   try {
-    for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
-      const payload = {
-        messages: apiMessages,
-        stream: true,
-        // Speed in every chunk, for the live speed in the mini monitor.
-        timings_per_token: true,
-        ...chatSettings.sampling,
-        // Gemma 4's template defaults thinking to off, Qwen3.5's to on; always say which.
-        chat_template_kwargs: { enable_thinking: chatSettings.thinking },
-      };
-      // The last round has no tools, so the model must answer with what it found.
-      if (webOn && round < MAX_TOOL_ROUNDS) payload.tools = TOOLS;
-
-      const res = await fetch(`http://127.0.0.1:${conn.port}/v1/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${conn.apiKey}` },
-        body: JSON.stringify(payload),
-        signal: abortController.signal,
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        const type = err && err.error && err.error.type;
-        reply.error = type === 'exceed_context_size_error' ? ar.chat.errors.contextFull : ar.chat.errors.generic;
-        break;
-      }
-
-      const toolCalls = [];
-      let roundContent = '';
-      for await (const chunk of readSse(res)) {
-        const delta = chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
-        if (delta) {
-          if (delta.reasoning_content) reply.reasoning += delta.reasoning_content;
-          if (delta.content) {
-            if (!reply.content && reply.reasoning) reply.thinkEnd = Date.now();
-            reply.content += delta.content;
-            roundContent += delta.content;
-          }
-          for (const tc of delta.tool_calls || []) {
-            const slot = (toolCalls[tc.index ?? 0] ||= { id: '', type: 'function', function: { name: '', arguments: '' } });
-            if (tc.id) slot.id = tc.id;
-            if (tc.function && tc.function.name) slot.function.name += tc.function.name;
-            if (tc.function && tc.function.arguments) slot.function.arguments += tc.function.arguments;
-          }
-        }
-        if (chunk.timings) {
-          reply.timings = chunk.timings;
-          if (chunk.timings.predicted_per_second) {
-            store.lastSpeed = chunk.timings.predicted_per_second;
-            window.dispatchEvent(new CustomEvent('blazma:gen-speed', { detail: { tps: store.lastSpeed, live: true } }));
-          }
-        }
-        renderLast();
-      }
-
-      const calls = toolCalls.filter(Boolean);
-      if (!calls.length) break;
-      calls.forEach((c, i) => {
-        if (!c.id) c.id = `call_${round}_${i}`;
-      });
-      apiMessages.push({ role: 'assistant', content: roundContent, tool_calls: calls });
-      for (const call of calls) {
-        const result = await runTool(call, reply);
-        if (abortController.signal.aborted) throw new DOMException('aborted', 'AbortError');
-        apiMessages.push({ role: 'tool', tool_call_id: call.id, content: result });
-      }
-      renderLast();
+    const conn = await window.blazma.getConnection();
+    if (!conn) {
+      reply.error = ar.chat.errors.notReady;
+      return;
     }
+    const chatSettings = await window.blazma.getChatSettings();
+    const webOn = Boolean(chatSettings.webSearch);
+    const persona = personaById(currentPersonaId);
+    let system = `${persona.prompt || chatSettings.systemPrompt}\n\n${dateContext(webOn)}`;
+    // "مكتبتي": the passages of the user's documents closest to the question.
+    const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+    if (chatSettings.kbInChat && lastUser && lastUser.content.trim()) {
+      // A library problem is reported as such; the reply goes on without it.
+      const res = await window.blazma.kbSearch(lastUser.content).catch(() => ({ ok: false }));
+      if (!res.ok) showComposerNote(ar.chat.kbFailed, 6000);
+      const passages = res.ok ? res.result : [];
+      if (passages.length) {
+        system += `\n\n${ar.chat.kbContext(passages.map((p, i) => `[${i + 1}] (${p.name})\n${p.text}`).join('\n\n'))}`;
+        reply.sources = passages.map((p) => ({ title: p.name, url: `file:${p.file}`, file: p.file }));
+      }
+    }
+    if (chatSettings.shareDeviceInfo) {
+      const summary = await window.blazma.deviceSummary().catch(() => null);
+      if (summary) system += `\n\n${ar.chat.deviceContext(summary)}`;
+    }
+    if (signal.aborted) throw new DOMException('aborted', 'AbortError');
+    reply.thinkStart = Date.now(); // the model starts now (after the search above)
+    await streamReply({ reply, system, conn, chatSettings, webOn, signal });
   } catch (err) {
     if (err.name === 'AbortError') reply.stopped = true;
     else reply.error = ar.chat.errors.serverGone;
@@ -906,6 +869,93 @@ async function generate() {
     setBusy(false);
     renderMessages();
     persist();
+    if (document.activeElement === document.body) $('chat-input').focus();
+  }
+}
+
+// The request to the model (with web-search tool rounds), streamed into reply.
+async function streamReply({ reply, system, conn, chatSettings, webOn, signal }) {
+  // Thinking text and tool traffic are not sent back as history; only the
+  // user's messages and the final answers are.
+  const history = messages
+    .slice(0, -1)
+    .filter((m) => !m.error || m.content)
+    .map((m) => ({ role: m.role, content: apiContent(m, chatSettings.contextSize * CHARS_PER_TOKEN * FILE_SHARE) }));
+  const apiMessages = [{ role: 'system', content: system }, ...history];
+
+  for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
+    const payload = {
+      messages: apiMessages,
+      stream: true,
+      // Speed in every chunk, for the live speed in the mini monitor.
+      timings_per_token: true,
+      ...chatSettings.sampling,
+      // Gemma 4's template defaults thinking to off, Qwen3.5's to on; always say which.
+      chat_template_kwargs: { enable_thinking: chatSettings.thinking },
+    };
+    // The last round has no tools, so the model must answer with what it found.
+    if (webOn && round < MAX_TOOL_ROUNDS) payload.tools = TOOLS;
+
+    const res = await fetch(`http://127.0.0.1:${conn.port}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${conn.apiKey}` },
+      body: JSON.stringify(payload),
+      signal,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      const type = err && err.error && err.error.type;
+      reply.error = type === 'exceed_context_size_error' ? ar.chat.errors.contextFull : ar.chat.errors.generic;
+      break;
+    }
+
+    const toolCalls = [];
+    let roundContent = '';
+    for await (const chunk of readSse(res)) {
+      // The engine failed in the middle of the reply: say so instead of
+      // leaving an empty answer.
+      if (chunk.error) {
+        const type = chunk.error.type || (chunk.error.error && chunk.error.error.type);
+        reply.error = type === 'exceed_context_size_error' ? ar.chat.errors.contextFull : ar.chat.errors.midStream;
+        return;
+      }
+      const delta = chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
+      if (delta) {
+        if (delta.reasoning_content) reply.reasoning += delta.reasoning_content;
+        if (delta.content) {
+          if (!reply.content && reply.reasoning) reply.thinkEnd = Date.now();
+          reply.content += delta.content;
+          roundContent += delta.content;
+        }
+        for (const tc of delta.tool_calls || []) {
+          const slot = (toolCalls[tc.index ?? 0] ||= { id: '', type: 'function', function: { name: '', arguments: '' } });
+          if (tc.id) slot.id = tc.id;
+          if (tc.function && tc.function.name) slot.function.name += tc.function.name;
+          if (tc.function && tc.function.arguments) slot.function.arguments += tc.function.arguments;
+        }
+      }
+      if (chunk.timings) {
+        reply.timings = chunk.timings;
+        if (chunk.timings.predicted_per_second) {
+          store.lastSpeed = chunk.timings.predicted_per_second;
+          window.dispatchEvent(new CustomEvent('blazma:gen-speed', { detail: { tps: store.lastSpeed, live: true } }));
+        }
+      }
+      renderLast();
+    }
+
+    const calls = toolCalls.filter(Boolean);
+    if (!calls.length) break;
+    calls.forEach((c, i) => {
+      if (!c.id) c.id = `call_${round}_${i}`;
+    });
+    apiMessages.push({ role: 'assistant', content: roundContent, tool_calls: calls });
+    for (const call of calls) {
+      const result = await runTool(call, reply);
+      if (signal.aborted) throw new DOMException('aborted', 'AbortError');
+      apiMessages.push({ role: 'tool', tool_call_id: call.id, content: result });
+    }
+    renderLast();
   }
 }
 
@@ -1046,6 +1096,11 @@ function startEdit(index) {
 }
 
 function saveEdit(index, text) {
+  // An edit box left open while a reply started: wait for the reply.
+  if (abortController || imageBusy || sending) {
+    showComposerNote(ar.chat.busySwitch, 4000);
+    return;
+  }
   const content = text.trim();
   const original = messages[index];
   if (!content && !(original.images && original.images.length)) return;
@@ -1164,6 +1219,7 @@ async function persist() {
 function newChat() {
   stopSpeaking();
   if (abortController) abortController.abort();
+  if (imageBusy) window.blazma.imagesCancel();
   currentChatId = null;
   editingIndex = null;
   messages = [];
@@ -1173,7 +1229,11 @@ function newChat() {
 }
 
 async function loadChat(id) {
-  if (abortController) return;
+  // Not while a reply or a picture is on its way: it belongs to this chat.
+  if (abortController || imageBusy || sending) {
+    showComposerNote(ar.chat.busySwitch, 4000);
+    return;
+  }
   stopSpeaking();
   const chat = await window.blazma.chatsGet(id);
   if (!chat) return;
@@ -1239,7 +1299,7 @@ function renderList(items, query) {
       });
       actions.children[1].addEventListener('click', async (e) => {
         e.stopPropagation();
-        if (!window.confirm(ar.chat.confirmDelete(chat.title || ar.chat.untitled))) return;
+        if (!(await confirmDialog({ text: ar.chat.confirmDelete(chat.title || ar.chat.untitled), danger: true }))) return;
         await window.blazma.chatsDelete(chat.id);
         if (chat.id === currentChatId) newChat();
         refreshList();
@@ -1281,7 +1341,7 @@ export function initChat() {
   $('composer').addEventListener('submit', (e) => {
     e.preventDefault();
     const text = input.value.trim();
-    if ((!text && !pendingImages.length && !pendingFiles.length) || abortController || imageBusy) return;
+    if ((!text && !pendingImages.length && !pendingFiles.length) || abortController || imageBusy || sending) return;
     if (setupState && setupState.phase !== 'ready') {
       showComposerNote(ar.chat.waitModel, 5000);
       return;
@@ -1325,7 +1385,7 @@ export function initChat() {
     if (!st.program || !st.models) {
       const plan = await window.blazma.imagesPlan();
       const gb = plan.ok ? (plan.result.bytes / 1e9).toFixed(1) : '6.5';
-      if (!window.confirm(ar.chat.imageInstall(gb))) return;
+      if (!(await confirmDialog({ text: ar.chat.imageInstall(gb), ok: ar.chat.download }))) return;
       imgBtn.disabled = true;
       const off = window.blazma.onImagesProgress((p) => {
         const box = $('attach-preview');
@@ -1385,7 +1445,7 @@ export function initChat() {
     }
     const st = await window.blazma.voiceStatus();
     if (!st.program || !st.model) {
-      if (!window.confirm(ar.chat.micInstall(st.modelKind))) return;
+      if (!(await confirmDialog({ text: ar.chat.micInstall(st.modelKind), ok: ar.chat.download }))) return;
       micBtn.disabled = true;
       const off = window.blazma.onVoiceProgress((p) => setMicNote(ar.chat.micDownloading(p.stage, p.total ? Math.floor((p.done / p.total) * 100) : 0)));
       const res = await window.blazma.voiceInstall();
@@ -1417,8 +1477,8 @@ export function initChat() {
     const on = kbBtn.getAttribute('aria-pressed') !== 'true';
     if (on && !(await window.blazma.kbStatus()).chunks) {
       showComposerNote(ar.chat.kbEmpty, 6000);
+      window.dispatchEvent(new CustomEvent('blazma:settings-tab', { detail: 'kb' }));
       window.dispatchEvent(new CustomEvent('blazma:show-page', { detail: 'settings' }));
-      setTimeout(() => document.getElementById('set-kb')?.scrollIntoView({ block: 'start' }), 400);
       return;
     }
     const st = await window.blazma.updateSettings({ kbInChat: on });

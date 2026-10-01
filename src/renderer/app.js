@@ -6,6 +6,8 @@ import { setStudioVisible, openCodeInStudio } from './pages/studio.js';
 import { initModels, setModelsVisible } from './pages/models.js';
 import { initOverlay, setOverlayChatVisible } from './pages/overlay.js';
 import { el } from './lib/dom.js';
+import { initTooltips } from './lib/tooltip.js';
+import { startTour } from './lib/tour.js';
 
 const PAGES = ['chat', 'studio', 'device', 'models', 'settings'];
 
@@ -14,6 +16,7 @@ function applyTheme({ dark }) {
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   window.dispatchEvent(new Event('blazma:theme'));
 }
+initTooltips();
 window.blazma.getTheme().then(applyTheme);
 window.blazma.onThemeChanged(applyTheme);
 
@@ -74,6 +77,32 @@ document.addEventListener('keydown', (e) => {
 
 // Links between pages (e.g. "إدارة الموديلات" in the chat's model menu).
 window.addEventListener('blazma:show-page', (e) => showPage(String(e.detail)));
+
+// Guided tour: once, the first time the chat is ready; again from settings.
+function runTour() {
+  showPage('chat');
+  const T = ar.tour;
+  startTour(T.steps, T, () => window.blazma.updateSettings({ tourDone: true }));
+}
+window.addEventListener('blazma:start-tour', runTour);
+let tourChecked = false;
+async function maybeTour(state) {
+  if (tourChecked || !state || state.phase !== 'ready') return;
+  tourChecked = true;
+  offTourWatch();
+  const st = await window.blazma.getSettings();
+  if (st.tourDone) return;
+  // Wait until the user is on the chat page with no dialog open, so the tour
+  // never pulls them away from something or covers a question.
+  const tryStart = () => {
+    const onChat = !document.querySelector('.page[data-page="chat"]').hidden;
+    if (onChat && !document.querySelector('.dlg-layer') && !document.querySelector('.tour-layer')) runTour();
+    else setTimeout(tryStart, 1500);
+  };
+  setTimeout(tryStart, 600);
+}
+const offTourWatch = window.blazma.onSetupState(maybeTour);
+window.blazma.getSetupState().then(maybeTour);
 // "فتح في الاستوديو" on a code block in the chat.
 window.addEventListener('blazma:open-in-studio', (e) => {
   showPage('studio');

@@ -17,6 +17,7 @@ const DEFAULTS = Object.freeze({
   apiKey: '',
   webSearch: true,
   kbInChat: false,
+  tourDone: false, // the first-run guided tour was finished or skipped
   voiceModel: 'small', // speech to text: 'small' (faster) or 'turbo' (more accurate) // answer from the user's documents (knowledge.js) // the model may search the web (tool calls run in main/web.js)
   shareDeviceInfo: false, // add a hardware summary to the system prompt (monitor.modelSummary)
   monitorIntervalMs: 2000,
@@ -48,6 +49,7 @@ const VALIDATORS = {
   systemPrompt: (v) => typeof v === 'string' && v.length <= 20000,
   webSearch: (v) => typeof v === 'boolean',
   kbInChat: (v) => typeof v === 'boolean',
+  tourDone: (v) => typeof v === 'boolean',
   voiceModel: (v) => ['small', 'turbo'].includes(v),
   shareDeviceInfo: (v) => typeof v === 'boolean',
   monitorIntervalMs: (v) => [500, 1000, 2000, 5000].includes(v),

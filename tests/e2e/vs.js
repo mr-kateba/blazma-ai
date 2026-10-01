@@ -9,7 +9,7 @@ const out = (...a) => console.log(...a);
   const win = await app.firstWindow(); await win.waitForLoadState('load');
   // Expected page errors: the blocked Monaco loader (below) and bug.js, written on purpose to fill the problems list.
   const logs = []; win.on('pageerror', e => !/reading 'config'|undefinedFn is not defined/.test(e.message) && logs.push('pageerror: ' + e.message)); win.on('console', m => m.type() === 'error' && logs.push('console: ' + m.text()));
-  win.on('dialog', d => d.accept());
+  win.on('dialog', d => d.accept()); await win.evaluate(() => new MutationObserver(() => { const b = document.querySelector('.dlg-ok'); if (b) b.click(); }).observe(document.body, { childList: true })); // accept in-app confirmations (lib/dialog.js)
   await win.evaluate(() => localStorage.clear());
   // This test covers the simple editor, the studio's fallback when Monaco
   // cannot load: the AMD loader is blocked, so loadMonaco times out (20 s).

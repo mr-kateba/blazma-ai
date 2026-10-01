@@ -37,6 +37,7 @@ const EDITABLE_SETTINGS = [
   'gpuTempDanger',
   'webSearch',
   'kbInChat',
+  'tourDone',
   'voiceModel',
   'shareDeviceInfo',
   'systemPrompt',

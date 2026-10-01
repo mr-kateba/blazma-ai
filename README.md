@@ -58,6 +58,7 @@
 | الإدخال بالصوت (whisper.cpp) | ✅ مُجرّب على لينكس بتسجيل عربي حقيقي من ميكروفون محاكى، ⚠️ تنزيل نسخة ويندوز وتشغيلها يُجرَّبان على ويندوز |
 | رسم الصور (stable-diffusion.cpp وZ-Image Turbo) | ✅ مُجرّب على لينكس بالمعالج، ⚠️ نسخة Vulkan على كرت الشاشة تُجرَّب على ويندوز |
 | المظهر الفاتح | ✅ مُجرّب في كل الصفحات |
+| جولة تعريفية عند أول تشغيل، وتلميحات بتصميم البرنامج، وإعدادات مرتبة في أقسام | ✅ مُجرّب على لينكس |
 | إخراج الموديل من الذاكرة عند عدم الاستخدام، وتسريع الكتابة (تجريبي) | ✅ مُجرّب على لينكس |
 | تحديث البرنامج من داخله | ⚠️ مكتوب، ولا يمكن تجربته إلا على ويندوز بإصدارين منشورين |
 
@@ -297,7 +298,7 @@ xvfb-run -a npm test                                                 # كل ال
 
 **Blazma AI** is an open-source Windows app with a fully Arabic (RTL) interface. It combines a chat with open models running locally on your GPU (through llama.cpp's `llama-server`) and a live hardware monitor (GPU, CPU, RAM, temperatures, power draw).
 
-**Status:** feature-complete for 0.1.0 and tested end to end on Linux (23 Playwright tests that drive the real app with small real models); Windows-specific paths are written and await testing on a real Windows + NVIDIA machine ([checklist](docs/CHECKLIST-WINDOWS.md)). Features:
+**Status:** feature-complete for 0.1.0 and tested end to end on Linux (24 Playwright tests that drive the real app with small real models); Windows-specific paths are written and await testing on a real Windows + NVIDIA machine ([checklist](docs/CHECKLIST-WINDOWS.md)). Features:
 - local chat with streaming, reasoning, safe Markdown, images in, files (PDF, Word, text), web search, personas, saved chats with versions (regenerate / edit keep earlier replies), export;
 - "My library": answers from your own folders of documents (Qwen3-Embedding 0.6B, semantic search, file names shown as sources);
 - voice input (whisper.cpp), read-aloud with Windows voices, image generation (stable-diffusion.cpp + Z-Image Turbo);

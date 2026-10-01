@@ -55,7 +55,7 @@ async function waitIdle(win) { await win.waitForTimeout(1200); await win.waitFor
   await win.click('.chat-item:has-text("عواصم")'); await win.waitForTimeout(500);
   console.log('loaded chat msgs:', await win.locator('.msg').count(), '|', (await win.locator('.msg-user .msg-body').first().innerText()));
   await win.screenshot({ path: SP + '/chats-1.png' });
-  win.on('dialog', d => d.accept());
+  win.on('dialog', d => d.accept()); await win.evaluate(() => new MutationObserver(() => { const b = document.querySelector('.dlg-ok'); if (b) b.click(); }).observe(document.body, { childList: true })); // accept in-app confirmations (lib/dialog.js)
   await win.hover('.chat-item >> nth=0'); await win.click('.chat-item >> nth=0 >> button[title="حذف"]'); await win.waitForTimeout(600);
   console.log('after delete:', await win.locator('.chat-item-title').allTextContents());
   await win.evaluate(() => window.blazma.updateSettings({ webSearch: true }));

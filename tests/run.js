@@ -12,7 +12,7 @@ const path = require('node:path');
 const { spawn, spawnSync } = require('node:child_process');
 
 const WORK = path.join(__dirname, '.work');
-const ALL = ['chat', 'chats', 'branches', 'close-busy', 'persona', 'files', 'vision', 'models', 'catalog', 'local', 'idle', 'theme', 'kb', 'voice', 'image', 'import', 'api', 'lhm', 'overlay', 'python', 'vs', 'agent', 'device'];
+const ALL = ['chat', 'chats', 'ui', 'branches', 'close-busy', 'persona', 'files', 'vision', 'models', 'catalog', 'local', 'idle', 'theme', 'kb', 'voice', 'image', 'import', 'api', 'lhm', 'overlay', 'python', 'vs', 'agent', 'device'];
 const NEEDS = {
   kb: ['models/Qwen3-Embedding-0.6B-Q8_0.gguf'],
   voice: ['whisper/whisper-bin-ubuntu-x64/whisper-server', 'whisper/ar-sample.wav'],
@@ -58,7 +58,7 @@ async function main() {
     const home = path.join(WORK, 'e2e-home', 'Blazma AI');
     for (const f of fs.existsSync(home) ? fs.readdirSync(home) : []) if (f !== 'models') fs.rmSync(path.join(home, f), { recursive: true, force: true });
     fs.mkdirSync(home, { recursive: true });
-    fs.writeFileSync(path.join(home, 'settings.json'), JSON.stringify({ activeModelId: 'qwen3.5-2b' }));
+    fs.writeFileSync(path.join(home, 'settings.json'), JSON.stringify({ activeModelId: 'qwen3.5-2b', tourDone: true }));
   }
   const mock = startMockHf();
   const results = [];

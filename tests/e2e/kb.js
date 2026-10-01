@@ -24,7 +24,7 @@ const top = (win, q) => win.evaluate((q) => window.blazma.kbSearch(q), q).then((
   const app = await _electron.launch({ executablePath: root + '/node_modules/electron/dist/electron', args: [root, '--no-sandbox'], cwd: root, env });
   const win = await app.firstWindow(); await win.waitForLoadState('load');
   const logs = []; win.on('pageerror', e => logs.push('pageerror: ' + e.message)); win.on('console', m => m.type() === 'error' && logs.push(m.text()));
-  win.on('dialog', d => d.accept());
+  win.on('dialog', d => d.accept()); await win.evaluate(() => new MutationObserver(() => { const b = document.querySelector('.dlg-ok'); if (b) b.click(); }).observe(document.body, { childList: true })); // accept in-app confirmations (lib/dialog.js)
   await ready(win);
   if (await win.evaluate(() => localStorage.getItem('blazma.persona'))) { await win.evaluate(() => localStorage.removeItem('blazma.persona')); await win.reload(); await win.waitForLoadState('load'); await ready(win); }
   if ((await win.evaluate(() => window.blazma.getSetupState())).modelId !== 'qwen3.5-2b') { await win.evaluate(() => window.blazma.modelsUse('qwen3.5-2b')); await win.waitForTimeout(800); await ready(win); }
@@ -32,6 +32,7 @@ const top = (win, q) => win.evaluate((q) => window.blazma.kbSearch(q), q).then((
 
   // Settings → مكتبتي: add two folders (the folder picker is stubbed), update.
   await win.click('.nav-item[data-page="settings"]'); await win.waitForTimeout(800);
+  await win.click('.set-toc button[data-target="kb"]'); await win.waitForTimeout(300);
   for (const folder of [KB, DOCS]) {
     await app.evaluate(({ dialog }, p) => { dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [p] }); }, folder);
     await win.click('#set-kb button:has-text("إضافة مجلد")'); await win.waitForTimeout(600);
@@ -94,6 +95,13 @@ const top = (win, q) => win.evaluate((q) => window.blazma.kbSearch(q), q).then((
   await win.evaluate(() => window.blazma.kbReveal('/etc/passwd'));
   const shown = await app.evaluate(() => global.__shown);
   check('only indexed files are revealed', shown.length === 1 && shown[0].endsWith('meeting.txt'), JSON.stringify(shown));
+  // The source still opens the file after the chat is reopened (it is saved with the chat).
+  await win.waitForTimeout(800);
+  await win.reload(); await win.waitForLoadState('load'); await ready(win);
+  await win.click('.chat-item >> nth=0'); await win.waitForTimeout(600);
+  await win.locator('.msg-ai .kb-source:has-text("meeting.txt")').first().click(); await win.waitForTimeout(300);
+  const shown2 = await app.evaluate(() => global.__shown);
+  check('source opens the file after reopening the chat', shown2.length === 2 && shown2[1].endsWith('meeting.txt'), JSON.stringify(shown2));
 
   // Removing a folder forgets its files.
   await win.evaluate((p) => window.blazma.kbRemoveFolder(p), DOCS);

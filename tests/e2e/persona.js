@@ -9,7 +9,7 @@ const idle = async (win) => { await win.waitForTimeout(1200); await win.waitForS
   fs.rmSync(SP + '/e2e-home/Blazma AI/personas.json', { force: true });
   let app = await launch(); let win = await app.firstWindow(); await win.waitForLoadState('load');
   const logs = []; win.on('pageerror', e => logs.push('pageerror: ' + e.message)); win.on('console', m => m.type() === 'error' && logs.push('console: ' + m.text().slice(0, 200)));
-  win.on('dialog', d => d.accept());
+  win.on('dialog', d => d.accept()); await win.evaluate(() => new MutationObserver(() => { const b = document.querySelector('.dlg-ok'); if (b) b.click(); }).observe(document.body, { childList: true })); // accept in-app confirmations (lib/dialog.js)
   await ready(win);
   await win.evaluate(() => { localStorage.removeItem('blazma.persona'); window.blazma.updateSettings({ webSearch: false }); });
   await win.evaluate(() => { window.__reqs = []; const f = window.fetch; window.fetch = (u, o) => { if (o && o.body) window.__reqs.push(JSON.parse(o.body)); return f(u, o); }; });

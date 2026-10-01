@@ -4,6 +4,7 @@
 
 import { ar, formatBytes } from '../i18n/ar.js';
 import { el } from '../lib/dom.js';
+import { confirmDialog } from '../lib/dialog.js';
 
 const M = ar.modelsPage;
 const $ = (id) => document.getElementById(id);
@@ -88,7 +89,7 @@ function modelCard(m) {
           type: 'button',
           class: 'btn ghost',
           onclick: async () => {
-            if (!window.confirm(M.confirmDelete(m.name))) return;
+            if (!(await confirmDialog({ text: M.confirmDelete(m.name), ok: M.deleteLocal, danger: true }))) return;
             const res = await window.blazma.modelsDelete(m.id);
             notice = res.ok ? null : M.inUse;
             refresh();
@@ -106,7 +107,7 @@ function modelCard(m) {
           type: 'button',
           class: 'btn ghost',
           onclick: async () => {
-            if (!window.confirm(M.confirmRemoveCustom(m.name))) return;
+            if (!(await confirmDialog({ text: M.confirmRemoveCustom(m.name), danger: true }))) return;
             const res = await window.blazma.modelsRemoveCustom(m.id);
             notice = res.ok ? null : M.inUse;
             refresh();

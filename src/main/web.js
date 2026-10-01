@@ -74,14 +74,35 @@ async function search(query) {
 
 // ---------- open a page ----------
 
+// IPv6 text (any form: "::1", "::ffff:127.0.0.1", "::ffff:7f00:1") to its
+// eight 16-bit groups.
+function ipv6Groups(ip) {
+  let v = ip.toLowerCase().split('%')[0];
+  const dotted = /(\d+\.\d+\.\d+\.\d+)$/.exec(v);
+  if (dotted) {
+    const [a, b, c, d] = dotted[1].split('.').map(Number);
+    v = `${v.slice(0, -dotted[1].length)}${((a << 8) | b).toString(16)}:${((c << 8) | d).toString(16)}`;
+  }
+  const [head, tail] = v.split('::');
+  const h = head ? head.split(':') : [];
+  const t = tail !== undefined && tail ? tail.split(':') : [];
+  const fill = v.includes('::') ? 8 - h.length - t.length : 0;
+  const groups = [...h, ...Array(Math.max(0, fill)).fill('0'), ...t].map((g) => parseInt(g || '0', 16));
+  return groups.length === 8 && groups.every((g) => g >= 0 && g <= 0xffff) ? groups : null;
+}
+
 function isPrivateAddress(ip) {
   if (net.isIPv4(ip)) {
     const [a, b] = ip.split('.').map(Number);
     return a === 10 || a === 127 || a === 0 || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168) || (a === 100 && b >= 64 && b <= 127) || a >= 224;
   }
-  const v = ip.toLowerCase();
-  if (v.startsWith('::ffff:')) return isPrivateAddress(v.slice(7));
-  return v === '::1' || v === '::' || v.startsWith('fc') || v.startsWith('fd') || v.startsWith('fe80');
+  const g = ipv6Groups(ip);
+  if (!g) return true; // unreadable: refuse
+  const v4 = (hi, lo) => `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`;
+  // IPv4 inside IPv6: mapped (::ffff:a.b.c.d), compatible (::a.b.c.d), NAT64 (64:ff9b::a.b.c.d).
+  if (g.slice(0, 5).every((x) => x === 0) && (g[5] === 0xffff || g[5] === 0)) return g[6] === 0 && g[7] <= 1 && g[5] === 0 ? true : isPrivateAddress(v4(g[6], g[7]));
+  if (g[0] === 0x64 && g[1] === 0xff9b) return isPrivateAddress(v4(g[6], g[7]));
+  return (g[0] & 0xfe00) === 0xfc00 || (g[0] & 0xffc0) === 0xfe80 || (g[0] & 0xff00) === 0xff00;
 }
 
 // The URL comes from the model, so only public http(s) hosts are allowed:
