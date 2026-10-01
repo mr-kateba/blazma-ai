@@ -28,6 +28,7 @@ function decodeText(buf) {
 
 const RTL_CHAR = /[\u0590-\u08FF\uFB1D-\uFDFF\uFE70-\uFEFF]/;
 const STRONG_LTR = /[A-Za-z0-9\u00C0-\u024F]/;
+const LTR_LETTER = /[A-Za-z\u00C0-\u024F]/; // digits do not decide a line's direction
 
 // PDFs store text by position, often one glyph per item and in visual
 // (left-to-right) order, which turns Arabic into reversed, spaced-out
@@ -59,8 +60,12 @@ function layoutPage(items) {
       }
       const text = tokens.map((t) => (t.space ? ' ' : t.str)).join('');
       const rtlCount = (text.match(new RegExp(RTL_CHAR.source, 'g')) || []).length;
-      const ltrCount = (text.match(new RegExp(STRONG_LTR.source, 'g')) || []).length;
-      if (rtlCount <= ltrCount) return text.replace(/ {2,}/g, ' ').trim();
+      const ltrCount = (text.match(new RegExp(LTR_LETTER.source, 'g')) || []).length;
+      // Mostly Arabic letters (digits are neutral); on a tie, the strong
+      // character furthest right decides, as it starts a right-to-left line.
+      const strong = [...text].filter((c) => RTL_CHAR.test(c) || LTR_LETTER.test(c));
+      const rightmostRtl = strong.length > 0 && RTL_CHAR.test(strong[strong.length - 1]);
+      if (rtlCount < ltrCount || (rtlCount === ltrCount && !rightmostRtl) || !rtlCount) return text.replace(/ {2,}/g, ' ').trim();
       // Right-to-left line: group consecutive non-RTL tokens (Latin, digits and
       // the spaces/punctuation between them) into runs that keep their order,
       // then read everything from right to left.
@@ -88,6 +93,8 @@ function layoutPage(items) {
           .replace(/ {2,}/g, ' ')
           // Arabic diacritics (tanween, shadda…) attach to the letter before them.
           .replace(/ +([\u064B-\u065F\u0670])/g, '$1')
+          // A diacritic can land before its letter at the start of a word.
+          .replace(/(^|\s)([\u064B-\u065F\u0670]+)([^\s\u064B-\u065F\u0670])/g, '$1$3$2')
           .trim()
       );
     })

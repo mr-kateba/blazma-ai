@@ -6,6 +6,7 @@ import { el, detectDir } from '../lib/dom.js';
 import { renderMarkdown } from '../lib/markdown.js';
 import { readSse } from '../lib/sse.js';
 import { store } from '../lib/store.js';
+import { loadPersonas, personaById, openPersonaMenu } from './personas.js';
 
 // Today's date and time in Arabic (Gregorian and Umm al-Qura Hijri), with
 // Western digits to match the rest of the app.
@@ -47,6 +48,13 @@ const MAX_FILES = 5;
 // inside the model's context (the rest of the context is for the chat).
 const CHARS_PER_TOKEN = 3;
 const FILE_SHARE = 0.6;
+let currentPersonaId = (() => {
+  try {
+    return localStorage.getItem('blazma.persona') || 'general';
+  } catch {
+    return 'general';
+  }
+})();
 let pendingFiles = []; // { name, kind, text, chars, pages, truncated } or { name, reading: true }
 const MAX_IMAGE_SIDE = 1536;
 let speed = 0;
@@ -237,7 +245,7 @@ function openModelMenu() {
   const items = setupState.models.filter((m) => m.downloaded);
   const menu = el(
     'div',
-    { class: 'model-menu', role: 'menu' },
+    { class: 'model-menu model-switch', role: 'menu' },
     el('div', { class: 'model-menu-head' }, ar.chat.switchModel),
     ...items.map((m) => {
       const current = m.id === setupState.modelId;
@@ -269,7 +277,7 @@ function outsideModelMenu(e) {
 }
 
 function closeModelMenu() {
-  const menu = document.querySelector('.model-menu');
+  const menu = document.querySelector('.model-switch');
   if (menu) menu.remove();
   document.removeEventListener('mousedown', outsideModelMenu);
 }
@@ -730,7 +738,8 @@ async function generate() {
   if (!conn) return;
   const chatSettings = await window.blazma.getChatSettings();
   const webOn = Boolean(chatSettings.webSearch);
-  let system = `${chatSettings.systemPrompt}\n\n${dateContext(webOn)}`;
+  const persona = personaById(currentPersonaId);
+  let system = `${persona.prompt || chatSettings.systemPrompt}\n\n${dateContext(webOn)}`;
   if (chatSettings.shareDeviceInfo) {
     const summary = await window.blazma.deviceSummary().catch(() => null);
     if (summary) system += `\n\n${ar.chat.deviceContext(summary)}`;
@@ -853,10 +862,103 @@ function saveEdit(index, text) {
 
 // ---------- saved conversations ----------
 
+function renderPersonaPill() {
+  const p = personaById(currentPersonaId);
+  $('persona-pill').textContent = `${p.icon} ${p.name} ▾`;
+}
+
+function setPersona(id, { remember = true } = {}) {
+  currentPersonaId = personaById(id).id;
+  renderPersonaPill();
+  if (remember) {
+    try {
+      localStorage.setItem('blazma.persona', currentPersonaId);
+    } catch {
+      /* not critical */
+    }
+    if (currentChatId && messages.length) persist();
+  }
+}
+
+// ---------- export ----------
+
+function chatTitle() {
+  const first = messages.find((m) => m.role === 'user' && m.content.trim());
+  return first ? first.content.replace(/\s+/g, ' ').trim().slice(0, 60) : ar.chat.untitled;
+}
+
+function exportMarkdown() {
+  const lines = [`# ${chatTitle()}`, '', `_${ar.chat.exportedOn(new Date().toLocaleString('ar'))}_`, ''];
+  for (const m of messages) {
+    if (m.role === 'user') {
+      lines.push(`## ${ar.chat.you}`, '');
+      if (m.files && m.files.length) lines.push(`📎 ${m.files.map((f) => f.name).join('، ')}`, '');
+      if (m.images && m.images.length) lines.push(`🖼 ${ar.chat.imagesCount(m.images.length)}`, '');
+      lines.push(m.content || '', '');
+    } else if (m.content || m.error) {
+      lines.push(`## ${ar.chat.assistantName}`, '', m.content || m.error, '');
+      if (m.sources && m.sources.length) lines.push(`${ar.chat.sources}:`, ...m.sources.map((src) => `- [${src.title || src.url}](${src.url})`), '');
+    }
+  }
+  return lines.join('\n');
+}
+
+function exportHtml() {
+  const mdLabels = { copy: ar.actions.copy, copied: ar.actions.copied, code: ar.chat.code };
+  const box = document.createElement('div');
+  box.append(el('h1', null, chatTitle()), el('div', { class: 'meta' }, ar.chat.exportedOn(new Date().toLocaleString('ar'))));
+  for (const m of messages) {
+    if (m.role !== 'user' && !m.content && !m.error) continue;
+    const body = el('div', { class: `msg ${m.role === 'user' ? 'user' : 'assistant'}` }, el('div', { class: 'who' }, m.role === 'user' ? ar.chat.you : ar.chat.assistantName));
+    if (m.role === 'user') {
+      if (m.files && m.files.length) body.append(el('div', { class: 'files' }, `📎 ${m.files.map((f) => f.name).join('، ')}`));
+      for (const src of m.images || []) body.append(el('img', { src, alt: '' }));
+      body.append(el('div', { dir: 'auto' }, ...String(m.content || '').split('\n').flatMap((l, i) => (i ? [el('br'), l] : [l]))));
+    } else body.append(renderMarkdown(m.content || m.error, mdLabels));
+    box.append(body);
+  }
+  return box.innerHTML;
+}
+
+async function exportChat(format) {
+  if (!messages.length) return;
+  const res = await window.blazma.exportChat({ title: chatTitle(), format, markdown: format === 'md' ? exportMarkdown() : '', html: format === 'pdf' ? exportHtml() : '' });
+  if (res.ok && res.result.saved) showComposerNote(ar.chat.exported);
+}
+
+function openExportMenu() {
+  const old = document.querySelector('.export-menu');
+  if (old) {
+    old.remove();
+    return;
+  }
+  const btn = $('btn-export-chat');
+  const item = (label, format) => {
+    const b = el('button', { type: 'button', class: 'model-menu-item' }, label);
+    b.addEventListener('click', () => {
+      menu.remove();
+      exportChat(format);
+    });
+    return b;
+  };
+  const menu = el('div', { class: 'model-menu export-menu', role: 'menu' }, item(ar.chat.exportMd, 'md'), item(ar.chat.exportPdf, 'pdf'));
+  const r = btn.getBoundingClientRect();
+  menu.style.top = `${r.bottom + 6}px`;
+  menu.style.left = `${r.left}px`;
+  document.body.append(menu);
+  const off = (e) => {
+    if (!e.target.closest('.export-menu') && !e.target.closest('#btn-export-chat')) {
+      menu.remove();
+      document.removeEventListener('mousedown', off);
+    }
+  };
+  setTimeout(() => document.addEventListener('mousedown', off), 0);
+}
+
 async function persist() {
   if (!messages.some((m) => m.role === 'user')) return;
   if (!currentChatId) currentChatId = crypto.randomUUID();
-  await window.blazma.chatsSave({ id: currentChatId, messages, fallbackTitle: ar.chat.untitled });
+  await window.blazma.chatsSave({ id: currentChatId, messages, personaId: currentPersonaId, fallbackTitle: ar.chat.untitled });
   refreshList();
 }
 
@@ -877,6 +979,7 @@ async function loadChat(id) {
   currentChatId = chat.id;
   editingIndex = null;
   messages = chat.messages;
+  setPersona(chat.personaId || 'general', { remember: false });
   renderMessages();
   highlightCurrent();
 }
@@ -961,7 +1064,11 @@ function autoGrow(textarea) {
 
 export function initChat() {
   const input = $('chat-input');
-  $('model-pill').addEventListener('click', () => (document.querySelector('.model-menu') ? closeModelMenu() : openModelMenu()));
+  $('model-pill').addEventListener('click', () => (document.querySelector('.model-switch') ? closeModelMenu() : openModelMenu()));
+  $('persona-pill').addEventListener('click', (e) => openPersonaMenu(e.currentTarget, currentPersonaId, (id) => setPersona(id)));
+  $('btn-export-chat').title = ar.chat.exportTitle;
+  $('btn-export-chat').addEventListener('click', openExportMenu);
+  loadPersonas().then(renderPersonaPill);
   input.placeholder = ar.chat.placeholder;
   input.addEventListener('input', () => autoGrow(input));
   input.addEventListener('keydown', (e) => {
