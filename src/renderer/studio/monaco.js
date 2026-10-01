@@ -8,6 +8,10 @@ import { el } from '../lib/dom.js';
 import { languageOf } from './highlight.js';
 
 const BASE = 'vendor/monaco/vs';
+// The app's light/dark choice reaches the page as prefers-color-scheme.
+const lightQuery = window.matchMedia('(prefers-color-scheme: light)');
+const monacoTheme = () => (lightQuery.matches ? 'vs' : 'vs-dark');
+
 const MONACO_LANG = { html: 'html', js: 'javascript', css: 'css', json: 'json', md: 'markdown', python: 'python', text: 'plaintext' };
 const FONT = "'Cascadia Mono', Consolas, 'Plex Arabic Code', 'Courier New', monospace";
 
@@ -58,9 +62,10 @@ export function createMonacoEditor(monaco, labels, { onChange, onCursor, onMarke
   const overflow = el('div', { class: 'monaco-editor mon-overflow', dir: 'ltr' });
   document.body.append(overflow);
 
+  lightQuery.addEventListener('change', () => monaco.editor.setTheme(monacoTheme()));
   const editor = monaco.editor.create(host, {
     model: null,
-    theme: 'vs-dark',
+    theme: monacoTheme(),
     fontFamily: FONT,
     fontSize: 14,
     lineHeight: 20,
@@ -229,7 +234,7 @@ export function createMonacoEditor(monaco, labels, { onChange, onCursor, onMarke
       const original = monaco.editor.createModel(before, lang);
       const modified = monaco.editor.createModel(after, lang);
       const diff = monaco.editor.createDiffEditor(container, {
-        theme: 'vs-dark',
+        theme: monacoTheme(),
         readOnly: true,
         automaticLayout: true,
         fontFamily: FONT,

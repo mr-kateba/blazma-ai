@@ -1,0 +1,43 @@
+const { _electron } = require('playwright-core');
+const { execSync } = require('child_process');
+const SP = process.argv[2], root = require('path').resolve(__dirname, '../..');
+const env = { ...process.env, PATH: `${SP}/fakebin:${process.env.PATH}`, XDG_CONFIG_HOME: SP + '/e2e-home', BLAZMA_LLAMA_SERVER: SP + '/llama.cpp/build/bin/llama-server', BLAZMA_HF_ENDPOINT: 'http://127.0.0.1:18999' };
+const phase = (win) => win.evaluate(() => window.blazma.getSetupState().then((s) => s.phase + ':' + s.modelId));
+(async () => {
+  const app = await _electron.launch({ executablePath: root + '/node_modules/electron/dist/electron', args: [root, '--no-sandbox'], cwd: root, env });
+  const win = await app.firstWindow(); await win.waitForLoadState('load');
+  const logs = []; win.on('pageerror', (e) => logs.push('pageerror: ' + e.message)); win.on('console', (m) => m.type() === 'error' && logs.push('console: ' + m.text().slice(0, 200)));
+  await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setSize(1366, 860));
+  for (let i = 0; i < 300 && !(await phase(win)).startsWith('ready'); i++) await win.waitForTimeout(300);
+  await win.evaluate(() => { localStorage.removeItem('blazma.models.filter'); return window.blazma.updateSettings({ gpuLayers: -1 }); });
+  const st = await win.evaluate(() => window.blazma.getSetupState());
+  console.log('models:', st.models.length, 'recommended:', st.recommendedId);
+  console.log('fit levels:', st.models.map((m) => `${m.id}=${m.fit}`).join(' '));
+  await win.click('.nav-item[data-page="models"]'); await win.waitForTimeout(800); await win.mouse.move(5, 5);
+  console.log('chips:', (await win.locator('.model-filters .chip').allInnerTexts()).map((t) => t.replace(/\s+/g, ' ')).join(' | '));
+  console.log('groups:', (await win.locator('.model-group-title').allInnerTexts()).join(' | '));
+  await win.screenshot({ path: SP + '/cat-1-all.png' });
+  await win.click('.model-filters .chip:has-text("صينية")'); await win.waitForTimeout(300); await win.mouse.move(5, 5);
+  console.log('chinese:', (await win.locator('.model-card .model-option-head b').allInnerTexts()).join(', '));
+  await win.screenshot({ path: SP + '/cat-2-cn.png' });
+  await win.click('.model-filters .chip:has-text("تتقن العربية")'); await win.waitForTimeout(300);
+  console.log('arabic:', (await win.locator('.model-card .model-option-head b').allInnerTexts()).join(', '));
+  await win.click('.model-filters .chip:has-text("للبرمجة")'); await win.waitForTimeout(300);
+  console.log('code:', (await win.locator('.model-card .model-option-head b').allInnerTexts()).join(', '));
+  await win.click('.model-filters .chip:has-text("الكل")'); await win.waitForTimeout(300);
+  // download and run a new model through the app (mock mirror serves the real 0.8B file)
+  await win.locator('.model-card', { hasText: 'Qwen3.5 0.8B' }).locator('.btn.primary').click();
+  for (let i = 0; i < 400 && (await phase(win)) !== 'ready:qwen3.5-0.8b'; i++) await win.waitForTimeout(500);
+  console.log('phase:', await phase(win));
+  console.log('server args:', execSync('pgrep -af "[l]lama-server" || true').toString().replace(/.*llama-server/, '').trim().replace(/--api-key \S+/, '--api-key ***'));
+  await win.click('.nav-item[data-page="chat"]'); await win.click('#btn-new-chat');
+  await win.fill('#chat-input', 'ما عاصمة مصر؟ أجب بكلمة.'); await win.press('#chat-input', 'Enter');
+  await win.waitForTimeout(1500); await win.waitForSelector('#btn-send:not([hidden])', { timeout: 300000 }); await win.waitForTimeout(500);
+  console.log('answer:', (await win.locator('.msg-ai .msg-body').last().innerText()).slice(0, 120));
+  // back to the tested default
+  await win.evaluate(() => window.blazma.modelsUse('qwen3.5-2b'));
+  for (let i = 0; i < 400 && (await phase(win)) !== 'ready:qwen3.5-2b'; i++) await win.waitForTimeout(500);
+  console.log('restored:', await phase(win));
+  console.log(logs.join('\n') || 'no errors');
+  await app.close();
+})().catch((e) => { console.error('FAIL', e); process.exit(1); });

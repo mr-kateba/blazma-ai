@@ -1,0 +1,26 @@
+#!/bin/bash
+# Fake nvidia-smi for UI tests only. Temperature and throttle come from files.
+S=$(dirname "$0")
+TEMP=$(cat "$S/temp" 2>/dev/null || echo 62)
+THERM=$(cat "$S/thermal" 2>/dev/null || echo "Not Active")
+case "$*" in
+  "-L") echo "GPU 0: NVIDIA GeForce RTX 5070 (UUID: GPU-00000000-0000-0000-0000-000000000000)";;
+  "--help-query-gpu") for f in index name driver_version utilization.gpu utilization.memory memory.used memory.total power.draw enforced.power.limit power.limit temperature.gpu fan.speed clocks.gr clocks.mem clocks.max.gr clocks.max.mem pstate clocks_event_reasons.gpu_idle clocks_event_reasons.sw_power_cap clocks_event_reasons.hw_slowdown clocks_event_reasons.hw_thermal_slowdown clocks_event_reasons.sw_thermal_slowdown clocks_event_reasons.hw_power_brake_slowdown; do echo "\"$f\""; echo "Description of $f."; echo; done;;
+  "--query-gpu=index,name,memory.total,driver_version --format=csv,noheader,nounits") echo "0, NVIDIA GeForce RTX 5070, 12227, 580.97";;
+  "") echo "| NVIDIA-SMI 580.97   Driver Version: 580.97   CUDA Version: 13.0 |";;
+  "-q -d TEMPERATURE -i 0") printf "Temperature\n    GPU Current Temp                  : %s C\n    GPU T.Limit Temp                  : 20 C\n    GPU Shutdown Temp                 : 98 C\n    GPU Slowdown Temp                 : 95 C\n    GPU Max Operating Temp            : 85 C\n    GPU Target Temperature            : N/A\n" "$TEMP";;
+  --query-compute-apps*) echo "$(pgrep -f 'build/bin/llama-server -hf' | head -1), [N/A]";;
+  --query-gpu=*-lms*)
+    MS=$(echo "$*" | sed -E 's/.*-lms ([0-9]+).*/\1/')
+    while true; do
+      U=$(( RANDOM % 60 + 30 )); TEMP=$(cat "$S/temp" 2>/dev/null || echo 62); THERM=$(cat "$S/thermal" 2>/dev/null || echo "Not Active")
+      echo "$U, 20, 7512, 12227, $(( 120 + RANDOM % 90 )).42, 250.00, $TEMP, [N/A], 2610, 14001, 3090, 14001, P2, Not Active, Active, Not Active, $THERM, Not Active, Not Active"
+      echo "$(date +%s%N) lms" >> "$S/lms.log"
+      sleep $(awk "BEGIN{print $MS/1000}")
+    done;;
+  --query-gpu=*)
+    U=$(( RANDOM % 60 + 30 ))
+    # utilization.gpu, utilization.memory, memory.used, memory.total, power.draw, enforced.power.limit, temperature.gpu, fan.speed, clocks.gr, clocks.mem, clocks.max.gr, clocks.max.mem, pstate, 6 reasons
+    echo "$U, 20, 7512, 12227, $(( 120 + RANDOM % 90 )).42, 250.00, $TEMP, [N/A], 2610, 14001, 3090, 14001, P2, Not Active, Active, Not Active, $THERM, Not Active, Not Active";;
+  *) echo "unknown: $*" >&2; exit 1;;
+esac

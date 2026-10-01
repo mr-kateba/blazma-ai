@@ -6,6 +6,8 @@ import { el, detectDir } from '../lib/dom.js';
 import { renderMarkdown } from '../lib/markdown.js';
 import { readSse } from '../lib/sse.js';
 import { store } from '../lib/store.js';
+import { speak, stopSpeaking } from '../lib/speech.js';
+import { startRecording } from '../lib/recorder.js';
 import { loadPersonas, personaById, openPersonaMenu } from './personas.js';
 
 // Today's date and time in Arabic (Gregorian and Umm al-Qura Hijri), with
@@ -309,7 +311,8 @@ function renderStatus(state) {
             ? 'error'
             : 'busy';
   pill.dataset.status = key;
-  pill.lastChild.textContent = ar.status[key];
+  pill.lastChild.textContent = key === 'ready' && state.sleeping ? ar.status.sleeping : ar.status[key];
+  pill.title = key === 'ready' && state.sleeping ? ar.status.sleepingHint : '';
 
   const engineNote = $('engine-note');
   const fb = state.engine && state.engine.fallbackFrom && state.engine.fallbackFrom.length;
@@ -361,6 +364,21 @@ function messageNode(msg, index) {
   if (isUser && msg.images && msg.images.length) {
     body.append(el('div', { class: 'msg-images' }, ...msg.images.map((src) => el('img', { src, alt: '' }))));
   }
+  // An image made by the image model, with a save button.
+  if (!isUser && msg.images && msg.images.length) {
+    body.append(
+      el(
+        'div',
+        { class: 'gen-images' },
+        ...msg.images.map((src) => {
+          const saveBtn = el('button', { type: 'button', class: 'btn ghost small' }, ar.chat.saveImage);
+          saveBtn.addEventListener('click', () => window.blazma.imagesSave(src));
+          return el('figure', { class: 'gen-image' }, el('img', { src, alt: msg.imagePrompt || '' }), saveBtn);
+        }),
+      ),
+    );
+  }
+  if (!isUser && msg.generatingImage) body.append(el('p', { class: 'muted pulse' }, ar.chat.imageWorking));
   if (isUser && msg.files && msg.files.length) {
     body.append(el('div', { class: 'msg-files' }, ...msg.files.map((f) => fileChip(f))));
   }
@@ -411,7 +429,9 @@ function messageNode(msg, index) {
         ...unique.map((src) =>
           el(
             'button',
-            { type: 'button', class: 'source', title: src.url, dir: 'auto', onclick: () => window.blazma.openExternal(src.url) },
+            src.file
+              ? { type: 'button', class: 'source kb-source', title: src.file, dir: 'auto', onclick: () => window.blazma.kbReveal(src.file) }
+              : { type: 'button', class: 'source', title: src.url, dir: 'auto', onclick: () => window.blazma.openExternal(src.url) },
             src.title || new URL(src.url).hostname,
           ),
         ),
@@ -432,16 +452,34 @@ function messageNode(msg, index) {
       }),
     );
     if (msg.content) footer.append(copy);
+    if (!isUser && msg.content) footer.append(listenButton(msg));
     if (!abortController) {
       if (isUser) footer.append(el('button', { type: 'button', class: 'icon-btn', onclick: () => startEdit(index) }, ar.chat.edit));
       else if (index === messages.length - 1) footer.append(el('button', { type: 'button', class: 'icon-btn', onclick: regenerate }, ar.chat.regenerate));
     }
+    if (msg.alts && msg.alts.length > 1) footer.append(branchNav(msg, index));
     if (msg.timings && msg.timings.predicted_per_second) {
       footer.append(el('span', { class: 'stats', dir: 'rtl' }, ar.chat.speed(msg.timings.predicted_per_second, msg.timings.predicted_n)));
     }
   }
 
   return el('div', { class: `msg ${isUser ? 'msg-user' : 'msg-ai'}`, 'data-index': index }, body, footer);
+}
+
+// "استمع": reads the reply with a Windows voice; a second click stops it.
+function listenButton(msg) {
+  const b = el('button', { type: 'button', class: 'icon-btn' }, ar.chat.listen);
+  b.addEventListener('speech-end', () => (b.textContent = ar.chat.listen));
+  b.addEventListener('click', async () => {
+    const res = await speak(msg.content, b);
+    if (!res.ok) {
+      b.textContent = ar.chat.listen;
+      showComposerNote(ar.chat.noVoice[res.reason], 9000);
+      return;
+    }
+    b.textContent = b.textContent === ar.chat.listen ? ar.chat.stopListen : ar.chat.listen;
+  });
+  return b;
 }
 
 // Welcome screen with starting suggestions; a click puts the text in the
@@ -750,12 +788,27 @@ async function generate() {
   const webOn = Boolean(chatSettings.webSearch);
   const persona = personaById(currentPersonaId);
   let system = `${persona.prompt || chatSettings.systemPrompt}\n\n${dateContext(webOn)}`;
+  // "مكتبتي": the passages of the user's documents closest to the question.
+  let kbPassages = [];
+  const lastUser = [...messages].reverse().find((m) => m.role === 'user');
+  if (chatSettings.kbInChat && lastUser && lastUser.content.trim()) {
+    const res = await window.blazma.kbSearch(lastUser.content);
+    if (res.ok) kbPassages = res.result;
+    if (kbPassages.length) system += `\n\n${ar.chat.kbContext(kbPassages.map((p, i) => `[${i + 1}] (${p.name})\n${p.text}`).join('\n\n'))}`;
+  }
   if (chatSettings.shareDeviceInfo) {
     const summary = await window.blazma.deviceSummary().catch(() => null);
     if (summary) system += `\n\n${ar.chat.deviceContext(summary)}`;
   }
 
-  const reply = { role: 'assistant', content: '', reasoning: '', streaming: true, thinkStart: Date.now(), steps: [], sources: [] };
+  const reply = { role: 'assistant', content: '', reasoning: '', streaming: true, thinkStart: Date.now(), steps: [], sources: kbPassages.map((p) => ({ title: p.name, url: `file:${p.file}`, file: p.file })) };
+  // A regenerated reply becomes a new branch next to the earlier ones.
+  if (pendingBranch && pendingBranch.index === messages.length) {
+    reply.alts = pendingBranch.alts;
+    reply.altIndex = pendingBranch.alts.length;
+    reply.alts.push([]);
+  }
+  pendingBranch = null;
   messages.push(reply);
   renderLast();
   setBusy(true);
@@ -851,10 +904,122 @@ async function generate() {
   }
 }
 
+// ---------- image generation ----------
+
+let imageBusy = false;
+
+// The image model reads English best, so an Arabic description is first
+// translated by the chat model (while it is still loaded).
+async function englishPrompt(text) {
+  if (detectDir(text) !== 'rtl') return text;
+  const conn = await window.blazma.getConnection();
+  if (!conn) return text;
+  try {
+    const res = await fetch(`http://127.0.0.1:${conn.port}/v1/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${conn.apiKey}` },
+      body: JSON.stringify({
+        messages: [
+          { role: 'system', content: 'Translate the user\'s image description into one detailed English prompt for an image generator. Reply with the English prompt only.' },
+          { role: 'user', content: text },
+        ],
+        max_tokens: 300,
+        temperature: 0.3,
+        chat_template_kwargs: { enable_thinking: false },
+      }),
+    });
+    const json = await res.json();
+    const out = json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content;
+    return out && out.trim() ? out.trim() : text;
+  } catch {
+    return text;
+  }
+}
+
+async function makeImage(text) {
+  imageBusy = true;
+  setBusy(true);
+  if (!messages.length) $('chat-log').replaceChildren();
+  messages.push({ role: 'user', content: `${ar.chat.imagePrefix} ${text}` });
+  const reply = { role: 'assistant', content: '', generatingImage: true };
+  messages.push(reply);
+  renderMessages();
+  try {
+    const prompt = await englishPrompt(text);
+    const res = await window.blazma.imagesGenerate(prompt);
+    if (res.ok) {
+      reply.images = [res.result.dataUrl];
+      reply.imagePrompt = prompt;
+      reply.content = ar.chat.imageDone(res.result.size);
+    } else reply.error = (ar.errors[res.error.code] || ar.errors.unknown).title;
+  } finally {
+    delete reply.generatingImage;
+    imageBusy = false;
+    setBusy(false);
+    renderMessages();
+    persist();
+  }
+}
+
+// ---------- branches ----------
+// Regenerating a reply or editing a message keeps the earlier version. The
+// message where the versions part holds `alts` (each a copy of the
+// conversation from that point on) and `altIndex` (the one shown).
+
+let pendingBranch = null; // { index, alts } for the reply generate() is about to add
+
+const copyTail = (tail) =>
+  tail.map((m, i) => {
+    const c = JSON.parse(JSON.stringify({ ...m, streaming: false }));
+    if (i === 0) {
+      delete c.alts;
+      delete c.altIndex;
+    }
+    return c;
+  });
+
+// Writes what is shown back into its slot at every branch point (from the
+// end, so an outer copy includes the inner branches).
+function syncBranches() {
+  for (let k = messages.length - 1; k >= 0; k--) {
+    const m = messages[k];
+    if (m.alts) m.alts[m.altIndex] = copyTail(messages.slice(k));
+  }
+}
+
+function branchesAt(k) {
+  syncBranches();
+  return messages[k].alts || [copyTail(messages.slice(k))];
+}
+
+function switchBranch(k, to) {
+  if (abortController) return;
+  syncBranches();
+  const alts = messages[k].alts;
+  if (!alts || !alts[to] || !alts[to].length) return;
+  const tail = JSON.parse(JSON.stringify(alts[to]));
+  tail[0].alts = alts;
+  tail[0].altIndex = to;
+  messages = [...messages.slice(0, k), ...tail];
+  renderMessages();
+  persist();
+}
+
+function branchNav(msg, index) {
+  const n = msg.alts.length;
+  const prev = el('button', { type: 'button', class: 'icon-btn', title: ar.chat.prevBranch, 'aria-label': ar.chat.prevBranch, disabled: msg.altIndex === 0 }, '›');
+  const next = el('button', { type: 'button', class: 'icon-btn', title: ar.chat.nextBranch, 'aria-label': ar.chat.nextBranch, disabled: msg.altIndex === n - 1 }, '‹');
+  prev.addEventListener('click', () => switchBranch(index, msg.altIndex - 1));
+  next.addEventListener('click', () => switchBranch(index, msg.altIndex + 1));
+  return el('span', { class: 'branch-nav', title: ar.chat.branchHint }, prev, el('span', { class: 'branch-count' }, `${msg.altIndex + 1}/${n}`), next);
+}
+
 // ---------- regenerate / edit ----------
 
 function regenerate() {
   if (abortController || !messages.length || messages[messages.length - 1].role !== 'assistant') return;
+  const index = messages.length - 1;
+  pendingBranch = { index, alts: branchesAt(index) };
   messages.pop();
   renderMessages();
   generate();
@@ -871,7 +1036,10 @@ function saveEdit(index, text) {
   const original = messages[index];
   if (!content && !(original.images && original.images.length)) return;
   editingIndex = null;
-  messages = [...messages.slice(0, index), { role: 'user', content, images: original.images || [], files: original.files || [] }];
+  const alts = branchesAt(index);
+  const edited = { role: 'user', content, images: original.images || [], files: original.files || [], alts, altIndex: alts.length };
+  alts.push([]);
+  messages = [...messages.slice(0, index), edited];
   renderMessages();
   generate();
 }
@@ -973,12 +1141,14 @@ function openExportMenu() {
 
 async function persist() {
   if (!messages.some((m) => m.role === 'user')) return;
+  syncBranches();
   if (!currentChatId) currentChatId = crypto.randomUUID();
   await window.blazma.chatsSave({ id: currentChatId, messages, personaId: currentPersonaId, fallbackTitle: ar.chat.untitled });
   refreshList();
 }
 
 function newChat() {
+  stopSpeaking();
   if (abortController) abortController.abort();
   currentChatId = null;
   editingIndex = null;
@@ -990,6 +1160,7 @@ function newChat() {
 
 async function loadChat(id) {
   if (abortController) return;
+  stopSpeaking();
   const chat = await window.blazma.chatsGet(id);
   if (!chat) return;
   currentChatId = chat.id;
@@ -1122,6 +1293,118 @@ export function initChat() {
   webBtn.addEventListener('click', async () => {
     const st = await window.blazma.updateSettings({ webSearch: webBtn.getAttribute('aria-pressed') !== 'true' });
     showWeb(st.webSearch);
+  });
+
+  // Image generation: the text in the box describes the picture.
+  const imgBtn = $('btn-image-gen');
+  imgBtn.title = ar.chat.imageGen;
+  imgBtn.setAttribute('aria-label', ar.chat.imageGen);
+  imgBtn.addEventListener('click', async () => {
+    const text = input.value.trim();
+    if (abortController || imageBusy) return;
+    if (!text) return showComposerNote(ar.chat.imageNeedText, 5000);
+    const st = await window.blazma.imagesStatus();
+    if (!st.program || !st.models) {
+      const plan = await window.blazma.imagesPlan();
+      const gb = plan.ok ? (plan.result.bytes / 1e9).toFixed(1) : '6.5';
+      if (!window.confirm(ar.chat.imageInstall(gb))) return;
+      imgBtn.disabled = true;
+      const off = window.blazma.onImagesProgress((p) => {
+        const box = $('attach-preview');
+        box.hidden = false;
+        box.replaceChildren(el('span', { class: 'muted small attach-note' }, ar.chat.imageDownloading(p.stage, p.total ? Math.floor((p.done / p.total) * 100) : 0)));
+      });
+      const res = await window.blazma.imagesInstall();
+      off();
+      imgBtn.disabled = false;
+      renderPreview();
+      if (!res.ok) return showComposerNote((ar.errors[res.error.code] || ar.errors.unknown).title, 6000);
+    }
+    input.value = '';
+    autoGrow(input);
+    await makeImage(text);
+  });
+
+  // Voice input: record, then whisper.cpp turns it into text in the input box.
+  const micBtn = $('btn-mic');
+  micBtn.title = ar.chat.mic;
+  micBtn.setAttribute('aria-label', ar.chat.mic);
+  let recording = null;
+  let micNote = null;
+  const setMicNote = (text) => {
+    if (micNote) micNote.remove();
+    micNote = null;
+    if (!text) return renderPreview();
+    const box = $('attach-preview');
+    box.hidden = false;
+    micNote = el('span', { class: 'muted small attach-note' }, text);
+    box.append(micNote);
+  };
+  micBtn.addEventListener('click', async () => {
+    if (recording) {
+      const rec = recording;
+      recording = null;
+      micBtn.classList.remove('recording');
+      micBtn.setAttribute('aria-pressed', 'false');
+      setMicNote(ar.chat.micConverting);
+      try {
+        const { wav, seconds } = await rec.stop();
+        if (seconds < 0.4) return setMicNote(null);
+        const res = await window.blazma.voiceTranscribe(wav);
+        setMicNote(null);
+        if (!res.ok) return showComposerNote((ar.errors[res.error.code] || ar.errors.unknown).title, 6000);
+        if (!res.result) return showComposerNote(ar.chat.micNothing, 4000);
+        const at = input.selectionStart ?? input.value.length;
+        const before = input.value.slice(0, at);
+        input.value = `${before}${before && !/\s$/.test(before) ? ' ' : ''}${res.result}${input.value.slice(at)}`;
+        autoGrow(input);
+        input.focus();
+      } catch {
+        setMicNote(null);
+        showComposerNote(ar.chat.micFailed, 5000);
+      }
+      return;
+    }
+    const st = await window.blazma.voiceStatus();
+    if (!st.program || !st.model) {
+      if (!window.confirm(ar.chat.micInstall(st.modelKind))) return;
+      micBtn.disabled = true;
+      const off = window.blazma.onVoiceProgress((p) => setMicNote(ar.chat.micDownloading(p.stage, p.total ? Math.floor((p.done / p.total) * 100) : 0)));
+      const res = await window.blazma.voiceInstall();
+      off();
+      micBtn.disabled = false;
+      setMicNote(null);
+      if (!res.ok) return showComposerNote((ar.errors[res.error.code] || ar.errors.unknown).title, 6000);
+    }
+    try {
+      recording = await startRecording();
+    } catch {
+      return showComposerNote(ar.chat.micDenied, 6000);
+    }
+    micBtn.classList.add('recording');
+    micBtn.setAttribute('aria-pressed', 'true');
+    setMicNote(ar.chat.micRecording);
+  });
+
+  // "مكتبتي" on/off, remembered in settings; without indexed files it opens
+  // the settings section where folders are added.
+  const kbBtn = $('btn-kb');
+  const showKb = (on) => {
+    kbBtn.setAttribute('aria-pressed', String(on));
+    kbBtn.title = on ? ar.chat.kbOn : ar.chat.kbOff;
+    kbBtn.setAttribute('aria-label', kbBtn.title);
+  };
+  window.blazma.getSettings().then((st) => showKb(st.kbInChat));
+  kbBtn.addEventListener('click', async () => {
+    const on = kbBtn.getAttribute('aria-pressed') !== 'true';
+    if (on && !(await window.blazma.kbStatus()).chunks) {
+      showComposerNote(ar.chat.kbEmpty, 6000);
+      window.dispatchEvent(new CustomEvent('blazma:show-page', { detail: 'settings' }));
+      setTimeout(() => document.getElementById('set-kb')?.scrollIntoView({ block: 'start' }), 400);
+      return;
+    }
+    const st = await window.blazma.updateSettings({ kbInChat: on });
+    showKb(st.kbInChat);
   });
 
   // Images: button, paste, or drag and drop onto the chat.

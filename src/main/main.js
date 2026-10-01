@@ -1,7 +1,8 @@
 'use strict';
 
 const path = require('node:path');
-const { app, BrowserWindow, Menu, Notification, session } = require('electron');
+const settings = require('./settings');
+const { app, BrowserWindow, Menu, Notification, nativeTheme, session } = require('electron');
 const { registerScheme, handleAppProtocol, handleStudioProtocol, setServerPort, APP_ORIGIN } = require('./protocol');
 const studio = require('./studio');
 const { registerIpc } = require('./ipc');
@@ -45,7 +46,7 @@ function createWindow() {
     minWidth: 960,
     minHeight: 620,
     title: 'Blazma AI',
-    backgroundColor: '#0e1014',
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0e1014' : '#f5f6f8',
     show: false,
     autoHideMenuBar: true,
     webPreferences: {
@@ -79,9 +80,13 @@ function hardenWebContents() {
     contents.setWindowOpenHandler(() => ({ action: 'deny' }));
   });
 
-  // The UI never needs camera, mic, notifications, etc.
-  session.defaultSession.setPermissionRequestHandler((_wc, _perm, callback) => callback(false));
-  session.defaultSession.setPermissionCheckHandler(() => false);
+  // Only the microphone, only for the app's own page, and only audio (the
+  // chat's voice input). No camera, notifications, location, etc.
+  const audioOnly = (types) => Array.isArray(types) && types.length > 0 && types.every((t) => t === 'audio');
+  session.defaultSession.setPermissionRequestHandler((_wc, perm, callback, details) =>
+    callback(perm === 'media' && String(details.requestingUrl || '').startsWith(`${APP_ORIGIN}/`) && audioOnly(details.mediaTypes)),
+  );
+  session.defaultSession.setPermissionCheckHandler((_wc, perm, origin, details) => perm === 'media' && origin === APP_ORIGIN && details.mediaType === 'audio');
 }
 
 if (!app.requestSingleInstanceLock()) {
@@ -112,6 +117,7 @@ if (!app.requestSingleInstanceLock()) {
     monitor.on('alerts', onAlerts);
     monitor.startBackground();
 
+    nativeTheme.themeSource = settings.get().theme;
     createWindow();
     setup.init();
   });
@@ -120,6 +126,8 @@ if (!app.requestSingleInstanceLock()) {
 
   // Never leave llama-server running (and holding GPU memory) after we exit.
   app.on('will-quit', () => {
+    require('./knowledge').stop();
+    require('./voice').stop();
     monitor.shutdown();
     setup.shutdownSync();
   });

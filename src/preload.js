@@ -28,6 +28,35 @@ contextBridge.exposeInMainWorld(
     stopServer: () => ipcRenderer.invoke('server:stop'),
     apiSetEnabled: (on) => ipcRenderer.invoke('api:setEnabled', Boolean(on)),
     apiNewKey: () => ipcRenderer.invoke('api:newKey'),
+    imagesStatus: () => ipcRenderer.invoke('images:status'),
+    imagesPlan: () => ipcRenderer.invoke('images:plan'),
+    imagesInstall: () => ipcRenderer.invoke('images:install'),
+    imagesGenerate: (prompt) => ipcRenderer.invoke('images:generate', { prompt: String(prompt) }),
+    imagesSave: (dataUrl) => ipcRenderer.invoke('images:save', String(dataUrl)),
+    onImagesProgress(cb) {
+      const listener = (_e, p) => cb(p);
+      ipcRenderer.on('images:progress', listener);
+      return () => ipcRenderer.removeListener('images:progress', listener);
+    },
+    voiceStatus: () => ipcRenderer.invoke('voice:status'),
+    voiceInstall: () => ipcRenderer.invoke('voice:install'),
+    voiceTranscribe: (wav) => ipcRenderer.invoke('voice:transcribe', wav),
+    onVoiceProgress(cb) {
+      const listener = (_e, p) => cb(p);
+      ipcRenderer.on('voice:progress', listener);
+      return () => ipcRenderer.removeListener('voice:progress', listener);
+    },
+    kbStatus: () => ipcRenderer.invoke('kb:status'),
+    kbAddFolder: () => ipcRenderer.invoke('kb:addFolder'),
+    kbRemoveFolder: (folder) => ipcRenderer.invoke('kb:removeFolder', String(folder)),
+    kbUpdate: () => ipcRenderer.invoke('kb:update'),
+    kbSearch: (question) => ipcRenderer.invoke('kb:search', String(question)),
+    kbReveal: (file) => ipcRenderer.invoke('kb:reveal', String(file)),
+    onKbProgress(cb) {
+      const listener = (_e, p) => cb(p);
+      ipcRenderer.on('kb:progress', listener);
+      return () => ipcRenderer.removeListener('kb:progress', listener);
+    },
     getConnection: () => ipcRenderer.invoke('server:getConnection'),
     getChatSettings: () => ipcRenderer.invoke('chat:getSettings'),
     webSearch: (query) => ipcRenderer.invoke('web:search', String(query)),
@@ -62,6 +91,13 @@ contextBridge.exposeInMainWorld(
     extractFile: (name, bytes) => ipcRenderer.invoke('files:extract', String(name), bytes),
     checkUpdates: () => ipcRenderer.invoke('updates:check'),
     updateEngine: () => ipcRenderer.invoke('updates:engine'),
+    downloadAppUpdate: () => ipcRenderer.invoke('updates:downloadApp'),
+    installAppUpdate: () => ipcRenderer.invoke('updates:installApp'),
+    onUpdateProgress(cb) {
+      const listener = (_e, pct) => cb(pct);
+      ipcRenderer.on('updates:progress', listener);
+      return () => ipcRenderer.removeListener('updates:progress', listener);
+    },
     openRelease: (url) => ipcRenderer.invoke('updates:openRelease', String(url)),
     monitorInfo: () => ipcRenderer.invoke('monitor:info'),
     monitorStart: (intervalMs, client) => ipcRenderer.invoke('monitor:start', Number(intervalMs), client === 'overlay' ? 'overlay' : 'device'),

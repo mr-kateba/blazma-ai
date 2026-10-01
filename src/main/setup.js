@@ -6,6 +6,7 @@
 
 const fs = require('node:fs');
 const os = require('node:os');
+const http = require('node:http');
 const { EventEmitter } = require('node:events');
 const { net } = require('electron');
 const settings = require('./settings');
@@ -17,6 +18,7 @@ const { freeBytes } = require('./download');
 const { toAppError, AppError } = require('./errors');
 
 const NETWORK_RETRY_MS = 5000;
+const SLEEP_CHECK_MS = 10000;
 const DISK_MARGIN = 512 * 1024 * 1024;
 
 class Setup extends EventEmitter {
@@ -39,6 +41,7 @@ class Setup extends EventEmitter {
       progress: null,
       error: null,
       vision: false,
+      sleeping: false, // the model is unloaded after idle time (settings: idleUnloadMin)
     };
 
     this.server.on('state', (s) => this.onServerState(s));
@@ -116,6 +119,7 @@ class Setup extends EventEmitter {
       tags: Array.isArray(m.tags) ? m.tags : [],
       featured: Boolean(m.featured),
       thinking: Boolean(m.thinking),
+      draft: m.draft || null,
       downloaded: m.local ? fs.existsSync(m.path) : models.isComplete(manifest[m.hf]),
       onDisk: m.local ? 0 : models.sizeOnDisk(m.hf),
       local: Boolean(m.local),
@@ -143,6 +147,7 @@ class Setup extends EventEmitter {
   }
 
   clearTimers() {
+    clearInterval(this.sleepTimer);
     clearInterval(this.progressTimer);
     clearTimeout(this.retryTimer);
     this.progressTimer = null;
@@ -234,6 +239,11 @@ class Setup extends EventEmitter {
       contextSize: Math.min(settings.get().contextSize, model.maxContext || Infinity),
       gpuLayers: useGpu ? settings.get().gpuLayers : 0,
       kvCache: settings.get().kvCache,
+      idleUnloadMin: settings.get().idleUnloadMin,
+      speculative: settings.get().speculative,
+      // The helper model only when it is already downloaded, so starting
+      // never needs the internet for it.
+      draftHf: settings.get().speculative === 'draft' && model.draft && models.isComplete(models.manifest()[model.draft]) ? model.draft : null,
       apiKey: settings.get().apiEnabled ? settings.get().apiKey : null,
       port: this.port,
       offline: complete,
@@ -260,12 +270,40 @@ class Setup extends EventEmitter {
     }, 700);
   }
 
+  // While idle unloading is on, asks llama-server whether the model is
+  // asleep (GET /props "is_sleeping"; it does not wake the model).
+  watchSleep() {
+    clearInterval(this.sleepTimer);
+    if (!settings.get().idleUnloadMin) return;
+    this.sleepTimer = setInterval(() => {
+      if (this.state.phase !== 'ready' || !this.server.apiKey) return;
+      const req = http.get(
+        { host: '127.0.0.1', port: this.server.port, path: '/props', timeout: 2000, headers: { Authorization: `Bearer ${this.server.apiKey}` } },
+        (res) => {
+          let body = '';
+          res.on('data', (d) => (body += d));
+          res.on('end', () => {
+            try {
+              const sleeping = Boolean(JSON.parse(body).is_sleeping);
+              if (sleeping !== this.state.sleeping) this.update({ sleeping });
+            } catch {
+              /* not JSON: leave as is */
+            }
+          });
+        },
+      );
+      req.on('timeout', () => req.destroy());
+      req.on('error', () => {});
+    }, SLEEP_CHECK_MS);
+  }
+
   onServerState(s) {
     // A downloaded model has an entry (checked in the background once it
     // runs); a model from a local file has none.
     if (s !== 'ready' || (!this.entry && !this.localActive)) return;
     this.clearTimers();
-    this.update({ phase: 'ready', progress: null, error: null, models: this.modelList() });
+    this.update({ phase: 'ready', progress: null, error: null, sleeping: false, models: this.modelList() });
+    this.watchSleep();
     if (this.entry && !this.entry.verified) this.verifyInBackground(this.entry, this.runId);
   }
 

@@ -76,7 +76,7 @@ class LlamaServer extends EventEmitter {
   }
 
   // options: { exe, hf | modelPath (+ mmprojPath), modelsDir, contextSize,
-  //            gpuLayers, kvCache, port, offline, vision, apiKey }
+  //            gpuLayers, kvCache, idleUnloadMin, speculative, draftHf, port, offline, vision, apiKey }
   start(options) {
     if (this.child) throw new Error('llama-server already running');
     this.options = options;
@@ -115,6 +115,17 @@ class LlamaServer extends EventEmitter {
     // for the same context. A quantized V cache switches Flash Attention on
     // automatically when it is 'auto' (the default; llama-context.cpp).
     if (options.kvCache && options.kvCache !== 'f16') args.push('-ctk', options.kvCache, '-ctv', options.kvCache);
+    // Sleep on idle (tools/server/README.md, "Sleeping on Idle"): the model and
+    // its memory leave the card and RAM after this many seconds without a
+    // request, and the next request loads it again. /health does not wake it.
+    if (options.idleUnloadMin > 0) args.push('--sleep-idle-seconds', String(options.idleUnloadMin * 60));
+    // Speculative decoding (common/arg.cpp): a small model of the same family
+    // proposes the next words and the big one checks them in one step
+    // (--spec-draft-hf + --spec-type draft-simple), and/or words are proposed
+    // from text already in the conversation (--spec-default, ngram-mod), which
+    // helps most when code or text is repeated. The answer is the same.
+    if (options.draftHf) args.push('--spec-draft-hf', options.draftHf, '--spec-type', 'draft-simple');
+    if (options.speculative === 'ngram' || options.speculative === 'draft') args.push('--spec-default');
 
     const env = {
       ...process.env,
