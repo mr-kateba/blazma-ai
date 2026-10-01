@@ -7,6 +7,7 @@
 
 import { el, detectDir } from '../lib/dom.js';
 import { readSse } from '../lib/sse.js';
+import { extractTextToolCalls, visibleText } from '../lib/toolcalls.js';
 import { diffLines, diffStats, diffHunks } from './diff.js';
 import { confirmDialog } from '../lib/dialog.js';
 
@@ -598,6 +599,8 @@ export function createAgent(A, ctx) {
           body: JSON.stringify({
             messages,
             stream: true,
+            // Several tool calls in one reply are read as calls, not left as text.
+            parallel_tool_calls: true,
             ...settings.sampling,
             chat_template_kwargs: { enable_thinking: settings.thinking },
             ...(round < MAX_ROUNDS - 1 ? { tools: TOOLS } : {}),
@@ -625,13 +628,14 @@ export function createAgent(A, ctx) {
             }
             think.lastChild.textContent = reasoning;
           }
-          if (content.trim()) {
+          const shown = visibleText(content);
+          if (shown.trim()) {
             if (!bubble) {
               bubble = el('div', { class: 'ai-entry assistant msg-body' });
               log.insertBefore(bubble, status);
             }
-            bubble.dir = detectDir(content);
-            bubble.replaceChildren(ctx.renderMarkdown(content));
+            bubble.dir = detectDir(shown);
+            bubble.replaceChildren(ctx.renderMarkdown(shown));
           }
           scroll();
         };
@@ -651,7 +655,14 @@ export function createAgent(A, ctx) {
           if (!frame) frame = requestAnimationFrame(paint);
         }
         cancelAnimationFrame(frame);
+        // Calls the server left in the text (see lib/toolcalls.js).
+        const leaked = extractTextToolCalls(content);
+        if (leaked.calls.length) {
+          content = leaked.content;
+          for (const c of leaked.calls) calls.push({ id: '', type: 'function', function: { name: c.name, arguments: c.arguments } });
+        }
         paint();
+        if (bubble && !visibleText(content).trim()) bubble.remove();
         if (think) think.firstChild.textContent = A.thought;
         const list = calls.filter(Boolean);
         if (!list.length) {
