@@ -85,9 +85,9 @@ function codeBlock(lang, code, labels) {
       }
     });
   }
-  // Web code can run in the studio's sandboxed preview.
+  // Code can be opened in VS Code (saved as a file in its own folder).
   let studio = null;
-  if (labels.studio && /^(html?|css|js|javascript)$/i.test(lang || '')) {
+  if (labels.studio && /^(html?|css|js|javascript|ts|typescript|py|python|json|md)$/i.test(lang || '')) {
     studio = el('button', { type: 'button', class: 'md-copy' }, labels.openInStudio);
     studio.addEventListener('click', () => labels.studio(code, lang));
   }

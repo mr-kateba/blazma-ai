@@ -14,7 +14,7 @@ const { exportReport } = require('./report');
 const { toAppError } = require('./errors');
 const web = require('./web');
 const chats = require('./chats');
-const studio = require('./studio');
+const vscode = require('./vscode');
 const updates = require('./updates');
 const documents = require('./documents');
 const localmodels = require('./localmodels');
@@ -367,13 +367,72 @@ function registerIpc({ setup, monitor, getWindow }) {
 
   handle('device:summary', () => monitor.modelSummary());
 
-  handle('studio:list', () => studio.list());
-  handle('studio:get', (id) => studio.get(String(id)));
-  handle('studio:save', (project) => wrap(() => studio.save(project || {})));
-  handle('studio:delete', (id) => studio.remove(String(id)));
-  handle('studio:export', (id) => wrap(() => studio.exportProject(getWindow(), String(id))));
-  handle('studio:importFolder', () => wrap(() => studio.importFolder(getWindow())));
-  handle('studio:preview', (files) => wrap(() => studio.setPreview(files || {})));
+  // Programming page: VS Code (VSCodium) shown inside the window (vscode.js).
+  const cleanBounds = (b) => (b && ['x', 'y', 'width', 'height'].every((k) => Number.isFinite(Number(b[k]))) ? { x: Number(b.x), y: Number(b.y), width: Number(b.width), height: Number(b.height) } : null);
+  // The AI in VS Code follows the running model and the API's port and key.
+  const refreshAiConfig = () => {
+    const s = settings.get();
+    if (!vscode.aiInstalled() || !s.apiEnabled || !s.apiKey) return false;
+    const model = models.findModel(setup.snapshot().modelId || s.activeModelId);
+    vscode.writeContinueConfig({ port: setup.port || s.port, apiKey: s.apiKey, modelName: model && model.name });
+    return true;
+  };
+  let codeFolder = null; // the folder open in VS Code (null = "Blazma Projects")
+  handle('vscode:status', () => ({ ...vscode.status(), ai: vscode.aiInstalled(), aiReady: vscode.aiInstalled() && settings.get().apiEnabled, folder: codeFolder || vscode.projectsDir() }));
+  handle('vscode:plan', () => wrap(() => vscode.plan()));
+  handle('vscode:install', () =>
+    wrap(() =>
+      vscode.install((p) => {
+        const w = getWindow();
+        if (w && !w.isDestroyed()) w.webContents.send('vscode:progress', p);
+      }),
+    ),
+  );
+  handle('vscode:show', (bounds) =>
+    wrap(async () => {
+      const b = cleanBounds(bounds);
+      if (!b) throw new AppError('vscode-failed', 'bad bounds');
+      vscode.migrateStudioProjects();
+      refreshAiConfig();
+      return vscode.showView(getWindow(), b, codeFolder);
+    }),
+  );
+  handle('vscode:bounds', (bounds) => vscode.setBounds(cleanBounds(bounds)));
+  handle('vscode:hide', () => vscode.hideView());
+  handle('vscode:openFolder', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(getWindow(), { title: 'اختر مجلد مشروع', properties: ['openDirectory', 'createDirectory'] });
+    if (canceled || !filePaths.length) return null;
+    codeFolder = filePaths[0];
+    return codeFolder;
+  });
+  handle('vscode:openProjects', () => {
+    codeFolder = null;
+    fs.mkdirSync(vscode.projectsDir(), { recursive: true });
+    return vscode.projectsDir();
+  });
+  handle('vscode:snippet', (code, lang) => {
+    codeFolder = vscode.saveSnippet(String(code || '').slice(0, 2_000_000), String(lang || ''));
+    return codeFolder;
+  });
+  handle('vscode:restart', () => {
+    vscode.stop();
+    return true;
+  });
+  // Turns on the local API (fixed key) if needed, installs Continue from
+  // Open VSX, and points it at the running model.
+  handle('vscode:connectAi', () =>
+    wrap(async () => {
+      const s = settings.get();
+      if (!s.apiEnabled || !s.apiKey) {
+        settings.update({ apiEnabled: true, apiKey: s.apiKey || newApiKey() });
+        setup.restart();
+      }
+      await vscode.installAi();
+      refreshAiConfig();
+      vscode.reloadView();
+      return true;
+    }),
+  );
 
   // User-initiated only (a click on a code block): the save dialog decides
   // where the file goes.

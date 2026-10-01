@@ -4,10 +4,10 @@
 // - a fake nvidia-smi (fixtures/fakebin), a fake Ollama folder, a fake
 //   LM Studio folder, and folders with split, broken and incomplete models;
 // - a link to a llama-server you built: LLAMA_SERVER=/path/to/llama-server.
-// With FEATURES=1 also (about 7 GB) what kb, voice and image tests need:
+// With FEATURES=1 also (about 7 GB) what kb, voice, image and vscode tests need:
 // the Qwen3-Embedding model, whisper.cpp's Linux build with a small model and
-// two speech samples, and stable-diffusion.cpp's Linux build with Z-Image
-// Turbo files (smaller Q3 versions than the app downloads).
+// two speech samples, stable-diffusion.cpp's Linux build with Z-Image
+// Turbo files (smaller Q3 versions than the app downloads), and VSCodium's server.
 //
 // Usage: LLAMA_SERVER=~/llama.cpp/build/bin/llama-server [FEATURES=1] node tests/setup.js
 
@@ -70,6 +70,17 @@ function features() {
   download('https://github.com/leejet/stable-diffusion.cpp/releases/download/master-929-3f8527a/sd-master-3f8527a-bin-Linux-Ubuntu-24.04-x86_64.zip', path.join(sd, 'sd.zip'));
   if (!fs.existsSync(path.join(sd, 'sd-server'))) execFileSync('unzip', ['-o', '-q', path.join(sd, 'sd.zip'), '-d', sd]);
   fs.chmodSync(path.join(sd, 'sd-server'), 0o755);
+  // VSCodium's web server (MIT) for the VS Code page; the Linux build of the
+  // same release the app downloads for Windows.
+  const vs = path.join(WORK, 'vscodium');
+  mkdir(vs);
+  const V = '1.135.06055';
+  download(`https://github.com/VSCodium/vscodium/releases/download/${V}/vscodium-reh-web-linux-x64-${V}.tar.gz`, path.join(vs, 'reh-linux.tar.gz'));
+  if (!fs.existsSync(path.join(vs, 'linux', 'out', 'server-main.js'))) {
+    mkdir(path.join(vs, 'linux'));
+    execFileSync('tar', ['-xzf', path.join(vs, 'reh-linux.tar.gz'), '-C', path.join(vs, 'linux')]);
+  }
+
   const img = path.join(WORK, 'images');
   mkdir(img);
   download(hf('leejet/Z-Image-Turbo-GGUF', 'z_image_turbo-Q3_K.gguf'), path.join(img, 'z_image_turbo-Q3_K.gguf'));
