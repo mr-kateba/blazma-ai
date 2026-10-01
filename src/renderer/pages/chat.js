@@ -42,6 +42,12 @@ let visionEnabled = false; // the running model was started with its vision proj
 let pendingImages = []; // data URLs attached to the message being written
 
 const MAX_IMAGES = 4;
+const MAX_FILES = 5;
+// Rough characters per token for Arabic/English text, to keep attached files
+// inside the model's context (the rest of the context is for the chat).
+const CHARS_PER_TOKEN = 3;
+const FILE_SHARE = 0.6;
+let pendingFiles = []; // { name, kind, text, chars, pages, truncated } or { name, reading: true }
 const MAX_IMAGE_SIDE = 1536;
 let speed = 0;
 let currentChatId = null; // saved conversation shown now (null until the first message)
@@ -299,7 +305,6 @@ function onState(state) {
   const prevPhase = setupState && setupState.phase;
   setupState = state;
   visionEnabled = Boolean(state.vision);
-  $('btn-attach').hidden = !visionEnabled;
   if (!visionEnabled && pendingImages.length) {
     pendingImages = [];
     renderPreview();
@@ -337,6 +342,9 @@ function messageNode(msg, index) {
 
   if (isUser && msg.images && msg.images.length) {
     body.append(el('div', { class: 'msg-images' }, ...msg.images.map((src) => el('img', { src, alt: '' }))));
+  }
+  if (isUser && msg.files && msg.files.length) {
+    body.append(el('div', { class: 'msg-files' }, ...msg.files.map((f) => fileChip(f))));
   }
   if (isUser && editingIndex === index) {
     const box = el('textarea', { dir: 'auto' });
@@ -508,6 +516,48 @@ async function prepareImage(file) {
   return canvas.toDataURL('image/jpeg', 0.9);
 }
 
+function fileChip(f, onRemove) {
+  const meta = f.reading ? ar.chat.fileReading : [f.pages ? ar.chat.filePages(f.pages) : null, ar.chat.fileChars(f.chars)].filter(Boolean).join(' · ');
+  return el(
+    'div',
+    { class: `file-chip${f.reading ? ' reading' : ''}`, title: f.name },
+    el('span', { class: 'file-chip-icon', 'aria-hidden': 'true' }, f.kind === 'pdf' ? 'PDF' : f.kind === 'docx' ? 'DOC' : 'TXT'),
+    el('span', { class: 'file-chip-text' }, el('bdi', { class: 'file-chip-name' }, f.name), el('span', { class: 'file-chip-meta' }, meta)),
+    onRemove ? el('button', { type: 'button', class: 'file-chip-x', title: ar.chat.removeFile, 'aria-label': ar.chat.removeFile, onclick: onRemove }, '×') : null,
+  );
+}
+
+// Images go to the model as pictures (vision models); other files are turned
+// into text in the main process (documents.js) and sent with the message.
+async function addAttachments(files) {
+  const images = files.filter((f) => f.type.startsWith('image/'));
+  const docs = files.filter((f) => !f.type.startsWith('image/'));
+  if (images.length) {
+    if (visionEnabled) await addImages(images);
+    else showComposerNote(ar.chat.noVision);
+  }
+  for (const file of docs) {
+    if (pendingFiles.length >= MAX_FILES) {
+      showComposerNote(ar.chat.maxFiles);
+      break;
+    }
+    const slot = { name: file.name, reading: true };
+    pendingFiles.push(slot);
+    renderPreview();
+    const res = await window.blazma.extractFile(file.name, new Uint8Array(await file.arrayBuffer()));
+    const i = pendingFiles.indexOf(slot);
+    if (i < 0) continue; // removed while reading
+    if (res.ok) {
+      pendingFiles[i] = res.result;
+      renderPreview();
+    } else {
+      pendingFiles.splice(i, 1);
+      renderPreview();
+      showComposerNote(ar.chat.fileErrors[res.error.code] ? ar.chat.fileErrors[res.error.code](file.name) : ar.chat.fileErrors['file-unreadable'](file.name), 6000);
+    }
+  }
+}
+
 async function addImages(files) {
   if (!visionEnabled) return;
   for (const file of files) {
@@ -525,17 +575,23 @@ async function addImages(files) {
   renderPreview();
 }
 
-function showComposerNote(text) {
+function showComposerNote(text, ms = 3500) {
   const box = $('attach-preview');
   box.hidden = false;
   box.append(el('span', { class: 'muted small attach-note' }, text));
-  setTimeout(renderPreview, 3000);
+  setTimeout(renderPreview, ms);
 }
 
 function renderPreview() {
   const box = $('attach-preview');
-  box.hidden = pendingImages.length === 0;
+  box.hidden = pendingImages.length === 0 && pendingFiles.length === 0;
   box.replaceChildren(
+    ...pendingFiles.map((f) =>
+      fileChip(f, () => {
+        pendingFiles.splice(pendingFiles.indexOf(f), 1);
+        renderPreview();
+      }),
+    ),
     ...pendingImages.map((src, i) =>
       el(
         'div',
@@ -560,10 +616,23 @@ function renderPreview() {
   );
 }
 
+// Attached files go before the question, each inside <file> tags, cut to
+// fit the share of the context given to files.
+function withFiles(m, fileBudget) {
+  if (!m.files || !m.files.length) return m.content;
+  const per = Math.floor(fileBudget / m.files.length);
+  const blocks = m.files.map((f) => {
+    const cut = f.text.length > per;
+    return `<file name="${f.name.replace(/"/g, "'")}">\n${cut ? f.text.slice(0, per) : f.text}${cut ? `\n${ar.chat.fileCutMarker}` : ''}\n</file>`;
+  });
+  return `${blocks.join('\n\n')}\n\n${m.content || ar.chat.summarizeFile}`;
+}
+
 // OpenAI-style content: plain text, or text plus image_url parts.
-function apiContent(m) {
-  if (!m.images || !m.images.length) return m.content;
-  return [{ type: 'text', text: m.content || ar.chat.describeImage }, ...m.images.map((url) => ({ type: 'image_url', image_url: { url } }))];
+function apiContent(m, fileBudget = Infinity) {
+  const text = withFiles(m, fileBudget);
+  if (!m.images || !m.images.length) return text;
+  return [{ type: 'text', text: text || ar.chat.describeImage }, ...m.images.map((url) => ({ type: 'image_url', image_url: { url } }))];
 }
 
 // Tools the model may call when web search is on. Descriptions are for the
@@ -641,9 +710,15 @@ async function runTool(call, reply) {
   return `Unknown tool ${call.function.name}.`;
 }
 
-async function send(text, images = []) {
+async function send(text, images = [], files = []) {
   if (!messages.length) $('chat-log').replaceChildren();
-  messages.push({ role: 'user', content: text, images });
+  if (files.length) {
+    const { contextSize } = await window.blazma.getChatSettings();
+    const budget = contextSize * CHARS_PER_TOKEN * FILE_SHARE;
+    const total = files.reduce((n, f) => n + f.chars, 0);
+    if (total > budget) showComposerNote(ar.chat.fileTooLong(Math.max(1, Math.floor((budget / total) * 100))), 8000);
+  }
+  messages.push({ role: 'user', content: text, images, files });
   renderLast();
   await generate();
 }
@@ -671,7 +746,7 @@ async function generate() {
   const history = messages
     .slice(0, -1)
     .filter((m) => !m.error || m.content)
-    .map((m) => ({ role: m.role, content: apiContent(m) }));
+    .map((m) => ({ role: m.role, content: apiContent(m, chatSettings.contextSize * CHARS_PER_TOKEN * FILE_SHARE) }));
   const apiMessages = [{ role: 'system', content: system }, ...history];
 
   abortController = new AbortController();
@@ -771,7 +846,7 @@ function saveEdit(index, text) {
   const original = messages[index];
   if (!content && !(original.images && original.images.length)) return;
   editingIndex = null;
-  messages = [...messages.slice(0, index), { role: 'user', content, images: original.images || [] }];
+  messages = [...messages.slice(0, index), { role: 'user', content, images: original.images || [], files: original.files || [] }];
   renderMessages();
   generate();
 }
@@ -898,13 +973,19 @@ export function initChat() {
   $('composer').addEventListener('submit', (e) => {
     e.preventDefault();
     const text = input.value.trim();
-    if ((!text && !pendingImages.length) || abortController) return;
+    if ((!text && !pendingImages.length && !pendingFiles.length) || abortController) return;
+    if (pendingFiles.some((f) => f.reading)) {
+      showComposerNote(ar.chat.fileStillReading);
+      return;
+    }
     const images = pendingImages;
+    const files = pendingFiles;
     pendingImages = [];
+    pendingFiles = [];
     renderPreview();
     input.value = '';
     autoGrow(input);
-    send(text, images);
+    send(text, images, files);
   });
 
   // Web search on/off, remembered in settings.
@@ -925,24 +1006,21 @@ export function initChat() {
   $('btn-attach').setAttribute('aria-label', ar.chat.attach);
   $('btn-attach').addEventListener('click', () => $('file-input').click());
   $('file-input').addEventListener('change', (e) => {
-    addImages([...e.target.files]);
+    addAttachments([...e.target.files]);
     e.target.value = '';
   });
   input.addEventListener('paste', (e) => {
     const files = [...e.clipboardData.items].filter((it) => it.kind === 'file').map((it) => it.getAsFile()).filter(Boolean);
-    if (files.length && visionEnabled) {
+    if (files.length) {
       e.preventDefault();
-      addImages(files);
+      addAttachments(files);
     }
   });
   const area = $('chat-area');
-  area.addEventListener('dragover', (e) => {
-    if (visionEnabled) e.preventDefault();
-  });
+  area.addEventListener('dragover', (e) => e.preventDefault());
   area.addEventListener('drop', (e) => {
-    if (!visionEnabled) return;
     e.preventDefault();
-    addImages([...e.dataTransfer.files]);
+    addAttachments([...e.dataTransfer.files]);
   });
   $('btn-stop-gen').addEventListener('click', () => abortController && abortController.abort());
   $('btn-new-chat').addEventListener('click', newChat);

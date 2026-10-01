@@ -7,6 +7,7 @@ const DEFAULTS = Object.freeze({
   port: 18080,
   contextSize: 8192,
   gpuLayers: 99,
+  kvCache: 'q8_0', // conversation memory precision: f16 (full), q8_0 (half the memory), q4_0
   modelsDir: '',
   activeModelId: '',
   temperature: null, // null = use the model's recommended value
@@ -25,6 +26,7 @@ const VALIDATORS = {
   port: (v) => isInt(v, 1024, 65535),
   contextSize: (v) => isInt(v, 512, 262144),
   gpuLayers: (v) => isInt(v, 0, 999),
+  kvCache: (v) => ['f16', 'q8_0', 'q4_0'].includes(v),
   modelsDir: (v) => typeof v === 'string',
   activeModelId: (v) => typeof v === 'string',
   temperature: (v) => v === null || (typeof v === 'number' && v >= 0 && v <= 2),

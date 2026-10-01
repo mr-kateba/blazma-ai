@@ -75,7 +75,8 @@ class LlamaServer extends EventEmitter {
     this.emit('state', state);
   }
 
-  // options: { exe, hf, modelsDir, contextSize, gpuLayers, port, offline, vision }
+  // options: { exe, hf | modelPath (+ mmprojPath), modelsDir, contextSize,
+  //            gpuLayers, kvCache, port, offline, vision }
   start(options) {
     if (this.child) throw new Error('llama-server already running');
     this.options = options;
@@ -84,8 +85,11 @@ class LlamaServer extends EventEmitter {
     this.log = [];
     this.stopping = false;
 
+    // A model from Hugging Face (-hf, cached under LLAMA_CACHE) or a GGUF file
+    // already on this computer (-m), e.g. imported from Ollama.
+    const source = options.modelPath ? ['-m', options.modelPath] : ['-hf', options.hf];
     const args = [
-      '-hf', options.hf,
+      ...source,
       '--jinja',
       '-ngl', String(options.gpuLayers),
       '-c', String(options.contextSize),
@@ -96,8 +100,16 @@ class LlamaServer extends EventEmitter {
     ];
     // Without --no-mmproj, -hf also fetches and loads the model's vision
     // projector (mmproj) so the chat can take images.
-    if (!options.vision) args.push('--no-mmproj');
-    if (options.offline) args.push('--offline');
+    if (options.modelPath) {
+      if (options.mmprojPath) args.push('--mmproj', options.mmprojPath);
+    } else {
+      if (!options.vision) args.push('--no-mmproj');
+      if (options.offline) args.push('--offline');
+    }
+    // Quantized KV cache: about half (q8_0) or a quarter (q4_0) of the memory
+    // for the same context. A quantized V cache switches Flash Attention on
+    // automatically when it is 'auto' (the default; llama-context.cpp).
+    if (options.kvCache && options.kvCache !== 'f16') args.push('-ctk', options.kvCache, '-ctv', options.kvCache);
 
     const env = {
       ...process.env,

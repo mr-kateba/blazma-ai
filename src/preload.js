@@ -45,6 +45,7 @@ contextBridge.exposeInMainWorld(
     openFolder: (kind) => ipcRenderer.invoke('settings:openFolder', kind === 'models' ? 'models' : 'data'),
     setLaunchAtLogin: (enabled) => ipcRenderer.invoke('settings:setLaunchAtLogin', Boolean(enabled)),
     restartServer: () => ipcRenderer.invoke('server:restart'),
+    extractFile: (name, bytes) => ipcRenderer.invoke('files:extract', String(name), bytes),
     checkUpdates: () => ipcRenderer.invoke('updates:check'),
     updateEngine: () => ipcRenderer.invoke('updates:engine'),
     openRelease: (url) => ipcRenderer.invoke('updates:openRelease', String(url)),

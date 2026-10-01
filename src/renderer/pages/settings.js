@@ -114,6 +114,11 @@ function engineSection(state) {
     [0, 8, 16, 24, 32, 40].includes(values.gpuLayers) ? values.gpuLayers : 99,
     (v) => save({ gpuLayers: Number(v) }, { engine: true }),
   );
+  const kv = select(
+    [['q8_0', S.engine.kvQ8], ['f16', S.engine.kvF16], ['q4_0', S.engine.kvQ4]],
+    values.kvCache,
+    (v) => save({ kvCache: v }, { engine: true }),
+  );
   const port = el('input', { type: 'number', min: '1024', max: '65535', value: String(values.port), dir: 'ltr', class: 'set-number' });
   port.addEventListener('change', () => {
     const n = Number(port.value);
@@ -154,6 +159,7 @@ function engineSection(state) {
     S.engine.desc,
     el('div', { id: 'engine-banner' }),
     item(S.engine.ctx, S.engine.ctxDesc, ctx),
+    item(S.engine.kv, S.engine.kvDesc, kv),
     item(S.engine.gpu, S.engine.gpuDesc, gpu),
     item(S.engine.port, S.engine.portDesc, port),
     item(S.engine.dir, S.engine.dirDesc, null, el('div', { class: 'set-stack' }, dirText, el('div', { class: 'row' }, choose, openDir, resetDir))),
