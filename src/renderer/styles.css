@@ -1183,3 +1183,9 @@ body.compact-nav .sidebar-foot { display: none; }
 .file-chip-x { flex-shrink: 0; width: 20px; height: 20px; border: 0; border-radius: 50%; background: none; color: var(--muted); cursor: pointer; }
 .file-chip-x:hover { background: var(--surface-2); color: var(--text); }
 .msg-files { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+
+/* models on this computer */
+.ollama-list { display: flex; flex-direction: column; gap: 4px; margin-top: 4px; }
+.ollama-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 8px; background: var(--surface-2); }
+.ollama-row .spacer { flex: 1; }
+.warn-text { color: #f2c27a; }

@@ -4,6 +4,7 @@
 // resolve model -> start llama-server (which downloads the model) -> ready.
 // Publishes a single state object that the renderer renders.
 
+const fs = require('node:fs');
 const os = require('node:os');
 const { EventEmitter } = require('node:events');
 const { net } = require('electron');
@@ -98,8 +99,12 @@ class Setup extends EventEmitter {
       custom: Boolean(m.custom),
       vision: Boolean(m.vision),
       fits: m.cpu ? true : m.minVramMB <= vram,
-      downloaded: models.isComplete(manifest[m.hf]),
-      onDisk: models.sizeOnDisk(m.hf),
+      downloaded: m.local ? fs.existsSync(m.path) : models.isComplete(manifest[m.hf]),
+      onDisk: m.local ? 0 : models.sizeOnDisk(m.hf),
+      local: Boolean(m.local),
+      source: m.source || null,
+      path: m.local ? m.path : null,
+      hasTemplate: m.local ? m.hasTemplate : null,
     }));
   }
 
@@ -147,6 +152,16 @@ class Setup extends EventEmitter {
         progress: null,
       });
 
+      // A model already on this computer (a GGUF file, or Ollama's copy).
+      if (model.local) {
+        if (!fs.existsSync(model.path)) throw new AppError('local-missing', model.path);
+        settings.update({ activeModelId: modelId });
+        this.entry = null; // nothing to verify against a download
+        this.localActive = true;
+        await this.launch(engine, model, null, true, run);
+        return;
+      }
+
       let entry = models.manifest()[model.hf];
       if (!entry) {
         this.update({ phase: 'model-resolve' });
@@ -167,6 +182,7 @@ class Setup extends EventEmitter {
         }
       }
       this.entry = entry;
+      this.localActive = false;
 
       const complete = models.isComplete(entry);
       if (!complete) {
@@ -202,10 +218,12 @@ class Setup extends EventEmitter {
       kvCache: settings.get().kvCache,
       port: this.port,
       offline: complete,
-      vision: Boolean(entry.vision),
+      vision: model.local ? Boolean(model.mmproj) : Boolean(entry.vision),
+      modelPath: model.local ? model.path : null,
+      mmprojPath: model.local && model.mmproj && fs.existsSync(model.mmproj) ? model.mmproj : null,
       hfEndpoint: process.env.BLAZMA_HF_ENDPOINT || null,
     });
-    this.update({ vision: Boolean(entry.vision) });
+    this.update({ vision: model.local ? Boolean(model.mmproj) : Boolean(entry.vision) });
 
     if (complete) {
       this.update({ phase: 'loading', progress: null });
@@ -224,10 +242,12 @@ class Setup extends EventEmitter {
   }
 
   onServerState(s) {
-    if (s !== 'ready' || !this.entry) return;
+    // A downloaded model has an entry (checked in the background once it
+    // runs); a model from a local file has none.
+    if (s !== 'ready' || (!this.entry && !this.localActive)) return;
     this.clearTimers();
     this.update({ phase: 'ready', progress: null, error: null, models: this.modelList() });
-    if (!this.entry.verified) this.verifyInBackground(this.entry, this.runId);
+    if (this.entry && !this.entry.verified) this.verifyInBackground(this.entry, this.runId);
   }
 
   async verifyInBackground(entry, run) {

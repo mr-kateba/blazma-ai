@@ -16,6 +16,7 @@ const chats = require('./chats');
 const studio = require('./studio');
 const updates = require('./updates');
 const documents = require('./documents');
+const localmodels = require('./localmodels');
 const paths = require('./paths');
 
 // Settings the renderer may change (more are added with the settings page).
@@ -81,6 +82,25 @@ function registerIpc({ setup, monitor, getWindow }) {
   handle('models:delete', (id) => setup.deleteModel(String(id)));
   handle('models:addCustom', async (hf) => {
     const res = await wrap(() => models.addCustom(String(hf || '').slice(0, 200)));
+    setup.refreshModels();
+    return res;
+  });
+  // A GGUF file on this computer, picked by the user.
+  handle('models:addLocalFile', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(getWindow(), {
+      title: 'اختر ملف موديل GGUF',
+      properties: ['openFile'],
+      filters: [{ name: 'GGUF', extensions: ['gguf'] }],
+    });
+    if (canceled || !filePaths[0]) return { ok: true, result: null };
+    const res = await wrap(() => localmodels.addFile(filePaths[0]));
+    setup.refreshModels();
+    return res;
+  });
+  // Models downloaded by Ollama, used in place.
+  handle('models:scanOllama', () => wrap(() => localmodels.scanOllama()));
+  handle('models:addOllama', async (key) => {
+    const res = await wrap(() => localmodels.addOllama(String(key || '')));
     setup.refreshModels();
     return res;
   });
