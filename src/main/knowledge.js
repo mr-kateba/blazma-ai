@@ -34,6 +34,8 @@ const MAX_FILES = 2000;
 const MAX_FILE_BYTES = 25 * 1024 * 1024;
 const MAX_DEPTH = 8;
 const IDLE_SECONDS = 300; // the embedding model leaves memory after 5 idle minutes
+const MIN_SCORE = 0.35;
+const SCORE_GAP = 0.12;
 
 const dir = () => path.join(paths.userData(), 'knowledge');
 const indexFile = () => path.join(dir(), 'index.json');
@@ -196,6 +198,8 @@ function status() {
   };
 }
 
+const isIndexed = (file) => Object.prototype.hasOwnProperty.call(load().files, file);
+
 function addFolder(folder) {
   const idx = load();
   const abs = path.resolve(folder);
@@ -270,7 +274,11 @@ async function search(question, limit = 5) {
     return { file, name: path.basename(file), text: c.text, score: s };
   });
   scored.sort((a, b) => b.score - a.score);
-  return scored.slice(0, limit);
+  // Passages far below the best match are about something else, so they are
+  // not sent or shown as sources. Measured on the test documents
+  // (tests/e2e/kb.js): matches scored 0.53-0.70, unrelated passages 0.23-0.42.
+  const best = scored[0].score;
+  return scored.filter((p) => p.score >= MIN_SCORE && p.score >= best - SCORE_GAP).slice(0, limit);
 }
 
-module.exports = { status, addFolder, removeFolder, update, search, stop, chunk };
+module.exports = { status, addFolder, removeFolder, update, search, stop, chunk, isIndexed };

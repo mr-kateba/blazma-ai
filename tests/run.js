@@ -4,13 +4,20 @@
 //
 // Usage (Linux):  xvfb-run -a node tests/run.js [name ...]
 //   no names = all tests below; "packaged" needs `npx electron-builder --linux dir` first.
+//   kb, voice and image need `FEATURES=1 node tests/setup.js`; they are
+//   skipped when their files are missing.
 
 const fs = require('node:fs');
 const path = require('node:path');
 const { spawn, spawnSync } = require('node:child_process');
 
 const WORK = path.join(__dirname, '.work');
-const ALL = ['chat', 'chats', 'close-busy', 'persona', 'files', 'vision', 'models', 'catalog', 'local', 'import', 'api', 'lhm', 'overlay', 'python', 'vs', 'agent', 'device'];
+const ALL = ['chat', 'chats', 'branches', 'close-busy', 'persona', 'files', 'vision', 'models', 'catalog', 'local', 'idle', 'theme', 'kb', 'voice', 'image', 'import', 'api', 'lhm', 'overlay', 'python', 'vs', 'agent', 'device'];
+const NEEDS = {
+  kb: ['models/Qwen3-Embedding-0.6B-Q8_0.gguf'],
+  voice: ['whisper/whisper-bin-ubuntu-x64/whisper-server', 'whisper/ar-sample.wav'],
+  image: ['sdcpp/sd-server', 'images/z_image_turbo-Q3_K.gguf'],
+};
 const TIMEOUT_MS = 30 * 60 * 1000;
 
 function startMockHf() {
@@ -46,10 +53,21 @@ async function main() {
     process.exit(1);
   }
   const names = process.argv.slice(2).length ? process.argv.slice(2) : ALL;
+  // A full run starts from a clean profile (downloaded models are kept).
+  if (!process.argv.slice(2).length) {
+    const home = path.join(WORK, 'e2e-home', 'Blazma AI');
+    for (const f of fs.existsSync(home) ? fs.readdirSync(home) : []) if (f !== 'models') fs.rmSync(path.join(home, f), { recursive: true, force: true });
+    fs.mkdirSync(home, { recursive: true });
+    fs.writeFileSync(path.join(home, 'settings.json'), JSON.stringify({ activeModelId: 'qwen3.5-2b' }));
+  }
   const mock = startMockHf();
   const results = [];
   for (const name of names) {
     process.stdout.write(`${name} … `);
+    if ((NEEDS[name] || []).some((f) => !fs.existsSync(path.join(WORK, f)))) {
+      console.log('skipped (run FEATURES=1 node tests/setup.js)');
+      continue;
+    }
     const r = await runOne(name);
     results.push(r);
     console.log(`${r.ok ? 'ok' : 'FAILED'} (${r.secs}s)${r.ok ? '' : `, see tests/.work/result-${name}.log`}`);

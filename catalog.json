@@ -96,8 +96,7 @@
       "tags": [
         "arabic"
       ],
-      "featured": true,
-      "draft": "unsloth/Qwen3.5-0.8B-GGUF:Q4_K_M"
+      "featured": true
     },
     {
       "id": "qwen3.5-0.8b",
@@ -529,5 +528,5 @@
   "_sampling_source": "Values from each model's Hugging Face card (best-practice / recommended sampling sections). Models whose card gives no recommendation have empty sampling and use llama.cpp's defaults.",
   "_vision_source": "Vision models ship mmproj-*.gguf projectors (checked on Hugging Face); llama.cpp downloads the one closest in quantization when --no-mmproj is not passed.",
   "_sizes_source": "sizeBytes for added models = the files llama.cpp picks for repo:quant (model + projector), from the Hugging Face tree API; minVramMB = that size + 1.5 GB for context, rounded up to 512 MB.",
-  "_draft_source": "draft: a smaller model of the same family (same tokenizer) used for speculative decoding (--spec-draft-hf with --spec-type draft-simple, common/arg.cpp)."
+  "_draft_source": "draft: a smaller model of the same family (same tokenizer) used for speculative decoding (--spec-draft-hf with --spec-type draft-simple, common/arg.cpp). Not on qwen3.5-2b: measured on a 4-core CPU, the 0.8B draft halved its speed in free Arabic text (12.5 -> 6.3 tok/s); on the 4B it doubled speed on copied code (5.7 -> 12.9) but slowed free Arabic text (5.6 -> 3.6)."
 }

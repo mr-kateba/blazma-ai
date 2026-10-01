@@ -52,6 +52,14 @@
 | صفحة الإعدادات الكاملة: تعليمات الذكاء، درجة الإبداع، ذاكرة المحادثة، طبقات الكرت، المنفذ، مجلد الموديلات، التشغيل مع ويندوز، التحقق من التحديثات وتحديث المحرك | ✅ مُجرّب على لينكس، ⚠️ تحديث المحرك والتشغيل مع ويندوز يُجرَّبان على ويندوز |
 | المحادثة: شاشة ترحيب باقتراحات، تبديل الموديل من أعلى المحادثة، تجميع المحادثات حسب التاريخ، اختصارات Ctrl+1 إلى Ctrl+5 للصفحات | ✅ مُجرّب |
 | ملف التنصيب (NSIS) والأيقونة، وبناؤه تلقائياً على ويندوز عبر GitHub Actions | ✅ البرنامج المغلّف مُجرّب، ⚠️ ملف Setup.exe النهائي يُبنى على ويندوز |
+| نسخ الردود: إعادة التوليد والتعديل يحفظان النسخ السابقة مع أسهم للتنقل | ✅ مُجرّب على لينكس |
+| زر "استمع" لقراءة الرد بأصوات ويندوز | ✅ المنطق مُجرّب بصوت عربي محاكى، ⚠️ الصوت الفعلي يُجرَّب على ويندوز |
+| مكتبتي: الإجابة من مستنداتك مع ذكر الملف (Qwen3-Embedding) | ✅ مُجرّب على لينكس (8 ملفات PDF وWord وHTML ونصوص، والسؤال الإنجليزي وجد الملاحظة العربية) |
+| الإدخال بالصوت (whisper.cpp) | ✅ مُجرّب على لينكس بتسجيل عربي حقيقي من ميكروفون محاكى، ⚠️ تنزيل نسخة ويندوز وتشغيلها يُجرَّبان على ويندوز |
+| رسم الصور (stable-diffusion.cpp وZ-Image Turbo) | ✅ مُجرّب على لينكس بالمعالج، ⚠️ نسخة Vulkan على كرت الشاشة تُجرَّب على ويندوز |
+| المظهر الفاتح | ✅ مُجرّب في كل الصفحات |
+| إخراج الموديل من الذاكرة عند عدم الاستخدام، وتسريع الكتابة (تجريبي) | ✅ مُجرّب على لينكس |
+| تحديث البرنامج من داخله | ⚠️ مكتوب، ولا يمكن تجربته إلا على ويندوز بإصدارين منشورين |
 
 خطة البناء الكاملة في [docs/PLAN.md](docs/PLAN.md).
 
@@ -217,6 +225,15 @@ npm start
 
 للتشخيص عند وجود مشكلة: `npm run diag`. يحفظ تقريراً في `diag-report.txt` بدون اسم المستخدم.
 
+### الاختبارات (لينكس)
+
+اختبارات تشغيل كاملة في `tests/`، تشغّل البرنامج الحقيقي بـPlaywright مع موديلات صغيرة حقيقية:
+
+```bash
+LLAMA_SERVER=~/llama.cpp/build/bin/llama-server npm run test:setup   # مرة واحدة (أضف FEATURES=1 لاختبارات مكتبتي والصوت والرسم)
+xvfb-run -a npm test                                                 # كل الاختبارات، أو: npm test -- chat kb
+```
+
 ## الخصوصية والأمان
 
 - لا توجد أي تحليلات أو تتبع (telemetry).
@@ -230,6 +247,9 @@ npm start
     - الموديل لا يفتح إلا روابط ظهرت في نتائج البحث أو كتبتها أنت.
     - لا يفتح أي عنوان على جهازك أو شبكتك المحلية.
   - التحقق من التحديثات، فقط عند الضغط على "تحقق الآن" في الإعدادات. طلب لـGitHub عن آخر إصدار من البرنامج ومن المحرك.
+  - تنزيل تحديث البرنامج، فقط عند الضغط على "تنزيل وتثبيت" بعد التحقق.
+  - تنزيل أدوات تعمل على جهازك عند أول استخدام لها وبعد موافقتك: موديل الفهرسة لـ"مكتبتي" (Hugging Face)، وwhisper.cpp للصوت (GitHub وHugging Face)، وstable-diffusion.cpp وملفات Z-Image للرسم (GitHub وHugging Face). كل ملف يُتحقق منه بحجمه وبصمته SHA-256.
+- مستنداتك في "مكتبتي" وتسجيلات الصوت ووصف الصور لا تخرج من جهازك. التسجيل لا يُحفظ، ويُرسل فقط إلى whisper.cpp على `127.0.0.1`.
 - الخادم المحلي يستمع على `127.0.0.1` فقط، ولا يمكن الوصول إليه من الشبكة.
 - لكل تشغيل مفتاح عشوائي جديد يُمرَّر للخادم عبر متغير بيئة، فلا يظهر في قائمة العمليات.
 - الخادم لا يقبل إلا طلبات التطبيق نفسه، فلا تستطيع أي صفحة ويب مفتوحة في متصفحك استخدام الموديل.
@@ -246,7 +266,9 @@ npm start
   - يُطلب منه البحث في الأسعار والأخبار وكل ما يتغير، وألا يذكر أرقاماً إذا فشل البحث. الموديلات الصغيرة (2B) قد تخالف هذا أحياناً.
   - البحث عبر DuckDuckGo بدون حساب، وقد يرفض الطلبات الكثيرة المتتالية.
   - التطبيق يعطي الموديل تاريخ اليوم وساعته مع كل محادثة.
-- **الصور:** الموديل **يفهم** الصور التي ترسلها (زر الصورة، أو اللصق، أو السحب)، لكنه **لا يرسم** صوراً.
+- **الصور:** الموديل **يفهم** الصور التي ترسلها (زر الصورة، أو اللصق، أو السحب). **الرسم** بزر منفصل وموديل منفصل (Z-Image Turbo): يحتاج حوالي 6.7 جيجابايت تنزيلاً، ويتوقف موديل المحادثة أثناء الرسم. على المعالج فقط تأخذ الصورة دقائق.
+- **تسريع الكتابة** يفيد في إعادة كتابة الكود والنص المكرر. خيار "الموديل المساعد" أبطأ الكتابة العربية الحرة في تجربتنا على المعالج، ولم يُجرَّب بعد على كرت الشاشة.
+- **استمع** يحتاج صوتاً عربياً مثبّتاً في ويندوز (الإعدادات ← الوقت واللغة ← الكلام).
 
 - الموديل الصغير على المعالج (2B) لغته العربية سليمة، لكنه يخطئ أحياناً في المعلومات والحساب. موديل 4B أدق بشكل واضح لكنه أبطأ بمرتين.
 - إذا أُغلق التطبيق بالقوة (مثلاً "إنهاء المهمة")، قد يبقى المحرك يعمل حتى تفتح التطبيق مرة أخرى، وعندها يغلقه تلقائياً.
@@ -260,6 +282,11 @@ npm start
 - قراءة PDF: [pdf.js](https://github.com/mozilla/pdf.js) (Apache-2.0). قراءة Word: [mammoth](https://github.com/mwilliamson/mammoth.js) (BSD-2-Clause).
 - بايثون في الاستوديو: [Pyodide](https://github.com/pyodide/pyodide) (MPL-2.0).
 - حرارة المعالج وطاقته (اختياري، يثبّته المستخدم بنفسه): [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) (MPL-2.0).
+- البحث بالمعنى في "مكتبتي": [Qwen3-Embedding-0.6B](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF) (Apache-2.0)، يشغّله llama.cpp.
+- الصوت إلى نص: [whisper.cpp](https://github.com/ggml-org/whisper.cpp) (MIT) وموديلات Whisper من OpenAI (MIT).
+- رسم الصور: [stable-diffusion.cpp](https://github.com/leejet/stable-diffusion.cpp) (MIT) وموديل [Z-Image Turbo](https://huggingface.co/Tongyi-MAI/Z-Image-Turbo) من Tongyi-MAI (Apache-2.0)، بصيغة GGUF من [leejet](https://huggingface.co/leejet/Z-Image-Turbo-GGUF)، مع Qwen3 4B (Apache-2.0) لفهم الوصف.
+- تحديث البرنامج: [electron-updater](https://github.com/electron-userland/electron-builder) (MIT).
+- اختبارات التشغيل: [Playwright](https://github.com/microsoft/playwright) (Apache-2.0). المقطع الصوتي العربي في الاختبارات من [Arabic Speech Corpus](https://huggingface.co/datasets/tunis-ai/arabic_speech_corpus) لنوّار حلبي (CC BY 4.0).
 - محرر الكود في الاستوديو: [Monaco Editor](https://github.com/microsoft/monaco-editor) من Microsoft، رخصة MIT. يأتي مع التطبيق ويعمل بدون إنترنت. رخص مكوّناته في `node_modules/monaco-editor/ThirdPartyNotices.txt`.
 
 </div>
@@ -270,16 +297,16 @@ npm start
 
 **Blazma AI** is an open-source Windows app with a fully Arabic (RTL) interface. It combines a chat with open models running locally on your GPU (through llama.cpp's `llama-server`) and a live hardware monitor (GPU, CPU, RAM, temperatures, power draw).
 
-**Status:** phase 1. Local chat works end to end:
-- hardware detection and model recommendation;
-- automatic llama.cpp download with CUDA version selection and a fallback chain;
-- resumable model download with real progress;
-- streaming chat with a collapsible reasoning section and safe Markdown rendering.
-
-Windows-specific paths are written but still awaiting testing on a real Windows + NVIDIA machine.
+**Status:** feature-complete for 0.1.0 and tested end to end on Linux (23 Playwright tests that drive the real app with small real models); Windows-specific paths are written and await testing on a real Windows + NVIDIA machine ([checklist](docs/CHECKLIST-WINDOWS.md)). Features:
+- local chat with streaming, reasoning, safe Markdown, images in, files (PDF, Word, text), web search, personas, saved chats with versions (regenerate / edit keep earlier replies), export;
+- "My library": answers from your own folders of documents (Qwen3-Embedding 0.6B, semantic search, file names shown as sources);
+- voice input (whisper.cpp), read-aloud with Windows voices, image generation (stable-diffusion.cpp + Z-Image Turbo);
+- model catalog, any local GGUF / Ollama / LM Studio model, OpenAI-compatible local API, idle unload, speculative decoding (experimental);
+- a VS Code-like studio with Monaco, an isolated terminal, Python (Pyodide) and a Claude Code-style agent;
+- a live hardware dashboard with a small in-chat overlay; light and dark themes; in-app updates.
 
 **Run from source:** `npm install && npm start`.
 
-**Privacy:** no telemetry. The network is used to download the engine (GitHub) and models (Hugging Face), for optional web search by the model (only the search query goes to DuckDuckGo; pages are fetched only from search results or links the user typed; local/private addresses are blocked), and later to check for updates. The local server binds to 127.0.0.1, requires a per-session random API key, and only accepts the app's own origin.
+**Privacy:** no telemetry. The network is used to download the engine (GitHub), models (Hugging Face) and, on first use and after consent, whisper.cpp, stable-diffusion.cpp and their models; for optional web search by the model (only the search query goes to DuckDuckGo; pages are fetched only from search results or links the user typed; local/private addresses are blocked), and to check for / download updates only when asked. Documents, recordings and image prompts never leave the machine. All local servers bind to 127.0.0.1, requires a per-session random API key, and only accepts the app's own origin.
 
-**License:** MIT. llama.cpp is MIT. Qwen3.5 and Gemma 4 are Apache-2.0. IBM Plex Sans Arabic is OFL-1.1.
+**License:** MIT. llama.cpp, whisper.cpp, stable-diffusion.cpp and electron-updater are MIT. Qwen3.5, Gemma 4, Qwen3-Embedding and Z-Image Turbo are Apache-2.0. IBM Plex Sans Arabic is OFL-1.1.

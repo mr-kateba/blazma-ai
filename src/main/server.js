@@ -33,8 +33,11 @@ function randomFreePort() {
   });
 }
 
+// The preferred port when it is free, else one the system assigns.
+// pickPort(0) means "any free port" (port 0 itself always binds, so it is
+// never returned: the program would listen elsewhere than we connect).
 async function pickPort(preferred) {
-  return (await isPortFree(preferred)) ? preferred : randomFreePort();
+  return preferred > 0 && (await isPortFree(preferred)) ? preferred : randomFreePort();
 }
 
 // Maps llama-server's log to an error code. Patterns are taken from the
@@ -118,7 +121,7 @@ class LlamaServer extends EventEmitter {
     // Sleep on idle (tools/server/README.md, "Sleeping on Idle"): the model and
     // its memory leave the card and RAM after this many seconds without a
     // request, and the next request loads it again. /health does not wake it.
-    if (options.idleUnloadMin > 0) args.push('--sleep-idle-seconds', String(options.idleUnloadMin * 60));
+    if (options.idleUnloadMin > 0) args.push('--sleep-idle-seconds', String(Number(process.env.BLAZMA_IDLE_SECONDS) || options.idleUnloadMin * 60)); // env: testing
     // Speculative decoding (common/arg.cpp): a small model of the same family
     // proposes the next words and the big one checks them in one step
     // (--spec-draft-hf + --spec-type draft-simple), and/or words are proposed
