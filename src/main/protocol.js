@@ -22,9 +22,22 @@ function monacoDir() {
   return fs.existsSync(MONACO_DIR) ? MONACO_DIR : null;
 }
 
+// Pyodide (MPL-2.0): CPython compiled to WebAssembly, for running Python in
+// the studio offline. Only the runtime files are served; packages beyond the
+// standard library are not shipped and the network is closed to them.
+const PYODIDE_PREFIX = '/vendor/pyodide/';
+const PYODIDE_DIR = path.join(__dirname, '..', '..', 'node_modules', 'pyodide');
+const PYODIDE_FILES = new Set(['pyodide.mjs', 'pyodide.asm.mjs', 'pyodide.asm.wasm', 'python_stdlib.zip', 'pyodide-lock.json']);
+// The Python worker and Pyodide's own files get a policy that also allows
+// compiling WebAssembly and fetching Pyodide's files; the app pages do not.
+const PYTHON_WORKER = '/studio/python-worker.js';
+
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.js': 'text/javascript; charset=utf-8',
+  '.mjs': 'text/javascript; charset=utf-8',
+  '.wasm': 'application/wasm',
+  '.zip': 'application/zip',
   '.css': 'text/css; charset=utf-8',
   '.json': 'application/json; charset=utf-8',
   '.svg': 'image/svg+xml',
@@ -38,11 +51,11 @@ function setServerPort(port) {
   serverPort = Number.isInteger(port) && port > 0 && port < 65536 ? port : null;
 }
 
-function buildCsp() {
-  const connect = serverPort ? `http://127.0.0.1:${serverPort}` : "'none'";
+function buildCsp({ python = false } = {}) {
+  const connect = python ? "'self'" : serverPort ? `http://127.0.0.1:${serverPort}` : "'none'";
   return [
     "default-src 'none'",
-    "script-src 'self'",
+    python ? "script-src 'self' 'wasm-unsafe-eval'" : "script-src 'self'",
     // Monaco injects <style> elements and has no nonce support. Scripts stay
     // 'self' only, and img/font/connect sources below block any external
     // request, so injected CSS could not send data anywhere.
@@ -87,7 +100,13 @@ function handleAppProtocol() {
     if (rel === '/' || rel === '') rel = '/index.html';
 
     let base = RENDERER_DIR;
-    if (rel.startsWith(MONACO_PREFIX)) {
+    const python = rel.startsWith(PYODIDE_PREFIX) || rel === PYTHON_WORKER;
+    if (rel.startsWith(PYODIDE_PREFIX)) {
+      const name = rel.slice(PYODIDE_PREFIX.length);
+      if (!PYODIDE_FILES.has(name) || !fs.existsSync(PYODIDE_DIR)) return notFound();
+      base = PYODIDE_DIR;
+      rel = `/${name}`;
+    } else if (rel.startsWith(MONACO_PREFIX)) {
       base = monacoDir();
       if (!base) return notFound();
       rel = rel.slice(MONACO_PREFIX.length - 1);
@@ -103,7 +122,7 @@ function handleAppProtocol() {
       return new Response(body, {
         headers: {
           'content-type': type,
-          'content-security-policy': buildCsp(),
+          'content-security-policy': buildCsp({ python }),
           'x-content-type-options': 'nosniff',
         },
       });

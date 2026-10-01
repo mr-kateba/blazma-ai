@@ -27,6 +27,10 @@
       "!node_modules/monaco-editor/esm/**",
       "!node_modules/monaco-editor/dev/**",
       "!node_modules/pdfjs-dist/build/**",
+      "!node_modules/pyodide/*.map",
+      "!node_modules/pyodide/*.d.ts",
+      "!node_modules/pyodide/console*.html",
+      "!node_modules/pyodide/pyodide.js",
       "!node_modules/pdfjs-dist/web/**",
       "!node_modules/pdfjs-dist/types/**",
       "!node_modules/pdfjs-dist/image_decoders/**",
@@ -79,6 +83,7 @@
   "dependencies": {
     "mammoth": "1.13.0",
     "monaco-editor": "0.57.0",
-    "pdfjs-dist": "6.3.289"
+    "pdfjs-dist": "6.3.289",
+    "pyodide": "314.0.7"
   }
 }

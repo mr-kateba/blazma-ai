@@ -97,7 +97,7 @@ async function exportProject(win, id) {
 // User-initiated: copies the text files of a folder the user picks into a
 // new project (like "Open Folder"). Read-only; the folder is not changed.
 // Hidden entries, node_modules and symbolic links are skipped.
-const IMPORT_EXT = /\.(html?|css|m?js|json|md|txt|svg|xml|csv)$/i;
+const IMPORT_EXT = /\.(html?|css|m?js|json|md|txt|svg|xml|csv|py)$/i;
 const IMPORT_NAME = /^[A-Za-z0-9_\-./]{1,200}$/;
 const IMPORT_TOTAL_BYTES = 8 * 1024 * 1024;
 
