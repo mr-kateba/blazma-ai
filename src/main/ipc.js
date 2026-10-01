@@ -26,6 +26,8 @@ const paths = require('./paths');
 const EDITABLE_SETTINGS = [
   'monitorIntervalMs',
   'lhmEnabled',
+  'overlayEnabled',
+  'overlayCorner',
   'lhmPort',
   'gpuTempWarn',
   'gpuTempDanger',
@@ -290,8 +292,8 @@ function registerIpc({ setup, monitor, getWindow }) {
   });
 
   handle('monitor:info', () => monitor.info());
-  handle('monitor:start', (intervalMs) => monitor.start(Number(intervalMs)));
-  handle('monitor:stop', () => monitor.stop());
+  handle('monitor:start', (intervalMs, client) => monitor.start(client === 'overlay' ? 'overlay' : 'device', Number(intervalMs)));
+  handle('monitor:stop', (client) => monitor.stop(client === 'overlay' ? 'overlay' : 'device'));
   handle('monitor:last', () => monitor.last);
 
   let lastBench = null;

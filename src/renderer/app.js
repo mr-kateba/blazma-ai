@@ -4,6 +4,7 @@ import { initDevice, setDeviceVisible } from './pages/device.js';
 import { setSettingsVisible } from './pages/settings.js';
 import { setStudioVisible, openCodeInStudio } from './pages/studio.js';
 import { initModels, setModelsVisible } from './pages/models.js';
+import { initOverlay, setOverlayChatVisible } from './pages/overlay.js';
 import { el } from './lib/dom.js';
 
 const PAGES = ['chat', 'studio', 'device', 'models', 'settings'];
@@ -22,6 +23,7 @@ function showPage(name) {
   setStudioVisible(name === 'studio');
   setModelsVisible(name === 'models');
   setSettingsVisible(name === 'settings');
+  setOverlayChatVisible(name === 'chat');
 }
 
 // Temperature / slowdown alerts appear on every page.
@@ -51,6 +53,7 @@ for (const item of document.querySelectorAll('.nav-item')) {
 initDevice();
 initModels();
 initChat();
+initOverlay();
 window.blazma.onAlerts(showAlerts);
 // Ctrl+1 … Ctrl+5 switch pages (by key position, so any keyboard layout works).
 document.addEventListener('keydown', (e) => {

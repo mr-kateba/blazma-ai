@@ -774,6 +774,8 @@ async function generate() {
       const payload = {
         messages: apiMessages,
         stream: true,
+        // Speed in every chunk, for the live speed in the mini monitor.
+        timings_per_token: true,
         ...chatSettings.sampling,
         // Gemma 4's template defaults thinking to off, Qwen3.5's to on; always say which.
         chat_template_kwargs: { enable_thinking: chatSettings.thinking },
@@ -814,7 +816,10 @@ async function generate() {
         }
         if (chunk.timings) {
           reply.timings = chunk.timings;
-          if (chunk.timings.predicted_per_second) store.lastSpeed = chunk.timings.predicted_per_second;
+          if (chunk.timings.predicted_per_second) {
+            store.lastSpeed = chunk.timings.predicted_per_second;
+            window.dispatchEvent(new CustomEvent('blazma:gen-speed', { detail: { tps: store.lastSpeed, live: true } }));
+          }
         }
         renderLast();
       }
@@ -838,6 +843,7 @@ async function generate() {
   } finally {
     if (reply.reasoning && !reply.thinkEnd) reply.thinkEnd = Date.now();
     reply.streaming = false;
+    window.dispatchEvent(new CustomEvent('blazma:gen-speed', { detail: { tps: store.lastSpeed, live: false } }));
     abortController = null;
     setBusy(false);
     renderMessages();

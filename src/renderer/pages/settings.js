@@ -5,6 +5,7 @@
 import { ar } from '../i18n/ar.js';
 import { el } from '../lib/dom.js';
 import { refreshDeviceInfo } from './device.js';
+import { refreshOverlaySettings } from './overlay.js';
 
 const S = ar.settingsPage;
 const $ = (id) => document.getElementById(id);
@@ -187,11 +188,12 @@ function renderEngineBanner() {
 function monitorSection(info) {
   const auto = values.gpuTempWarn === null && values.gpuTempDanger === null;
   const interval = select(
-    [1000, 2000, 5000].map((ms) => [ms, S.seconds(ms / 1000)]),
+    [[500, S.live], ...[1000, 2000, 5000].map((ms) => [ms, S.seconds(ms / 1000)])],
     values.monitorIntervalMs,
     async (v) => {
       await save({ monitorIntervalMs: Number(v) });
       await refreshDeviceInfo();
+      refreshOverlaySettings();
     },
   );
   const warn = el('input', { type: 'number', min: '30', max: '110', class: 'set-number', dir: 'ltr', value: String(values.gpuTempWarn ?? info.thresholds.gpuTempWarn), disabled: auto });
@@ -230,6 +232,18 @@ function monitorSection(info) {
     item(S.auto, S.autoNote(info.thresholds.gpuTempWarn, info.thresholds.gpuTempDanger), autoToggle),
     item(S.warn, null, warn),
     item(S.danger, null, danger),
+    item(S.overlay, S.overlayDesc, toggle(values.overlayEnabled, async (on) => {
+      await save({ overlayEnabled: on });
+      refreshOverlaySettings();
+    })),
+    item(S.overlayCorner, null, select(
+      ['top-left', 'top-right', 'bottom-left', 'bottom-right'].map((c) => [c, S.corners[c]]),
+      values.overlayCorner,
+      async (v) => {
+        await save({ overlayCorner: v });
+        refreshOverlaySettings();
+      },
+    )),
     item(S.lhm, S.lhmDesc, toggle(values.lhmEnabled, (on) => save({ lhmEnabled: on }))),
     item(S.lhmPort, S.lhmPortDesc, lhmPort),
   );

@@ -1,7 +1,8 @@
 'use strict';
 
-// Live hardware readings for the "جهازي" page. Sampling runs only while the
-// page is open and visible (the renderer calls start/stop). While the model
+// Live hardware readings for the "جهازي" page and the chat's mini monitor.
+// Sampling runs only while one of them is open and visible (each calls
+// start/stop with its own name; the fastest requested interval wins). While the model
 // server is running, a light background check (GPU temperature and slowdown
 // reasons every 10 s) keeps alerts working when the page is closed.
 
@@ -13,6 +14,7 @@ const system = require('./hardware/system');
 const lhm = require('./hardware/lhm');
 
 const HISTORY_SEC = 300;
+const INTERVALS = [500, 1000, 2000, 5000];
 const BACKGROUND_MS = 10000;
 const STORAGE_EVERY_MS = 30000;
 // When LibreHardwareMonitor is not answering, ask again only this often.
@@ -34,6 +36,10 @@ class Monitor extends EventEmitter {
     this.lhm = { status: 'off', tempC: null, powerW: null };
     this.lhmAt = 0;
     this.alertState = {};
+    this.clients = new Map(); // name -> interval ms
+    this.gpuStream = new gpu.GpuStream();
+    this.winSample = null; // latest Windows counters (sampled in the background)
+    this.winPending = false;
     this.gpuIndex = null;
   }
 
@@ -67,19 +73,43 @@ class Monitor extends EventEmitter {
     return { gpuTempWarn: warn, gpuTempDanger: danger, source: s.gpuTempDanger != null ? 'user' : max ? 'card' : 'default' };
   }
 
-  start(intervalMs) {
-    this.intervalMs = [1000, 2000, 5000].includes(intervalMs) ? intervalMs : settings.get().monitorIntervalMs;
-    this.stop();
+  start(client = 'device', intervalMs) {
+    const ms = INTERVALS.includes(intervalMs) ? intervalMs : settings.get().monitorIntervalMs;
+    this.clients.set(String(client), ms);
+    this.reschedule();
+  }
+
+  stop(client = 'device') {
+    this.clients.delete(String(client));
+    this.reschedule();
+  }
+
+  reschedule() {
+    clearTimeout(this.timer);
+    this.timer = null;
+    if (!this.clients.size) {
+      this.gpuStream.stop();
+      return;
+    }
+    this.intervalMs = Math.min(...this.clients.values());
+    // A tick still running from before must not start a second loop.
+    const gen = (this.gen = (this.gen || 0) + 1);
     const loop = async () => {
       await this.tick();
-      if (this.timer) this.timer = setTimeout(loop, this.intervalMs);
+      if (this.timer && gen === this.gen) this.timer = setTimeout(loop, this.intervalMs);
     };
     this.timer = setTimeout(loop, 0);
   }
 
-  stop() {
-    clearTimeout(this.timer);
-    this.timer = null;
+  // Windows counters take longer than a fast tick; they run beside it and
+  // each tick uses the newest finished result.
+  refreshWinSample(pid) {
+    if (this.winPending) return;
+    this.winPending = true;
+    this.sampler
+      .sample(pid)
+      .then((w) => (this.winSample = w))
+      .finally(() => (this.winPending = false));
   }
 
   // CPU temperature and power, when LibreHardwareMonitor's web server runs.
@@ -89,9 +119,15 @@ class Monitor extends EventEmitter {
       this.lhm = { status: 'disabled', tempC: null, powerW: null };
       return;
     }
+    if (this.lhmPending) return;
     if (this.lhm.status !== 'ok' && Date.now() - this.lhmAt < LHM_RETRY_MS) return;
     this.lhmAt = Date.now();
-    this.lhm = await lhm.readCpu(s.lhmPort);
+    this.lhmPending = true;
+    try {
+      this.lhm = await lhm.readCpu(s.lhmPort);
+    } finally {
+      this.lhmPending = false;
+    }
   }
 
   serverPid() {
@@ -105,14 +141,19 @@ class Monitor extends EventEmitter {
     try {
       const nv = this.nvidia();
       const pid = this.serverPid();
-      const [g, winSample, vramByNvsmi] = await Promise.all([
-        nv ? gpu.sampleGpu(nv.best.index) : null,
-        this.sampler.sample(pid),
-        nv && pid ? gpu.processVramMB(pid) : null,
-      ]);
+      if (nv) await this.gpuStream.start(nv.best.index, this.intervalMs);
+      this.refreshWinSample(pid);
+      // VRAM per process changes slowly; asked at most every 2 seconds.
+      if (nv && pid && Date.now() - (this.vramAt || 0) >= 2000) {
+        this.vramAt = Date.now();
+        this.vramByNvsmi = await gpu.processVramMB(pid);
+      } else if (!pid) this.vramByNvsmi = null;
+      const g = nv ? this.gpuStream.read(this.intervalMs * 3 + 1500) || (await gpu.sampleGpu(nv.best.index)) : null;
+      const winSample = this.winSample;
+      const vramByNvsmi = this.vramByNvsmi ?? null;
       const cpu = system.cpuUsage();
       const st = await system.staticInfo();
-      await this.readLhm();
+      this.readLhm(); // updates this.lhm when it answers (local, under 1 s)
       if (Date.now() - this.storageAt > STORAGE_EVERY_MS) {
         this.storageCache = await system.storage(settings.modelsDir());
         this.storageAt = Date.now();
@@ -172,7 +213,7 @@ class Monitor extends EventEmitter {
   startBackground() {
     clearInterval(this.bgTimer);
     this.bgTimer = setInterval(async () => {
-      if (this.timer || !this.serverPid() || !this.nvidia()) return;
+      if (this.clients.size || !this.serverPid() || !this.nvidia()) return;
       this.checkAlerts(await gpu.sampleGpu(this.nvidia().best.index));
     }, BACKGROUND_MS);
   }
@@ -222,7 +263,8 @@ class Monitor extends EventEmitter {
   }
 
   shutdown() {
-    this.stop();
+    this.clients.clear();
+    this.reschedule();
     clearInterval(this.bgTimer);
     this.sampler.stop();
   }
