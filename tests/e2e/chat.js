@@ -10,7 +10,9 @@ async function waitPhase(win, want, ms = 120000) { const t0 = Date.now(); let p;
   const app = await _electron.launch({ executablePath: root + '/node_modules/electron/dist/electron', args: [root, '--no-sandbox'], cwd: root, env });
   const win = await app.firstWindow(); const logs = [];
   win.on('console', m => logs.push(m.type() + ': ' + m.text())); win.on('pageerror', e => logs.push('pageerror: ' + e.message));
-  await waitPhase(win, 'ready', 60000); console.log('ready offline in', ((Date.now() - t0) / 1000).toFixed(1), 's');
+  // First test of a full run: the mock HF server hashes the model file on its
+  // first request, which alone can take over a minute.
+  await waitPhase(win, 'ready', 240000); console.log('ready offline in', ((Date.now() - t0) / 1000).toFixed(1), 's');
   await win.fill('#chat-input', 'مرحبا، عرّف بنفسك في جملتين.');
   await win.press('#chat-input', 'Enter');
   for (let i = 0; i < 60; i++) {
