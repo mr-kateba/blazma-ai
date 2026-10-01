@@ -1184,7 +1184,6 @@ body.compact-nav .sidebar-foot { display: none; }
 .code-bar-title { font-weight: 600; }
 .code-folder { color: var(--muted); font-size: 12.5px; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .code-bar-gap { flex: 1; }
-.code-ai.on { color: var(--ok-text); font-size: 13px; padding: 2px 8px; border: 1px solid var(--ok); border-radius: 999px; }
 .code-host { position: relative; flex: 1; min-height: 0; background: #1f1f1f; }
 .code-loading { position: absolute; inset: 0; display: flex; gap: 10px; align-items: center; justify-content: center; color: var(--muted); }
 .code-loading[hidden] { display: none; }

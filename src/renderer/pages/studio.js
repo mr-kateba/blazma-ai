@@ -139,7 +139,10 @@ function toolbar(st) {
     await showView();
   });
   let ai;
-  if (st.aiReady) ai = el('span', { class: 'code-ai on', title: C.aiOnHint }, C.aiOn);
+  if (st.aiReady) {
+    ai = el('button', { type: 'button', class: 'btn primary small', title: C.aiOnHint }, C.aiOn);
+    ai.addEventListener('click', () => window.blazma.vscodeAskAi());
+  }
   else {
     ai = el('button', { type: 'button', class: 'btn primary small' }, C.aiConnect);
     ai.addEventListener('click', async () => {

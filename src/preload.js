@@ -86,6 +86,7 @@ contextBridge.exposeInMainWorld(
     vscodeSnippet: (code, lang) => ipcRenderer.invoke('vscode:snippet', String(code), String(lang || '')),
     vscodeRestart: () => ipcRenderer.invoke('vscode:restart'),
     vscodeConnectAi: () => ipcRenderer.invoke('vscode:connectAi'),
+    vscodeAskAi: () => ipcRenderer.invoke('vscode:askAi'),
     saveTextFile: (content, lang) => ipcRenderer.invoke('file:saveText', String(content), String(lang || '')),
     getSettings: () => ipcRenderer.invoke('settings:get'),
     getTheme: () => ipcRenderer.invoke('theme:get'),

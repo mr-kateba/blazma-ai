@@ -36,7 +36,7 @@ const ps = () => execSync('ps -eo args').toString();
   fs.mkdirSync(USER + '/studio', { recursive: true });
   fs.writeFileSync(USER + '/studio/11111111-2222-3333-4444-555555555555.json', JSON.stringify({ id: '11111111-2222-3333-4444-555555555555', name: 'لعبتي', updatedAt: Date.now(), files: { 'index.html': '<h1>مرحبا</h1>', 'js/game.js': 'console.log(1)', '../evil.txt': 'no' } }));
 
-  const app = await _electron.launch({ executablePath: root + '/node_modules/electron/dist/electron', args: [root, '--no-sandbox'], cwd: root, env });
+  const app = await _electron.launch({ executablePath: root + '/node_modules/electron/dist/electron', args: [root, '--no-sandbox', '--lang=ar'], cwd: root, env });
   const win = await app.firstWindow(); await win.waitForLoadState('load');
   await win.setViewportSize({ width: 1400, height: 860 });
   const logs = []; win.on('pageerror', e => logs.push('pageerror: ' + e.message)); win.on('console', m => m.type() === 'error' && logs.push(m.text()));
@@ -61,7 +61,20 @@ const ps = () => execSync('ps -eo args').toString();
       await code.waitForTimeout(800);
     }
   };
+  await code.waitForTimeout(2500);
+  const restricted = await code.locator('.monaco-dialog-box, .statusbar-item:has-text("Restricted")').count();
+  check('no "Restricted Mode" (it turned the AI off)', restricted === 0);
   await trust();
+  // Colors: the app's dark theme with its orange; settings kept per computer.
+  const machine = JSON.parse(fs.readFileSync(USER + '/vscode/data/data/Machine/settings.json', 'utf8'));
+  const look = await code.evaluate(() => ({ dark: document.querySelector('.monaco-workbench').classList.contains('vs-dark'), bg: getComputedStyle(document.querySelector('.part.sidebar')).backgroundColor }));
+  check('dark theme in the app\'s colors, Continue reports off', look.dark && look.bg === 'rgb(20, 23, 30)' && machine['continue.telemetryEnabled'] === false, JSON.stringify(look));
+  // Switching the app to light switches VS Code too, without a reload.
+  await win.evaluate(() => window.blazma.updateSettings({ theme: 'light' }));
+  let light = false;
+  for (let i = 0; i < 20 && !light; i++) { await code.waitForTimeout(500); light = await code.evaluate(() => document.querySelector('.monaco-workbench').classList.contains('vs')); }
+  await win.evaluate(() => window.blazma.updateSettings({ theme: 'dark' }));
+  check('follows the app\'s light theme', light);
   check('server on 127.0.0.1 with a token file, telemetry off', /server-main\.js --host 127\.0\.0\.1 --port \d+ --connection-token-file .* --telemetry-level off/.test(ps()) && !/--connection-token [0-9a-f]/.test(ps()));
 
   const projects = (await win.evaluate(() => window.blazma.vscodeStatus())).projects;
@@ -70,9 +83,12 @@ const ps = () => execSync('ps -eo args').toString();
   await code.waitForTimeout(2500);
   const tree = await code.locator('.monaco-list-row').allInnerTexts().catch(() => []);
   check('explorer shows "Blazma Projects"', tree.some((t) => t.includes('لعبتي')), tree.slice(0, 6).join(' | '));
-  const box = await app.evaluate(({ BrowserWindow }) => { const w = BrowserWindow.getAllWindows()[0]; const v = w.contentView.children[0]; return v ? { ...v.getBounds(), visible: v.getVisible() } : null; });
+  // Run in Arabic, like the users' Windows: Chromium then mirrors child view
+  // positions (x counted from the right), so the x given is the mirrored one
+  // and the app's side bar on the right stays uncovered.
+  const box = await app.evaluate(({ BrowserWindow }) => { const w = BrowserWindow.getAllWindows()[0]; const v = w.contentView.children[0]; return v ? { ...v.getBounds(), visible: v.getVisible(), cw: w.getContentBounds().width } : null; });
   const host = await win.locator('#code-host').boundingBox();
-  check('editor placed over the page area', box && box.visible && Math.abs(box.x - host.x) < 2 && Math.abs(box.y - host.y) < 2 && Math.abs(box.width - host.width) < 2, JSON.stringify(box));
+  check('editor placed over the page area (Arabic layout, side bar free)', box && box.visible && Math.abs(box.cw - box.x - box.width - host.x) < 2 && Math.abs(box.y - host.y) < 2 && Math.abs(box.width - host.width) < 2, JSON.stringify(box));
   await code.screenshot({ path: SP + '/vscode-1.png' });
   await win.screenshot({ path: SP + '/vscode-0-frame.png' });
 
@@ -129,6 +145,10 @@ const ps = () => execSync('ps -eo args').toString();
   const cfg = fs.existsSync(cfgFile) ? fs.readFileSync(cfgFile, 'utf8') : '';
   const st = await win.evaluate(() => window.blazma.getSettings());
   check('AI connect: API on, Continue config points at it', res.ok && st.apiEnabled && cfg.includes('provider: openai') && cfg.includes(`apiKey: "${st.apiKey}"`) && /apiBase: "http:\/\/127\.0\.0\.1:\d+\/v1"/.test(cfg), cfg.split('\n').slice(4, 8).join(' '));
+  check('AI answers in Arabic (Continue rule)', /^rules:\n  - ".*العربية/m.test(cfg));
+  await win.click('.nav-item[data-page="chat"]'); await win.click('.nav-item[data-page="studio"]');
+  await win.waitForSelector('.code-bar button:has-text("اسأل الذكاء")', { timeout: 10000 }).catch(() => {});
+  check('"اسأل الذكاء" button in the bar', (await win.locator('.code-bar button:has-text("اسأل الذكاء")').count()) === 1 && (await win.evaluate(() => window.blazma.vscodeAskAi())) === true);
   check('Continue settings kept in the app folder', /CONTINUE_GLOBAL_DIR/.test(execSync(`cat /proc/$(pgrep -f "server-main.js --host 127.0.0.1" | head -1)/environ | tr '\\0' '\\n' | grep CONTINUE || true`).toString()));
   await win.evaluate(() => window.blazma.apiSetEnabled(false));
 
