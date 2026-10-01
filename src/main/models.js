@@ -194,6 +194,9 @@ function removeLocal(entry) {
 // GGUF file (and whether it has a vision projector) before adding it.
 async function addCustom(hf) {
   const clean = String(hf || '').trim();
+  // Already a built-in model: adding it again would list it twice.
+  const builtin = readJson(paths.catalogFile(), { models: [] }).models.find((m) => m.hf.toLowerCase() === clean.toLowerCase());
+  if (builtin) throw new AppError('model-in-catalog', builtin.name);
   const withVision = await resolveRemote(clean, { vision: true });
   const modelFiles = withVision.files.filter((f) => !f.path.includes('mmproj'));
   const size = modelFiles.reduce((sum, f) => sum + f.size, 0);
