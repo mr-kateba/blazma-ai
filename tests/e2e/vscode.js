@@ -18,6 +18,18 @@ const check = (name, ok, info = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${
 const ps = () => execSync('ps -eo args').toString();
 
 (async () => {
+  // The app's own .tar.gz reader (main/untar.js, used instead of Windows'
+  // tar.exe, which cannot open paths with Arabic letters): same files as tar.
+  {
+    const { extractTarGz } = require(root + '/src/main/untar.js');
+    const dest = SP + '/untar-محمد مجلد';
+    fs.rmSync(dest, { recursive: true, force: true });
+    await extractTarGz(SP + '/vscodium/reh-linux.tar.gz', dest);
+    const count = (d) => fs.readdirSync(d, { withFileTypes: true }).reduce((n, e) => n + (e.isDirectory() ? count(path.join(d, e.name)) : 1), 0);
+    const same = count(dest) === count(SP + '/vscodium/linux') && fs.readFileSync(dest + '/out/server-main.js').equals(fs.readFileSync(SP + '/vscodium/linux/out/server-main.js'));
+    check('own tar.gz reader: same files as tar, Arabic folder name', same && (fs.statSync(dest + '/node').mode & 0o111) !== 0, `${count(dest)} files`);
+    fs.rmSync(dest, { recursive: true, force: true });
+  }
   // A project from the old built-in studio, to be moved to a folder.
   fs.rmSync(HOME, { recursive: true, force: true });
   fs.rmSync(USER + '/vscode', { recursive: true, force: true });

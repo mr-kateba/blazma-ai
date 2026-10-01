@@ -266,4 +266,4 @@ async function cleanupOrphan() {
   return isOurs;
 }
 
-module.exports = { LlamaServer, pickPort, isPortFree, cleanupOrphan, classifyLog };
+module.exports = { LlamaServer, pickPort, isPortFree, cleanupOrphan, classifyLog, killTree };

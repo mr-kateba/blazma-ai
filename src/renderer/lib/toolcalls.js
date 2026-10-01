@@ -64,9 +64,17 @@ function gemmaValue(s, i) {
 }
 
 // { content: text without the calls, calls: [{ name, arguments: JSON string }] }
+// Only text outside ``` code blocks is read, so code that merely shows such
+// syntax (or XML with <channel> tags) is left exactly as written.
 export function extractTextToolCalls(content) {
   const calls = [];
-  let text = String(content || '');
+  const parts = String(content || '').split(/(```[\s\S]*?(?:```|$))/);
+  const out = parts.map((part, i) => (i % 2 ? part : readCalls(part, calls)));
+  return { content: out.join('').trim(), calls };
+}
+
+function readCalls(segment, calls) {
+  let text = segment;
   // Gemma 4
   for (let at = text.indexOf(GEMMA_OPEN); at >= 0; at = text.indexOf(GEMMA_OPEN)) {
     const brace = text.indexOf('{', at);
@@ -98,9 +106,8 @@ export function extractTextToolCalls(content) {
     }
     return whole;
   });
-  // Stray markers the model sometimes leaves around.
-  text = text.replace(/<\|?(?:channel|turn)\|?>|<channel\|>|<turn\|>/g, '');
-  return { content: text.trim(), calls };
+  // Gemma 4's own control tokens left around (with the pipes; plain <channel> is ordinary text).
+  return text.replace(/<\|channel>|<channel\|>|<\|turn>|<turn\|>/g, '');
 }
 
 // What to show while a reply is still streaming: a call being written is hidden.

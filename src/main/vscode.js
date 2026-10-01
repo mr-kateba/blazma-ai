@@ -23,7 +23,8 @@ const { app, net, shell, WebContentsView, session } = require('electron');
 const paths = require('./paths');
 const { downloadFile } = require('./download');
 const { run } = require('./exec');
-const { pickPort } = require('./server');
+const { pickPort, killTree } = require('./server');
+const { extractTarGz } = require('./untar');
 const { AppError } = require('./errors');
 
 const RELEASES_API = 'https://api.github.com/repos/VSCodium/vscodium/releases?per_page=5';
@@ -58,7 +59,7 @@ function installedRoot() {
   const bin = path.join(root(), 'bin');
   if (!fs.existsSync(bin)) return null;
   // Newest version folder first.
-  const versions = fs.readdirSync(bin).sort((a, b) => b.localeCompare(a, 'en', { numeric: true }));
+  const versions = fs.readdirSync(bin).filter((v) => !v.endsWith('.partial')).sort((a, b) => b.localeCompare(a, 'en', { numeric: true }));
   for (const v of versions) {
     const found = findServerRoot(path.join(bin, v));
     if (found) return found;
@@ -74,9 +75,12 @@ function version(dir) {
   }
 }
 
+// Running = not exited and not killed by a signal (exitCode stays null then).
+const alive = (child) => Boolean(child) && child.exitCode === null && child.signalCode === null;
+
 function status() {
   const dir = installedRoot();
-  return { installed: Boolean(dir), version: dir ? version(dir) : null, running: Boolean(server && server.child.exitCode === null), projects: projectsDir() };
+  return { installed: Boolean(dir), version: dir ? version(dir) : null, running: Boolean(server && alive(server.child)), projects: projectsDir() };
 }
 
 async function json(url) {
@@ -118,14 +122,6 @@ async function plan() {
   return { version: rel.tag, bytes: rel.asset.size };
 }
 
-// tar.gz: Windows 10/11 ship tar.exe (bsdtar); fixed arguments only.
-async function extractTarGz(file, dest) {
-  fs.mkdirSync(dest, { recursive: true });
-  const tar = process.platform === 'win32' ? path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe') : 'tar';
-  const r = await run(tar, ['-xzf', file, '-C', dest], { timeoutMs: 15 * 60 * 1000 });
-  if (!r.ok) throw new AppError('vscode-install', r.stderr);
-}
-
 // onProgress({ stage: 'download' | 'extract', done, total })
 async function install(onProgress = () => {}) {
   if (installing) return installing;
@@ -140,11 +136,21 @@ async function install(onProgress = () => {}) {
       onProgress: (done) => onProgress({ stage: 'download', done, total: rel.asset.size }),
     });
     onProgress({ stage: 'extract', done: 0, total: 0 });
+    // Extracted next to its final place and renamed when complete, so an
+    // interrupted extraction is never taken for an installed copy.
     const target = path.join(root(), 'bin', rel.tag.replace(/[^\w.-]/g, '_'));
+    const temp = `${target}.partial`;
+    fs.rmSync(temp, { recursive: true, force: true });
+    try {
+      await extractTarGz(file, temp);
+    } catch (err) {
+      fs.rmSync(temp, { recursive: true, force: true });
+      throw new AppError('vscode-install', err.message);
+    }
+    if (!findServerRoot(temp)) throw new AppError('vscode-install', 'server not found in the archive');
     fs.rmSync(target, { recursive: true, force: true });
-    await extractTarGz(file, target);
+    fs.renameSync(temp, target);
     fs.rmSync(file, { force: true });
-    if (!findServerRoot(target)) throw new AppError('vscode-install', 'server not found in the archive');
     return status();
   })();
   try {
@@ -166,7 +172,7 @@ function ping(port) {
 }
 
 async function startServer() {
-  stop();
+  killServer(); // not stop(): that would also cancel the view being opened
   const dir = installedRoot();
   if (!dir) throw new AppError('vscode-missing');
   const port = await pickPort(0);
@@ -191,20 +197,31 @@ async function startServer() {
     env: { ...process.env, CONTINUE_GLOBAL_DIR: continueDir() },
   });
   let log = '';
+  let spawnError = null;
+  // A spawn failure (antivirus blocking node.exe, no rights) is an 'error'
+  // event; unhandled it would end the whole app.
+  child.on('error', (err) => (spawnError = err));
   child.stderr.on('data', (d) => (log = (log + d).slice(-4000)));
   server = { child, port, token, base: `http://127.0.0.1:${port}` };
   const started = Date.now();
   while (Date.now() - started < 120000) {
-    if (child.exitCode !== null) throw new AppError('vscode-failed', log.slice(-800));
+    if (spawnError) {
+      server = null;
+      throw new AppError('vscode-failed', spawnError.message);
+    }
+    if (!alive(child)) {
+      server = null;
+      throw new AppError('vscode-failed', log.slice(-800));
+    }
     if (await ping(port)) return server;
     await new Promise((r) => setTimeout(r, 400));
   }
-  stop();
+  killServer();
   throw new AppError('vscode-failed', 'timeout');
 }
 
 async function ensureServer() {
-  if (server && server.child.exitCode === null) return server;
+  if (server && alive(server.child)) return server;
   if (!starting) starting = startServer().finally(() => (starting = null));
   return starting;
 }
@@ -218,10 +235,15 @@ function urlFor(s, folder) {
   return u.toString();
 }
 
+// The whole process tree: on Windows its terminals and helpers too.
+function killServer() {
+  if (server && alive(server.child) && server.child.pid) killTree(server.child.pid, true);
+  server = null;
+}
+
 function stop() {
   hideView();
-  if (server && server.child.exitCode === null) server.child.kill();
-  server = null;
+  killServer();
 }
 
 // ---------- the view inside the app window ----------
@@ -299,8 +321,14 @@ function allowsNavigation(contents, url) {
   return Boolean(view) && contents === view.webContents && isOwnUrl(url);
 }
 
+let wantVisible = false; // the page wants the view (false once it is left)
+
+// folder: open this folder; null = keep what is open (the user may have
+// opened another folder inside VS Code), or "Blazma Projects" the first time.
 async function showView(win, bounds, folder) {
+  wantVisible = true;
   const s = await ensureServer();
+  if (!wantVisible) return { base: s.base }; // the page was left meanwhile
   if (!view) view = makeView();
   if (viewWin !== win) {
     if (viewWin && !viewWin.isDestroyed()) viewWin.contentView.removeChildView(view);
@@ -308,14 +336,30 @@ async function showView(win, bounds, folder) {
     viewWin = win;
   }
   setBounds(bounds);
-  view.setVisible(true);
-  const target = urlFor(s, folder || projectsDir());
   const current = view.webContents.getURL();
-  // Same server and folder: keep the page (and its open files) as it is.
-  const sameFolder = current && new URL(current).searchParams.get('folder') === new URL(target).searchParams.get('folder') && current.startsWith(s.base);
-  if (!sameFolder) await view.webContents.loadURL(target).catch(() => {});
+  const onServer = Boolean(current) && current.startsWith(`${s.base}/`);
+  if (folder || !onServer) {
+    view.setVisible(false);
+    await view.webContents.loadURL(urlFor(s, folder || projectsDir())).catch(() => {});
+  }
+  if (!wantVisible) {
+    view.setVisible(false);
+    return { base: s.base };
+  }
+  view.setVisible(true);
   view.webContents.focus();
   return { base: s.base };
+}
+
+// The folder open in the editor now (from its address), for the page's toolbar.
+function currentFolder() {
+  if (!view) return null;
+  try {
+    const f = new URL(view.webContents.getURL()).searchParams.get('folder');
+    return f ? (process.platform === 'win32' ? f.replace(/^\//, '').replace(/\//g, '\\') : f) : null;
+  } catch {
+    return null;
+  }
 }
 
 function setBounds(b) {
@@ -325,7 +369,10 @@ function setBounds(b) {
 }
 
 function hideView() {
+  wantVisible = false;
   if (view) view.setVisible(false);
+  // Keyboard focus back to the app's page, not the hidden editor.
+  if (viewWin && !viewWin.isDestroyed()) viewWin.webContents.focus();
 }
 
 function reloadView() {
@@ -386,8 +433,28 @@ function saveSnippet(code, lang) {
 // ---------- the AI in VS Code (Continue) ----------
 
 // Continue's config (packages/config-yaml schema v1): the running model
-// through Blazma's OpenAI-compatible API. Rewritten at each connection, since
-// the port can change.
+// through Blazma's OpenAI-compatible API. Written once; later only the port
+// and key are updated in place (when they change), so the user's own
+// additions to the file are kept.
+function syncContinueConfig({ port, apiKey, modelName }) {
+  const file = path.join(continueDir(), 'config.yaml');
+  const metaFile = path.join(continueDir(), 'blazma.json');
+  let meta = null;
+  try {
+    meta = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
+  } catch {
+    meta = null;
+  }
+  if (fs.existsSync(file) && meta) {
+    if (meta.port === port && meta.apiKey === apiKey) return;
+    let text = fs.readFileSync(file, 'utf8');
+    text = text.split(`http://127.0.0.1:${meta.port}/v1`).join(`http://127.0.0.1:${port}/v1`);
+    if (meta.apiKey) text = text.split(meta.apiKey).join(apiKey);
+    fs.writeFileSync(file, text, { mode: 0o600 });
+  } else writeContinueConfig({ port, apiKey, modelName });
+  fs.writeFileSync(metaFile, JSON.stringify({ port, apiKey }), { mode: 0o600 });
+}
+
 function writeContinueConfig({ port, apiKey, modelName }) {
   fs.mkdirSync(continueDir(), { recursive: true });
   const q = (s) => JSON.stringify(String(s)); // YAML accepts JSON strings
@@ -443,11 +510,12 @@ module.exports = {
   hideView,
   reloadView,
   allowsNavigation,
+  currentFolder,
   ownsContents,
   migrateStudioProjects,
   saveSnippet,
   projectsDir,
-  writeContinueConfig,
+  syncContinueConfig,
   aiInstalled,
   installAi,
 };
