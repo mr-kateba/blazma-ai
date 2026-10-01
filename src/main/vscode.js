@@ -19,7 +19,7 @@ const path = require('node:path');
 const http = require('node:http');
 const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
-const { app, net, shell, WebContentsView, session } = require('electron');
+const { app, net, shell, WebContentsView, session, nativeTheme } = require('electron');
 const paths = require('./paths');
 const { downloadFile } = require('./download');
 const { run } = require('./exec');
@@ -178,6 +178,7 @@ async function startServer() {
   const port = await pickPort(0);
   const token = crypto.randomBytes(24).toString('hex');
   for (const d of [dataDir(), extDir(), continueDir()]) fs.mkdirSync(d, { recursive: true });
+  syncMachineSettings();
   const tokenFile = path.join(root(), 'connection-token');
   fs.writeFileSync(tokenFile, token, { mode: 0o600 });
   const args = [
@@ -187,6 +188,10 @@ async function startServer() {
     '--connection-token-file', tokenFile,
     '--accept-server-license-terms',
     '--telemetry-level', 'off',
+    // No "Restricted Mode": it turned off Continue (the AI) and most of the
+    // editor until "Trust" was clicked, in English. The folders are the
+    // user's own projects; the terminal already runs their commands.
+    '--disable-workspace-trust',
     '--server-data-dir', dataDir(),
     '--extensions-dir', extDir(),
   ];
@@ -362,9 +367,18 @@ function currentFolder() {
   }
 }
 
+// Languages Chromium lays out right to left.
+const RTL_LOCALE = /^(ar|fa|he|iw|ur|ps|sd|yi|ug|dv|ckb)(\b|[-_])/i;
+
 function setBounds(b) {
   if (!view || !b) return;
   const r = { x: Math.round(b.x), y: Math.round(b.y), width: Math.max(0, Math.round(b.width)), height: Math.max(0, Math.round(b.height)) };
+  // With a right-to-left system language (Arabic Windows) Chromium mirrors
+  // child view positions: x then counts from the right edge. Without this the
+  // editor slid over the app's side bar and there was no way back.
+  if (RTL_LOCALE.test(app.getLocale()) && viewWin && !viewWin.isDestroyed()) {
+    r.x = viewWin.getContentBounds().width - r.x - r.width;
+  }
   view.setBounds(r);
 }
 
@@ -373,6 +387,15 @@ function hideView() {
   if (view) view.setVisible(false);
   // Keyboard focus back to the app's page, not the hidden editor.
   if (viewWin && !viewWin.isDestroyed()) viewWin.webContents.focus();
+}
+
+// Continue's chat box (its own shortcut, Ctrl+L, typed into VS Code).
+function focusAi() {
+  if (!view || !view.getVisible()) return false;
+  view.webContents.focus();
+  view.webContents.sendInputEvent({ type: 'keyDown', keyCode: 'L', modifiers: ['control'] });
+  view.webContents.sendInputEvent({ type: 'keyUp', keyCode: 'L', modifiers: ['control'] });
+  return true;
 }
 
 function reloadView() {
@@ -430,6 +453,109 @@ function saveSnippet(code, lang) {
   return dir;
 }
 
+// ---------- VS Code settings ----------
+
+// Settings for this computer's VS Code (the "Machine" settings of a remote
+// server, which apply on top of the user's): colors that follow the app's
+// theme in its orange, no welcome page, and Continue's usage reports off
+// (the app sends nothing out). A value the user has changed since we last
+// wrote it is kept; a file that is not plain JSON (comments) is left alone.
+const DARK = {
+  'editor.background': '#0e1014',
+  'editorGutter.background': '#0e1014',
+  'sideBar.background': '#14171e',
+  'sideBarSectionHeader.background': '#14171e',
+  'activityBar.background': '#14171e',
+  'activityBar.activeBorder': '#ff6d00',
+  'activityBarBadge.background': '#ff6d00',
+  'activityBarBadge.foreground': '#1a0d00',
+  'titleBar.activeBackground': '#0e1014',
+  'titleBar.inactiveBackground': '#0e1014',
+  'statusBar.background': '#14171e',
+  'statusBar.border': '#252a35',
+  'statusBarItem.remoteBackground': '#ff6d00',
+  'statusBarItem.remoteForeground': '#1a0d00',
+  'panel.background': '#0e1014',
+  'panel.border': '#252a35',
+  'terminal.background': '#0e1014',
+  'tab.activeBackground': '#0e1014',
+  'tab.inactiveBackground': '#14171e',
+  'tab.activeBorderTop': '#ff6d00',
+  'editorGroupHeader.tabsBackground': '#14171e',
+  'focusBorder': '#ff6d0099',
+  'button.background': '#ff6d00',
+  'button.foreground': '#1a0d00',
+  'button.hoverBackground': '#ff8a33',
+  'progressBar.background': '#ff6d00',
+  'textLink.foreground': '#ffb26b',
+  'list.activeSelectionBackground': '#ff6d0033',
+  'list.inactiveSelectionBackground': '#ff6d0022',
+};
+const LIGHT = {
+  'activityBar.activeBorder': '#ff6d00',
+  'activityBarBadge.background': '#ff6d00',
+  'tab.activeBorderTop': '#ff6d00',
+  'focusBorder': '#ff6d0099',
+  'button.background': '#e65c00',
+  'button.foreground': '#ffffff',
+  'progressBar.background': '#ff6d00',
+  'statusBarItem.remoteBackground': '#ff6d00',
+};
+
+function wantedSettings(dark) {
+  return {
+    'workbench.colorTheme': dark ? 'Default Dark Modern' : 'Default Light Modern',
+    'workbench.colorCustomizations': dark ? DARK : LIGHT,
+    'workbench.startupEditor': 'none',
+    'continue.telemetryEnabled': false,
+  };
+}
+
+function syncMachineSettings() {
+  const file = path.join(dataDir(), 'data', 'Machine', 'settings.json');
+  const metaFile = path.join(root(), 'settings-blazma.json');
+  let current = {};
+  let last = {};
+  try {
+    if (fs.existsSync(file)) {
+      const text = fs.readFileSync(file, 'utf8');
+      current = text.trim() ? JSON.parse(text) : {};
+    }
+  } catch {
+    return; // edited by hand with comments: not ours to rewrite
+  }
+  try {
+    last = JSON.parse(fs.readFileSync(metaFile, 'utf8'));
+  } catch {
+    last = {};
+  }
+  const want = wantedSettings(nativeTheme.shouldUseDarkColors);
+  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  let changed = false;
+  for (const [k, v] of Object.entries(want)) {
+    if ((!(k in current) || same(current[k], last[k])) && !same(current[k], v)) {
+      current[k] = v;
+      changed = true;
+    }
+  }
+  if (changed || !fs.existsSync(file)) {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify(current, null, 2));
+  }
+  fs.writeFileSync(metaFile, JSON.stringify(want));
+}
+
+// The app's theme changed: VS Code reads its settings file again by itself.
+nativeTheme.on('updated', () => {
+  if (installedRoot()) {
+    try {
+      syncMachineSettings();
+    } catch {
+      /* not worth a message: the colors stay as they were */
+    }
+  }
+});
+
 // ---------- the AI in VS Code (Continue) ----------
 
 // Continue's config (packages/config-yaml schema v1): the running model
@@ -446,14 +572,19 @@ function syncContinueConfig({ port, apiKey, modelName }) {
     meta = null;
   }
   if (fs.existsSync(file) && meta) {
-    if (meta.port === port && meta.apiKey === apiKey) return;
     let text = fs.readFileSync(file, 'utf8');
+    const addRule = !meta.arabic && !/^rules:/m.test(text);
+    if (meta.port === port && meta.apiKey === apiKey && !addRule) return;
+    if (addRule) text = `${text.replace(/\s*$/, '\n')}${ARABIC_RULE.join('\n')}\n`;
     text = text.split(`http://127.0.0.1:${meta.port}/v1`).join(`http://127.0.0.1:${port}/v1`);
     if (meta.apiKey) text = text.split(meta.apiKey).join(apiKey);
     fs.writeFileSync(file, text, { mode: 0o600 });
   } else writeContinueConfig({ port, apiKey, modelName });
-  fs.writeFileSync(metaFile, JSON.stringify({ port, apiKey }), { mode: 0o600 });
+  fs.writeFileSync(metaFile, JSON.stringify({ port, apiKey, arabic: true }), { mode: 0o600 });
 }
+
+// The model answers in Arabic (code and names stay as they are).
+const ARABIC_RULE = ['rules:', `  - ${JSON.stringify('أجب دائماً باللغة العربية الفصحى المبسطة. اترك الكود وأسماء الملفات والأوامر كما هي بالإنجليزية.')}`];
 
 function writeContinueConfig({ port, apiKey, modelName }) {
   fs.mkdirSync(continueDir(), { recursive: true });
@@ -472,6 +603,7 @@ function writeContinueConfig({ port, apiKey, modelName }) {
     '      - chat',
     '      - edit',
     '      - apply',
+    ...ARABIC_RULE,
     '',
   ].join('\n');
   fs.writeFileSync(path.join(continueDir(), 'config.yaml'), yaml, { mode: 0o600 });
@@ -509,6 +641,7 @@ module.exports = {
   setBounds,
   hideView,
   reloadView,
+  focusAi,
   allowsNavigation,
   currentFolder,
   ownsContents,

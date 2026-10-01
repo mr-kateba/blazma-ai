@@ -425,6 +425,7 @@ function registerIpc({ setup, monitor, getWindow }) {
   });
   // Turns on the local API (fixed key) if needed, installs Continue from
   // Open VSX, and points it at the running model.
+  handle('vscode:askAi', () => vscode.focusAi());
   handle('vscode:connectAi', () =>
     wrap(async () => {
       const s = settings.get();
