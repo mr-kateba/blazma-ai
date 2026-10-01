@@ -7,10 +7,14 @@ const out = (...a) => console.log(...a);
   fs.rmSync(SP + '/e2e-home/Blazma AI/studio', { recursive: true, force: true });
   const app = await _electron.launch({ executablePath: root + '/node_modules/electron/dist/electron', args: [root, '--no-sandbox'], cwd: root, env });
   const win = await app.firstWindow(); await win.waitForLoadState('load');
-  const logs = []; win.on('pageerror', e => logs.push('pageerror: ' + e.message)); win.on('console', m => m.type() === 'error' && logs.push('console: ' + m.text()));
+  // Expected page errors: the blocked Monaco loader (below) and bug.js, written on purpose to fill the problems list.
+  const logs = []; win.on('pageerror', e => !/reading 'config'|undefinedFn is not defined/.test(e.message) && logs.push('pageerror: ' + e.message)); win.on('console', m => m.type() === 'error' && logs.push('console: ' + m.text()));
   win.on('dialog', d => d.accept());
   await win.evaluate(() => localStorage.clear());
-  await win.click('.nav-item[data-page="studio"]'); await win.waitForTimeout(2000);
+  // This test covers the simple editor, the studio's fallback when Monaco
+  // cannot load: the AMD loader is blocked, so loadMonaco times out (20 s).
+  await win.evaluate(() => Object.defineProperty(window, 'require', { get: () => undefined, set: () => {}, configurable: false }));
+  await win.click('.nav-item[data-page="studio"]'); await win.waitForSelector('.ed-input', { timeout: 40000 }); await win.waitForTimeout(1000);
   const val = () => win.evaluate(() => document.querySelector('.ed-input').value);
   const termText = () => win.evaluate(() => [...document.querySelectorAll('.term-row')].map(r => r.textContent));
   const frame = win.frameLocator('.pv-frame');

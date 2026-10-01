@@ -66,6 +66,8 @@ const navOf = (win, sel) => win.locator(`${sel} .branch-count`).allTextContents(
     speechSynthesis.getVoices = () => fake;
     speechSynthesis.speak = (u) => { window.__spoken.push({ text: u.text, lang: u.lang }); window.__utter = u; };
     speechSynthesis.cancel = () => {};
+    // A real utterance only accepts real SpeechSynthesisVoice objects.
+    window.SpeechSynthesisUtterance = class { constructor(text) { this.text = text; } };
   });
   await win.locator('.msg-ai .msg-footer button:has-text("استمع")').click(); await win.waitForTimeout(300);
   const spoken = await win.evaluate(() => window.__spoken);

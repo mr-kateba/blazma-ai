@@ -7,7 +7,7 @@ const tc = (name, args) => ({ name, args: JSON.stringify(args) });
 (async () => {
   const app = await _electron.launch({ executablePath: root + '/node_modules/electron/dist/electron', args: [root, '--no-sandbox'], cwd: root, env });
   const win = await app.firstWindow(); await win.waitForLoadState('load');
-  const logs = []; win.on('pageerror', e => logs.push('pageerror: ' + e.message));
+  const logs = []; win.on('pageerror', e => !/boom is not defined/.test(e.message) && logs.push('pageerror: ' + e.message)); // boom: a runtime error written on purpose for /fix
   win.on('dialog', d => d.accept());
   for (let i = 0; i < 600 && (await win.evaluate(() => window.blazma.getSetupState().then(s => s.phase))) !== 'ready'; i++) await win.waitForTimeout(300);
   // Scripted model: each request takes the next reply from window.__script.
@@ -41,7 +41,7 @@ const tc = (name, args) => ({ name, args: JSON.stringify(args) });
   // Scenario 1: auto mode
   await script([
     { reasoning: 'I should change the color.', calls: [tc('todo_write', { todos: [{ content: 'تغيير لون المربع', status: 'in_progress' }, { content: 'التشغيل والتأكد', status: 'pending' }] }), tc('read_file', { path: 'game.js' })] },
-    { calls: [tc('edit_file', { path: 'game.js', old_string: "ctx.fillStyle = '#5b8cff';", new_string: "  ctx.fillStyle = '#ff4d4d';" }), tc('edit_file', { path: 'game.js', old_string: 'this text does not exist', new_string: 'x' })] },
+    { calls: [tc('edit_file', { path: 'game.js', old_string: "ctx.fillStyle = '#ff6d00';", new_string: "  ctx.fillStyle = '#ff4d4d';" }), tc('edit_file', { path: 'game.js', old_string: 'this text does not exist', new_string: 'x' })] },
     { calls: [tc('run_project', {}), tc('run_command', { command: 'ls' }), tc('search_files', { query: 'fillStyle' })] },
     { calls: [tc('todo_write', { todos: [{ content: 'تغيير لون المربع', status: 'completed' }, { content: 'التشغيل والتأكد', status: 'completed' }] })] },
     { content: 'غيّرت لون المربع إلى **الأحمر** وشغّلت المشروع بدون أخطاء.' },
@@ -50,7 +50,7 @@ const tc = (name, args) => ({ name, args: JSON.stringify(args) });
   out('cards:', (await win.locator('.tool-card').allInnerTexts()).map(t => t.replace(/\s+/g, ' ')));
   out('card states:', await win.evaluate(() => [...document.querySelectorAll('.tool-card')].map(c => c.className.replace('tool-card ', ''))));
   out('todos:', (await win.locator('.todo').allInnerTexts()), '|', await win.innerText('.ai-todos-head'));
-  out('game.js has red:', (await model('game.js')).includes("  ctx.fillStyle = '#ff4d4d';"), '| original gone:', !(await model('game.js')).includes('#5b8cff'));
+  out('game.js has red:', (await model('game.js')).includes("  ctx.fillStyle = '#ff4d4d';"), '| original gone:', !(await model('game.js')).includes('#ff6d00'));
   out('answer:', await win.innerText('.ai-entry.assistant'));
   out('thinking block:', await win.locator('.ai-think').count());
   out('footer:', (await win.innerText('.turn-changes')).replace(/\s+/g, ' '));
@@ -67,7 +67,7 @@ const tc = (name, args) => ({ name, args: JSON.stringify(args) });
   await win.click('.diff-modal-head .wb-icon-btn');
   // undo
   await win.click('.turn-changes .btn'); await win.waitForTimeout(800);
-  out('after undo, blue back:', (await model('game.js')).includes('#5b8cff'), '| red gone:', !(await model('game.js')).includes('#ff4d4d'), '| footer:', await win.innerText('.turn-changes .btn'));
+  out('after undo, orange back:', (await model('game.js')).includes('#ff6d00'), '| red gone:', !(await model('game.js')).includes('#ff4d4d'), '| footer:', await win.innerText('.turn-changes .btn'));
 
   // Scenario 2: ask mode, reject then accept
   await win.selectOption('.ai-mode', 'ask');
