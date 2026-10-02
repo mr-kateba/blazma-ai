@@ -15,10 +15,11 @@ const DEFAULTS = Object.freeze({
   temperature: null, // null = use the model's recommended value
   apiEnabled: false, // other programs on this computer may use the server (fixed key below)
   apiKey: '',
-  webSearch: true,
-  kbInChat: false,
+  webSearch: true, // the model may search the web (tool calls run in main/web.js)
+  kbInChat: false, // answer from the user's documents (knowledge.js)
   tourDone: false, // the first-run guided tour was finished or skipped
-  voiceModel: 'small', // speech to text: 'small' (faster) or 'turbo' (more accurate) // answer from the user's documents (knowledge.js) // the model may search the web (tool calls run in main/web.js)
+  voiceModel: 'small', // speech to text: 'small' (faster) or 'turbo' (more accurate)
+  ttsEngine: 'auto', // reading aloud: 'auto' (Blazma's Arabic voice when downloaded), 'blazma' or 'windows'
   shareDeviceInfo: false, // add a hardware summary to the system prompt (monitor.modelSummary)
   monitorIntervalMs: 2000,
   theme: 'dark', // 'dark' | 'light' | 'system' (follows Windows)
@@ -51,6 +52,7 @@ const VALIDATORS = {
   kbInChat: (v) => typeof v === 'boolean',
   tourDone: (v) => typeof v === 'boolean',
   voiceModel: (v) => ['small', 'turbo'].includes(v),
+  ttsEngine: (v) => ['auto', 'blazma', 'windows'].includes(v),
   shareDeviceInfo: (v) => typeof v === 'boolean',
   monitorIntervalMs: (v) => [500, 1000, 2000, 5000].includes(v),
   theme: (v) => ['dark', 'light', 'system'].includes(v),

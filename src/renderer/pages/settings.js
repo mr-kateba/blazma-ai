@@ -6,6 +6,7 @@
 
 import { ar } from '../i18n/ar.js';
 import { el } from '../lib/dom.js';
+import { speak } from '../lib/speech.js';
 import { refreshDeviceInfo } from './device.js';
 import { refreshOverlaySettings } from './overlay.js';
 import { confirmDialog } from '../lib/dialog.js';
@@ -111,6 +112,31 @@ function chatSection() {
     (v) => save({ temperature: v === 'auto' ? null : Number(v) }),
   );
 
+  // Reading voice: which one, and Blazma's own voice downloaded here too.
+  const ttsSelect = select([['auto', S.chat.ttsAuto], ['blazma', S.chat.ttsBlazma], ['windows', S.chat.ttsWindows]], values.ttsEngine || 'auto', (v) => save({ ttsEngine: v }));
+  const ttsBox = el('div', { class: 'row' });
+  const renderTts = async () => {
+    const st = await window.blazma.ttsStatus();
+    const tryBtn = el('button', { type: 'button', class: 'btn ghost small' }, S.chat.ttsTry);
+    tryBtn.addEventListener('click', () => speak(S.chat.ttsSample, tryBtn));
+    if (st.installed) return ttsBox.replaceChildren(el('span', { class: 'muted small' }, S.chat.ttsReady), tryBtn);
+    const get = el('button', { type: 'button', class: 'btn small' }, S.chat.ttsInstall);
+    get.addEventListener('click', async () => {
+      get.disabled = true;
+      const off = window.blazma.onTtsProgress((p) => (get.textContent = ar.chat.ttsDownloading(p.total ? Math.floor((p.done / p.total) * 100) : 0)));
+      const res = await window.blazma.ttsInstall();
+      off();
+      if (!res.ok) {
+        get.disabled = false;
+        get.textContent = S.chat.ttsInstall;
+        return toast(errorText(res.error), 'error');
+      }
+      renderTts();
+    });
+    ttsBox.replaceChildren(get, tryBtn);
+  };
+  renderTts();
+
   const backupBtn = el('button', { type: 'button', class: 'btn small' }, S.chat.backupBtn);
   backupBtn.addEventListener('click', async () => {
     const res = await window.blazma.chatsBackup();
@@ -135,6 +161,7 @@ function chatSection() {
     item(S.chat.device, S.chat.deviceDesc, toggle(values.shareDeviceInfo, (on) => save({ shareDeviceInfo: on }))),
     item(S.chat.temp, S.chat.tempDesc, temp),
     item(S.chat.prompt, S.chat.promptDesc, null, el('div', { class: 'set-stack' }, prompt, el('div', { class: 'row' }, resetPrompt))),
+    item(S.chat.tts, S.chat.ttsDesc, ttsSelect, ttsBox),
     item(S.chat.backup, S.chat.backupDesc, null, el('div', { class: 'row' }, backupBtn, restoreBtn)),
   );
 }

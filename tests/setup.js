@@ -7,7 +7,8 @@
 // With FEATURES=1 also (about 7 GB) what kb, voice, image and vscode tests need:
 // the Qwen3-Embedding model, whisper.cpp's Linux build with a small model and
 // two speech samples, stable-diffusion.cpp's Linux build with Z-Image
-// Turbo files (smaller Q3 versions than the app downloads), and VSCodium's server.
+// Turbo files (smaller Q3 versions than the app downloads), VSCodium's server,
+// and Piper with a test voice.
 //
 // Usage: LLAMA_SERVER=~/llama.cpp/build/bin/llama-server [FEATURES=1] node tests/setup.js
 
@@ -80,6 +81,17 @@ function features() {
     mkdir(path.join(vs, 'linux'));
     execFileSync('tar', ['-xzf', path.join(vs, 'reh-linux.tar.gz'), '-C', path.join(vs, 'linux')]);
   }
+
+  // Piper (MIT) for the reading voice: the Linux build of the release the app
+  // downloads for Windows, and Piper's own small test voice (English) in place
+  // of the Arabic voice, served by the mock from hfsrc like Hugging Face would.
+  const files = path.join(WORK, 'hfsrc', 'files');
+  mkdir(files);
+  download('https://github.com/rhasspy/piper/releases/download/2023.11.14-2/piper_linux_x86_64.tar.gz', path.join(files, 'piper_linux_x86_64.tar.gz'));
+  const voice = path.join(WORK, 'hfsrc', 'repos', 'rhasspy', 'piper-voices', 'ar', 'ar_JO', 'kareem', 'medium');
+  mkdir(voice);
+  download('https://github.com/rhasspy/piper/raw/master/etc/test_voice.onnx', path.join(voice, 'ar_JO-kareem-medium.onnx'));
+  download('https://github.com/rhasspy/piper/raw/master/etc/test_voice.onnx.json', path.join(voice, 'ar_JO-kareem-medium.onnx.json'));
 
   const img = path.join(WORK, 'images');
   mkdir(img);

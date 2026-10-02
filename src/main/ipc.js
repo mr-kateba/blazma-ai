@@ -20,6 +20,7 @@ const documents = require('./documents');
 const localmodels = require('./localmodels');
 const knowledge = require('./knowledge');
 const voice = require('./voice');
+const tts = require('./tts');
 const images = require('./images');
 const personas = require('./personas');
 const { exportChat } = require('./exporter');
@@ -39,6 +40,7 @@ const EDITABLE_SETTINGS = [
   'kbInChat',
   'tourDone',
   'voiceModel',
+  'ttsEngine',
   'shareDeviceInfo',
   'systemPrompt',
   'temperature',
@@ -155,6 +157,18 @@ function registerIpc({ setup, monitor, getWindow }) {
       }),
     ),
   );
+  // Blazma's own Arabic voice for "استمع" (tts.js).
+  handle('tts:status', () => tts.status());
+  handle('tts:plan', () => wrap(() => tts.plan()));
+  handle('tts:install', () =>
+    wrap(() =>
+      tts.install((p) => {
+        const w = getWindow();
+        if (w && !w.isDestroyed()) w.webContents.send('tts:progress', p);
+      }),
+    ),
+  );
+  handle('tts:synth', (text) => wrap(async () => new Uint8Array(await tts.synth(String(text || '')))));
   handle('voice:transcribe', (wav) => wrap(() => voice.transcribe(wav instanceof Uint8Array ? wav : new Uint8Array(wav || []))));
   // "مكتبتي": the user's document folders, indexed for answers (knowledge.js).
   handle('kb:status', () => knowledge.status());
