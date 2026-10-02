@@ -10,6 +10,10 @@ const { writeJson, readJson } = require('./jsonfile');
 
 const ID_RE = /^[a-z0-9-]{8,64}$/;
 const MAX_TITLE = 80;
+const MAX_FOLDER = 40;
+
+// A folder name: one line, no control characters, short.
+const cleanFolder = (f) => String(f || '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, MAX_FOLDER);
 
 const dir = () => path.join(paths.userData(), 'chats');
 const fileFor = (id) => {
@@ -71,13 +75,14 @@ function list() {
     let hit = listCache.get(file);
     if (!hit || hit.mtimeMs !== st.mtimeMs || hit.size !== st.size) {
       const c = readJson(file, null);
-      hit = { mtimeMs: st.mtimeMs, size: st.size, meta: c && ID_RE.test(c.id) ? { id: c.id, title: c.title, updatedAt: c.updatedAt } : null };
+      hit = { mtimeMs: st.mtimeMs, size: st.size, meta: c && ID_RE.test(c.id) ? { id: c.id, title: c.title, updatedAt: c.updatedAt, pinned: Boolean(c.pinned), folder: cleanFolder(c.folder) } : null };
       listCache.set(file, hit);
     }
     if (hit.meta) out.push(hit.meta);
   }
   for (const file of listCache.keys()) if (!files.includes(path.basename(file))) listCache.delete(file);
-  return out.sort((a, b) => b.updatedAt - a.updatedAt);
+  // Pinned chats first, then the newest.
+  return out.sort((a, b) => Number(b.pinned) - Number(a.pinned) || b.updatedAt - a.updatedAt);
 }
 
 function get(id) {
@@ -96,6 +101,9 @@ function save(chat) {
     String(chat.fallbackTitle || '').slice(0, MAX_TITLE);
   const personaId = typeof chat.personaId === 'string' && /^[a-z0-9-]{1,64}$/.test(chat.personaId) ? chat.personaId : undefined;
   const data = { id: chat.id, title, createdAt: (existing && existing.createdAt) || now, updatedAt: now, personaId, messages };
+  // Pin and folder are set from the list (setMeta), and kept when the chat is saved.
+  if (existing && existing.pinned) data.pinned = true;
+  if (existing && cleanFolder(existing.folder)) data.folder = cleanFolder(existing.folder);
   writeJson(fileFor(chat.id), data);
   return { id: data.id, title: data.title, updatedAt: data.updatedAt };
 }
@@ -106,6 +114,65 @@ function rename(id, title) {
   chat.title = String(title || '').replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE) || chat.title;
   writeJson(fileFor(id), chat);
   return { id, title: chat.title };
+}
+
+// Pin / unpin, or move to a folder ('' = no folder). The date is kept, so the
+// chat does not jump to the top of "today".
+function setMeta(id, { pinned, folder } = {}) {
+  const chat = get(id);
+  if (!chat) return null;
+  if (pinned !== undefined) {
+    if (pinned) chat.pinned = true;
+    else delete chat.pinned;
+  }
+  if (folder !== undefined) {
+    const f = cleanFolder(folder);
+    if (f) chat.folder = f;
+    else delete chat.folder;
+  }
+  writeJson(fileFor(id), chat);
+  return { id, pinned: Boolean(chat.pinned), folder: chat.folder || '' };
+}
+
+// Every chat in one file, for a backup or another computer.
+function exportAll() {
+  const chats = list()
+    .map((m) => get(m.id))
+    .filter(Boolean);
+  return { app: 'Blazma AI', kind: 'chats-backup', version: 1, exportedAt: Date.now(), chats };
+}
+
+// Chats from a backup file. Each one is cleaned like a saved chat; a chat
+// that is already here is replaced only by a newer copy.
+function importAll(data) {
+  if (!data || data.kind !== 'chats-backup' || !Array.isArray(data.chats)) throw new Error('not a Blazma chats backup');
+  const res = { added: 0, updated: 0, skipped: 0 };
+  for (const c of data.chats.slice(0, 20000)) {
+    if (!c || !ID_RE.test(String(c.id)) || !Array.isArray(c.messages)) {
+      res.skipped++;
+      continue;
+    }
+    const existing = get(c.id);
+    const updatedAt = Number(c.updatedAt) || Date.now();
+    if (existing && (Number(existing.updatedAt) || 0) >= updatedAt) {
+      res.skipped++;
+      continue;
+    }
+    const messages = c.messages.slice(0, 5000).map((m) => cleanMessage(m || {}));
+    const out = {
+      id: c.id,
+      title: String(c.title || '').replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE) || 'محادثة',
+      createdAt: Number(c.createdAt) || updatedAt,
+      updatedAt,
+      personaId: typeof c.personaId === 'string' && /^[a-z0-9-]{1,64}$/.test(c.personaId) ? c.personaId : undefined,
+      messages,
+    };
+    if (c.pinned) out.pinned = true;
+    if (cleanFolder(c.folder)) out.folder = cleanFolder(c.folder);
+    writeJson(fileFor(c.id), out);
+    res[existing ? 'updated' : 'added']++;
+  }
+  return res;
 }
 
 function remove(id) {
@@ -137,4 +204,4 @@ function search(query) {
   return out;
 }
 
-module.exports = { list, get, save, rename, remove, search };
+module.exports = { list, get, save, rename, remove, search, setMeta, exportAll, importAll };

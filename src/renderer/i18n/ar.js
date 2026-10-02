@@ -70,6 +70,17 @@ export const ar = Object.freeze({
     untitled: 'محادثة بدون عنوان',
     rename: 'إعادة تسمية',
     remove: 'حذف',
+    pin: 'تثبيت في الأعلى',
+    unpin: 'إلغاء التثبيت',
+    moveToFolder: 'نقل إلى مجلد',
+    folderMenu: 'المجلد',
+    noFolder: 'بدون مجلد',
+    newFolder: 'مجلد جديد…',
+    newFolderTitle: 'مجلد جديد',
+    newFolderPh: 'اسم المجلد، مثل: الدراسة',
+    allChats: 'الكل',
+    pinnedGroup: 'مثبّتة',
+    foldersLabel: 'المجلدات',
     confirmDelete: (t) => `حذف المحادثة «${t}»؟ لا يمكن التراجع.`,
     regenerate: 'إعادة التوليد',
     listen: 'استمع',
@@ -555,7 +566,7 @@ export const ar = Object.freeze({
     openFolder: 'فتح المجلد',
     chat: {
       title: 'المحادثة',
-      desc: 'كيف يرد الذكاء عليك. تنطبق أيضاً على مساعد الاستوديو.',
+      desc: 'كيف يرد الذكاء عليك، ونسخة احتياطية من محادثاتك.',
       prompt: 'تعليمات الذكاء',
       promptDesc: 'نص يُرسل مع كل محادثة ليحدد أسلوب الردود (مثلاً: أجب باختصار).',
       temp: 'أسلوب الردود',
@@ -570,6 +581,12 @@ export const ar = Object.freeze({
       webDesc: 'يبحث الموديل بنفسه عند الحاجة. يُرسل نص البحث فقط إلى DuckDuckGo.',
       device: 'إعطاء الذكاء معلومات جهازي',
       deviceDesc: 'يعرف الذكاء قطع جهازك وحرارتها ليجيب عن أسئلتك عنه.',
+      backup: 'نسخة احتياطية للمحادثات',
+      backupDesc: 'كل محادثاتك في ملف واحد، لتحفظها أو تنقلها لجهاز آخر. الاستعادة تضيف المحادثات ولا تحذف شيئاً.',
+      backupBtn: 'حفظ نسخة احتياطية…',
+      restoreBtn: 'استعادة من ملف…',
+      backupDone: (n) => `حُفظت ${n} محادثة.`,
+      restoreDone: (r) => `أُضيفت ${r.added} محادثة، وحُدّثت ${r.updated}${r.skipped ? `، وتُركت ${r.skipped} لأنها موجودة عندك بنفس النسخة أو أحدث` : ''}.`,
     },
     engine: {
       title: 'الموديل والأداء',
@@ -727,6 +744,10 @@ export const ar = Object.freeze({
 
   // Keyed by the error codes produced in src/main (errors.js, server.js).
   errors: {
+    'backup-invalid': {
+      title: 'هذا الملف ليس نسخة احتياطية من محادثات Blazma AI',
+      hint: 'اختر الملف الذي حفظته من الإعدادات ← المحادثة ← نسخة احتياطية.',
+    },
     network: {
       title: 'تعذّر الاتصال بالإنترنت',
       hint: 'تأكد من اتصالك بالإنترنت ثم اضغط "إعادة المحاولة". التنزيل يكمل من حيث توقف.',
