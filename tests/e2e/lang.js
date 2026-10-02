@@ -53,7 +53,8 @@ const launch = async () => {
 
   // No Arabic left on any page or settings section (chat contents aside).
   const arabicOn = (label) => win.evaluate((label) => {
-    const skip = (n) => n.closest('#chat-log, #chat-items, select, .chat-item, code');
+    // Chat contents and names the user typed (chats, folders) are not interface text.
+    const skip = (n) => n.closest('#chat-log, #chat-items, #chat-folders, select, .chat-item, code');
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     const hits = [];
     for (let n = walker.nextNode(); n; n = walker.nextNode()) {
