@@ -73,7 +73,7 @@
     ]
   },
   "devDependencies": {
-    "electron": "^44.4.5",
+    "electron": "^44.5.1",
     "electron-builder": "^26.15.3",
     "playwright-core": "1.56.1"
   },

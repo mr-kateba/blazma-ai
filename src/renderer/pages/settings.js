@@ -54,6 +54,13 @@ function toggle(checked, onChange, { disabled = false } = {}) {
 
 // help: a longer explanation, shown in a tooltip on a "؟" next to the title.
 function item(title, desc, control, extra = null, help = null) {
+  // Fields get the row's title as their name (screen readers, voice control).
+  const name = typeof title === 'string' ? title : '';
+  for (const part of [control, extra]) {
+    if (!(part instanceof Element) || !name) continue;
+    const fields = part.matches('input, select, textarea') ? [part] : [...part.querySelectorAll('input, select, textarea')];
+    for (const f of fields) if (!f.getAttribute('aria-label')) f.setAttribute('aria-label', name);
+  }
   const head = el('div', { class: 'set-title' }, title, help ? el('span', { class: 'set-help', tabindex: '0', title: help, 'aria-label': help }, '؟') : null);
   return el(
     'div',

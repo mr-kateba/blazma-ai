@@ -75,6 +75,15 @@ document.addEventListener('keydown', (e) => {
   showPage(PAGES[Number(m[1]) - 1]);
 });
 
+// Esc closes a drop-down menu (model switch, persona, export), like a click outside.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const menus = document.querySelectorAll('.model-menu');
+  if (!menus.length) return;
+  menus.forEach((m) => m.remove());
+  e.stopPropagation();
+});
+
 // Links between pages (e.g. "إدارة الموديلات" in the chat's model menu).
 window.addEventListener('blazma:show-page', (e) => showPage(String(e.detail)));
 
