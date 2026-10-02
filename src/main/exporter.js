@@ -4,13 +4,14 @@
 // HTML the renderer built (its own escaped markdown output). The PDF is
 // printed in a hidden window with JavaScript disabled, from a temporary file.
 
+const { t: tr } = require('./i18n');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { BrowserWindow, dialog } = require('electron');
 
-const safeName = (title) => String(title || 'محادثة').replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/\s+/g, ' ').trim().slice(0, 80) || 'محادثة';
+const safeName = (title) => String(title || tr('untitled')).replace(/[<>:"/\\|?*\x00-\x1f]/g, '_').replace(/\s+/g, ' ').trim().slice(0, 80) || tr('untitled');
 
 const PDF_CSS = `
   @page { margin: 18mm 16mm; }
@@ -32,7 +33,7 @@ const PDF_CSS = `
 async function exportChat(win, { title, format, markdown, html }) {
   const ext = format === 'pdf' ? 'pdf' : 'md';
   const { canceled, filePath } = await dialog.showSaveDialog(win, {
-    title: 'تصدير المحادثة',
+    title: tr('exportChat'),
     defaultPath: `${safeName(title)}.${ext}`,
     filters: [format === 'pdf' ? { name: 'PDF', extensions: ['pdf'] } : { name: 'Markdown', extensions: ['md'] }],
   });

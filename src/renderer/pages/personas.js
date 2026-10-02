@@ -2,11 +2,11 @@
 // model, chosen per chat from the chat header. The built-in ones are in
 // ar.js; custom ones are stored by the main process (personas.js).
 
-import { ar } from '../i18n/ar.js';
+import { ui } from '../i18n/index.js';
 import { el } from '../lib/dom.js';
 import { confirmDialog } from '../lib/dialog.js';
 
-const P = ar.personas;
+const P = ui.personas;
 let custom = [];
 
 export async function loadPersonas() {

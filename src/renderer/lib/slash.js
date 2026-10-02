@@ -1,8 +1,8 @@
 // Quick commands in the chat box: "/ترجم النص" sends the text with a fixed
-// instruction in front of it (ar.chat.slash). Typing "/" opens a list of the
+// instruction in front of it (ui.chat.slash). Typing "/" opens a list of the
 // commands; arrows or the mouse pick one, Enter or Tab puts it in the box.
 
-import { ar } from '../i18n/ar.js';
+import { ui } from '../i18n/index.js';
 import { el } from './dom.js';
 
 // Arabic written with or without marks and hamza forms matches the same command.
@@ -15,7 +15,7 @@ function norm(s) {
     .replace(/ة/g, 'ه');
 }
 
-const commands = () => ar.chat.slash;
+const commands = () => ui.chat.slash;
 
 export function commandById(id) {
   return commands().find((c) => c.id === id) || null;
@@ -84,8 +84,8 @@ export function attachSlashMenu(input) {
     active = 0;
     menu = el(
       'div',
-      { class: 'slash-menu', role: 'listbox', 'aria-label': ar.chat.slashTitle },
-      el('div', { class: 'slash-head' }, ar.chat.slashTitle),
+      { class: 'slash-menu', role: 'listbox', 'aria-label': ui.chat.slashTitle },
+      el('div', { class: 'slash-head' }, ui.chat.slashTitle),
       ...list.map((c) => {
         const b = el('button', { type: 'button', class: 'slash-item', role: 'option' }, el('b', null, `/${c.name}`), el('span', { class: 'muted small' }, c.desc));
         b.addEventListener('mousedown', (e) => e.preventDefault()); // keep the caret in the box

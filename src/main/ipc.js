@@ -22,6 +22,7 @@ const knowledge = require('./knowledge');
 const voice = require('./voice');
 const tts = require('./tts');
 const coder = require('./coder');
+const { t: tr } = require('./i18n');
 const images = require('./images');
 const personas = require('./personas');
 const { exportChat } = require('./exporter');
@@ -41,6 +42,7 @@ const EDITABLE_SETTINGS = [
   'kbInChat',
   'tourDone',
   'voiceModel',
+  'language',
   'ttsEngine',
   'shareDeviceInfo',
   'systemPrompt',
@@ -107,7 +109,7 @@ function registerIpc({ setup, monitor, getWindow }) {
   // A GGUF file on this computer, picked by the user.
   handle('models:addLocalFile', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(getWindow(), {
-      title: 'اختر ملف موديل GGUF',
+      title: tr('pickGguf'),
       properties: ['openFile'],
       filters: [{ name: 'GGUF', extensions: ['gguf'] }],
     });
@@ -143,7 +145,7 @@ function registerIpc({ setup, monitor, getWindow }) {
   handle('images:save', async (dataUrl) => {
     const m = /^data:image\/png;base64,([A-Za-z0-9+/=]+)$/.exec(String(dataUrl || ''));
     if (!m) return { ok: false };
-    const { canceled, filePath } = await dialog.showSaveDialog(getWindow(), { title: 'حفظ الصورة', defaultPath: 'blazma-image.png', filters: [{ name: 'PNG', extensions: ['png'] }] });
+    const { canceled, filePath } = await dialog.showSaveDialog(getWindow(), { title: tr('saveImage'), defaultPath: 'blazma-image.png', filters: [{ name: 'PNG', extensions: ['png'] }] });
     if (canceled || !filePath) return { ok: true, result: null };
     fs.writeFileSync(filePath, Buffer.from(m[1], 'base64'));
     return { ok: true, result: filePath };
@@ -174,7 +176,7 @@ function registerIpc({ setup, monitor, getWindow }) {
   // "مكتبتي": the user's document folders, indexed for answers (knowledge.js).
   handle('kb:status', () => knowledge.status());
   handle('kb:addFolder', async () => {
-    const { canceled, filePaths } = await dialog.showOpenDialog(getWindow(), { title: 'اختر مجلد مستندات', properties: ['openDirectory'] });
+    const { canceled, filePaths } = await dialog.showOpenDialog(getWindow(), { title: tr('pickDocs'), properties: ['openDirectory'] });
     if (canceled || !filePaths[0]) return { ok: true, result: null };
     return wrap(() => knowledge.addFolder(filePaths[0]));
   });
@@ -197,7 +199,7 @@ function registerIpc({ setup, monitor, getWindow }) {
   // Every GGUF in a folder the user picks, or in LM Studio's models folder.
   handle('models:scanFolder', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(getWindow(), {
-      title: 'اختر مجلداً فيه موديلات GGUF',
+      title: tr('pickGgufFolder'),
       properties: ['openDirectory'],
     });
     if (canceled || !filePaths[0]) return { ok: true, result: null };
@@ -264,7 +266,7 @@ function registerIpc({ setup, monitor, getWindow }) {
       apiEnabled: s.apiEnabled,
       apiKey: s.apiEnabled ? s.apiKey : '',
       defaults: {
-        systemPrompt: settings.DEFAULTS.systemPrompt,
+        systemPrompt: settings.defaultPrompt(),
         contextSize: settings.DEFAULTS.contextSize,
         gpuLayers: settings.DEFAULTS.gpuLayers,
         kvCache: settings.DEFAULTS.kvCache,
@@ -296,7 +298,7 @@ function registerIpc({ setup, monitor, getWindow }) {
   // The folder for new model downloads. Files already downloaded stay where they are.
   handle('settings:chooseModelsDir', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(getWindow(), {
-      title: 'اختر مجلد الموديلات',
+      title: tr('pickModelsDir'),
       properties: ['openDirectory', 'createDirectory'],
     });
     if (canceled || !filePaths[0]) return settingsView();
@@ -385,7 +387,7 @@ function registerIpc({ setup, monitor, getWindow }) {
   handle('chats:backup', () =>
     wrap(async () => {
       const stamp = new Date().toISOString().slice(0, 10);
-      const { canceled, filePath } = await dialog.showSaveDialog(getWindow(), { title: 'نسخة احتياطية للمحادثات', defaultPath: `blazma-chats-${stamp}.json`, filters: [{ name: 'JSON', extensions: ['json'] }] });
+      const { canceled, filePath } = await dialog.showSaveDialog(getWindow(), { title: tr('backup'), defaultPath: `blazma-chats-${stamp}.json`, filters: [{ name: 'JSON', extensions: ['json'] }] });
       if (canceled || !filePath) return null;
       const data = chats.exportAll();
       fs.writeFileSync(filePath, JSON.stringify(data), 'utf8');
@@ -394,7 +396,7 @@ function registerIpc({ setup, monitor, getWindow }) {
   );
   handle('chats:restore', () =>
     wrap(async () => {
-      const { canceled, filePaths } = await dialog.showOpenDialog(getWindow(), { title: 'استعادة المحادثات من نسخة احتياطية', properties: ['openFile'], filters: [{ name: 'JSON', extensions: ['json'] }] });
+      const { canceled, filePaths } = await dialog.showOpenDialog(getWindow(), { title: tr('restore'), properties: ['openFile'], filters: [{ name: 'JSON', extensions: ['json'] }] });
       if (canceled || !filePaths[0]) return null;
       const st = fs.statSync(filePaths[0]);
       if (st.size > 1024 * 1024 * 1024) throw new AppError('backup-invalid', 'file over 1 GB');
@@ -469,7 +471,7 @@ function registerIpc({ setup, monitor, getWindow }) {
   handle('vscode:bounds', (bounds) => vscode.setBounds(cleanBounds(bounds)));
   handle('vscode:hide', () => vscode.hideView());
   handle('vscode:openFolder', async () => {
-    const { canceled, filePaths } = await dialog.showOpenDialog(getWindow(), { title: 'اختر مجلد مشروع', properties: ['openDirectory', 'createDirectory'] });
+    const { canceled, filePaths } = await dialog.showOpenDialog(getWindow(), { title: tr('pickProject'), properties: ['openDirectory', 'createDirectory'] });
     if (canceled || !filePaths.length) return null;
     codeFolder = filePaths[0];
     return codeFolder;
@@ -509,7 +511,7 @@ function registerIpc({ setup, monitor, getWindow }) {
   handle('file:saveText', async (content, lang) => {
     const ext = CODE_EXT[String(lang || '').toLowerCase()] || 'txt';
     const { canceled, filePath } = await dialog.showSaveDialog(getWindow(), {
-      title: 'حفظ الكود كملف',
+      title: tr('saveCode'),
       defaultPath: `code.${ext}`,
       filters: [{ name: ext.toUpperCase(), extensions: [ext] }, { name: '*', extensions: ['*'] }],
     });

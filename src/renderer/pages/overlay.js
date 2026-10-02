@@ -3,11 +3,11 @@
 // the reply being written. It uses the same readings as "جهازي" and asks for
 // them only while the chat is on screen and the panel is on.
 
-import { ar } from '../i18n/ar.js';
+import { ui } from '../i18n/index.js';
 import { el } from '../lib/dom.js';
 import { store } from '../lib/store.js';
 
-const O = ar.overlay;
+const O = ui.overlay;
 const CORNERS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
 
 let panel = null;

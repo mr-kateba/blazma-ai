@@ -4,6 +4,7 @@
 // Deliberately excludes anything identifying: no computer name, user name or
 // file paths (only the drive letter of the models folder).
 
+const { t: tr } = require('./i18n');
 const fs = require('node:fs');
 const { app, dialog } = require('electron');
 
@@ -48,7 +49,7 @@ function buildReport({ info, last, bench, setupState }) {
 async function exportReport(win, data) {
   const stamp = new Date().toISOString().slice(0, 10);
   const { canceled, filePath } = await dialog.showSaveDialog(win, {
-    title: 'تصدير تقرير الجهاز',
+    title: tr('deviceReport'),
     defaultPath: `blazma-device-report-${stamp}.json`,
     filters: [{ name: 'JSON', extensions: ['json'] }],
   });

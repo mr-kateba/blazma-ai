@@ -196,7 +196,7 @@ button { font: inherit; color: inherit; }
   font-weight: 600;
   font-size: 16px;
   line-height: 1.3;
-  text-align: right;
+  text-align: start;
 }
 
 .brand-sub {
@@ -953,7 +953,7 @@ body.compact-nav .sidebar-foot { display: none; }
 /* Settings > API */
 .api-value { padding: 4px 8px; border-radius: 6px; background: var(--surface-2); font-family: var(--mono); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 420px; }
 .api-example { margin: 8px 0 0; padding: 10px 12px; border-radius: 8px; background: var(--surface-2); font-family: var(--mono); font-size: 12.5px; line-height: 1.6; overflow-x: auto; text-align: left; }
-.model-path { overflow-wrap: anywhere; text-align: right; }
+.model-path { overflow-wrap: anywhere; text-align: start; }
 
 /* Chat: mini hardware monitor (like a game overlay) */
 .chat-main { position: relative; }

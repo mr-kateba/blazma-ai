@@ -1,4 +1,4 @@
-import { ar } from './i18n/ar.js';
+import { ui, LANG, DIR } from './i18n/index.js';
 import { initChat } from './pages/chat.js';
 import { initDevice, setDeviceVisible } from './pages/device.js';
 import { setSettingsVisible } from './pages/settings.js';
@@ -10,6 +10,27 @@ import { initTooltips } from './lib/tooltip.js';
 import { startTour } from './lib/tour.js';
 
 const PAGES = ['chat', 'studio', 'device', 'models', 'settings'];
+
+// Interface language (Settings > General): writing direction and the fixed
+// labels of index.html.
+document.documentElement.lang = LANG;
+document.documentElement.dir = DIR;
+for (const n of document.querySelectorAll('[data-i18n]')) n.textContent = ui.html[n.dataset.i18n];
+for (const n of document.querySelectorAll('[data-i18n-label]')) n.setAttribute('aria-label', ui.html[n.dataset.i18nLabel]);
+for (const n of document.querySelectorAll('[data-i18n-title]')) n.title = ui.html[n.dataset.i18nTitle];
+for (const n of document.querySelectorAll('[data-i18n-ph]')) n.placeholder = ui.html[n.dataset.i18nPh];
+// The language saved in settings wins (the page keeps a copy to know it
+// before anything is drawn); reload once if the two differ.
+window.blazma.getSettings().then((s) => {
+  const want = s.language === 'en' ? 'en' : 'ar';
+  if (want === LANG) return;
+  try {
+    localStorage.setItem('blazma.lang', want);
+    if (localStorage.getItem('blazma.lang') === want) location.reload();
+  } catch {
+    /* no storage: stays in the default language */
+  }
+});
 
 // Light or dark, chosen in Settings → General ("system" follows Windows).
 function applyTheme({ dark }) {
@@ -41,7 +62,7 @@ function showPage(name) {
 function showAlerts(alerts) {
   const box = document.getElementById('global-alerts');
   box.replaceChildren(
-    ...alerts.map((a) => el('div', { class: `alert alert-${a.level}` }, ar.alerts[a.code] ? ar.alerts[a.code](a) : a.code)),
+    ...alerts.map((a) => el('div', { class: `alert alert-${a.level}` }, ui.alerts[a.code] ? ui.alerts[a.code](a) : a.code)),
   );
 }
 
@@ -51,7 +72,7 @@ async function showVersion() {
     const info = await window.blazma.getAppInfo();
     el.textContent = info.version;
   } catch {
-    el.textContent = ar.versionUnknown;
+    el.textContent = ui.versionUnknown;
   }
 }
 
@@ -90,7 +111,7 @@ window.addEventListener('blazma:show-page', (e) => showPage(String(e.detail)));
 // Guided tour: once, the first time the chat is ready; again from settings.
 function runTour() {
   showPage('chat');
-  const T = ar.tour;
+  const T = ui.tour;
   startTour(T.steps, T, () => window.blazma.updateSettings({ tourDone: true }));
 }
 window.addEventListener('blazma:start-tour', runTour);

@@ -4,11 +4,11 @@
 // place the view goes. The view is a native layer, so anything this page
 // shows on top of it (a dialog) hides the view first.
 
-import { ar } from '../i18n/ar.js';
+import { ui } from '../i18n/index.js';
 import { el } from '../lib/dom.js';
 import { confirmDialog } from '../lib/dialog.js';
 
-const C = ar.code;
+const C = ui.code;
 const $ = (id) => document.getElementById(id);
 
 let visible = false;
@@ -17,7 +17,7 @@ let busy = false;
 let observer = null;
 
 function errorTitle(res) {
-  const e = res && res.error && ar.errors[res.error.code];
+  const e = res && res.error && ui.errors[res.error.code];
   return e ? e.title : C.failed;
 }
 

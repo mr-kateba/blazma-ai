@@ -1,7 +1,7 @@
 // Chat page: setup/progress panel until the local server is ready, then a
 // streaming chat against http://127.0.0.1:<port>/v1/chat/completions.
 
-import { ar, errorText, formatBytes, formatDuration } from '../i18n/ar.js';
+import { ui, errorText, formatBytes, formatDuration, LOCALE, DIR } from '../i18n/index.js';
 import { el, detectDir } from '../lib/dom.js';
 import { renderMarkdown } from '../lib/markdown.js';
 import { readSse } from '../lib/sse.js';
@@ -17,8 +17,8 @@ import { attachSlashMenu, parseCommand, withCommand, commandById } from '../lib/
 // Western digits to match the rest of the app.
 function dateContext(webOn) {
   const now = new Date();
-  const fmt = (calendar, opts) => new Intl.DateTimeFormat(`ar-SA-u-ca-${calendar}-nu-latn`, opts).format(now);
-  return ar.chat.dateContext(
+  const fmt = (calendar, opts) => new Intl.DateTimeFormat(`${LOCALE === 'en' ? 'en' : 'ar-SA'}-u-ca-${calendar}-nu-latn`, opts).format(now);
+  return ui.chat.dateContext(
     fmt('gregory', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' }),
     fmt('islamic-umalqura', { year: 'numeric', month: 'long', day: 'numeric' }),
     fmt('gregory', { hour: 'numeric', minute: '2-digit' }),
@@ -27,13 +27,13 @@ function dateContext(webOn) {
 }
 
 const mdLabels = {
-  copy: ar.actions.copy,
-  copied: ar.actions.copied,
-  code: ar.chat.code,
-  saveCode: ar.chat.saveCode,
-  savedCode: ar.chat.savedCode,
+  copy: ui.actions.copy,
+  copied: ui.actions.copied,
+  code: ui.chat.code,
+  saveCode: ui.chat.saveCode,
+  savedCode: ui.chat.savedCode,
   save: (code, lang) => window.blazma.saveTextFile(code, lang),
-  openInStudio: ar.studio.openInStudio,
+  openInStudio: ui.studio.openInStudio,
   studio: (code, lang) => window.dispatchEvent(new CustomEvent('blazma:open-in-studio', { detail: { code, lang } })),
 };
 
@@ -92,13 +92,13 @@ function trackSpeed(done) {
 function hardwareSummary(hw) {
   // The English card name is isolated so the Arabic line keeps its order.
   const gpu = hw.nvidia
-    ? el('b', { dir: 'rtl' }, el('bdi', { dir: 'ltr' }, hw.nvidia.name), ` · ${(hw.nvidia.vramMB / 1024).toFixed(0)} جيجابايت`)
-    : el('b', null, ar.setup.noNvidia);
+    ? el('b', { dir: DIR }, el('bdi', { dir: 'ltr' }, hw.nvidia.name), ` · ${ui.units.gbShort((hw.nvidia.vramMB / 1024).toFixed(0))}`)
+    : el('b', null, ui.setup.noNvidia);
   return el(
     'div',
     { class: 'hw-summary' },
-    el('div', null, el('span', { class: 'muted' }, ar.setup.gpu), gpu),
-    el('div', null, el('span', { class: 'muted' }, ar.setup.ram), el('b', null, `${(hw.ramMB / 1024).toFixed(0)} جيجابايت`)),
+    el('div', null, el('span', { class: 'muted' }, ui.setup.gpu), gpu),
+    el('div', null, el('span', { class: 'muted' }, ui.setup.ram), el('b', null, ui.units.gbShort((hw.ramMB / 1024).toFixed(0)))),
   );
 }
 
@@ -112,8 +112,8 @@ function modelChooser(state) {
   const shown = state.models.filter((m) => m.featured || m.downloaded || m.id === selectedModelId);
   for (const m of shown) {
     const tags = [];
-    if (m.id === state.recommendedId) tags.push(el('span', { class: 'tag tag-accent' }, ar.setup.recommended));
-    if (m.downloaded) tags.push(el('span', { class: 'tag' }, ar.setup.downloaded));
+    if (m.id === state.recommendedId) tags.push(el('span', { class: 'tag tag-accent' }, ui.setup.recommended));
+    if (m.downloaded) tags.push(el('span', { class: 'tag' }, ui.setup.downloaded));
     if (m.fit && m.fit !== 'ok') tags.push(el('span', { class: 'tag tag-warn' }, fitLabel(m, state.hardware)));
     const option = el(
       'button',
@@ -143,45 +143,45 @@ function modelChooser(state) {
   const startBtn = el(
     'button',
     { type: 'button', class: 'btn primary big', onclick: () => window.blazma.startSetup(selectedModelId) },
-    chosen && chosen.downloaded ? ar.setup.startDownloaded : ar.setup.start,
+    chosen && chosen.downloaded ? ui.setup.startDownloaded : ui.setup.start,
   );
-  return [list, hidden > 0 ? el('p', { class: 'muted small' }, ar.setup.moreModels(hidden)) : null, startBtn];
+  return [list, hidden > 0 ? el('p', { class: 'muted small' }, ui.setup.moreModels(hidden)) : null, startBtn];
 }
 
 // Why a model may be slow or not run on this computer (setup.fitLevel).
 export function fitLabel(m, hardware) {
-  if (m.fit === 'too-big') return ar.setup.tooBig;
-  return hardware && hardware.nvidia ? ar.setup.usesRam : ar.setup.slowOnCpu;
+  if (m.fit === 'too-big') return ui.setup.tooBig;
+  return hardware && hardware.nvidia ? ui.setup.usesRam : ui.setup.slowOnCpu;
 }
 
 function phaseView(state) {
   const p = state.progress || {};
   switch (state.phase) {
     case 'detecting':
-      return [el('div', { class: 'spinner' }), el('p', null, ar.phase.detecting)];
+      return [el('div', { class: 'spinner' }), el('p', null, ui.phase.detecting)];
     case 'choose':
       return [
-        el('h2', null, ar.setup.title),
-        el('p', { class: 'muted' }, ar.setup.intro),
+        el('h2', null, ui.setup.title),
+        el('p', { class: 'muted' }, ui.setup.intro),
         hardwareSummary(state.hardware),
-        !state.hardware.nvidia && el('div', { class: 'notice' }, ar.setup.cpuNotice),
+        !state.hardware.nvidia && el('div', { class: 'notice' }, ui.setup.cpuNotice),
         ...modelChooser(state),
       ];
     case 'engine': {
       if (p.stage === 'download' && p.total) {
         const { bar, pct } = progressBar(p.done, p.total);
         return [
-          el('h2', null, ar.phase.engineDownload),
+          el('h2', null, ui.phase.engineDownload),
           bar,
-          el('p', { class: 'muted' }, `${pct.toFixed(0)}% · ${formatBytes(p.done)} من ${formatBytes(p.total)}`),
+          el('p', { class: 'muted' }, `${pct.toFixed(0)}% · ${ui.units.ofSize(formatBytes(p.done), formatBytes(p.total))}`),
         ];
       }
       const text =
-        p.stage === 'extract' ? ar.phase.engineExtract : p.stage === 'test' ? ar.phase.engineTest : ar.phase.engineRelease;
+        p.stage === 'extract' ? ui.phase.engineExtract : p.stage === 'test' ? ui.phase.engineTest : ui.phase.engineRelease;
       return [el('div', { class: 'spinner' }), el('p', null, text)];
     }
     case 'model-resolve':
-      return [el('div', { class: 'spinner' }), el('p', null, ar.phase.modelResolve)];
+      return [el('div', { class: 'spinner' }), el('p', null, ui.phase.modelResolve)];
     case 'model-download':
     case 'waiting-network': {
       const done = p.done || 0;
@@ -190,29 +190,29 @@ function phaseView(state) {
       if (!waiting) trackSpeed(done);
       const { bar, pct } = progressBar(done, total);
       const model = state.models.find((m) => m.id === state.modelId);
-      const parts = [`${pct.toFixed(1)}%`, `${formatBytes(done)} من ${formatBytes(total)}`];
+      const parts = [`${pct.toFixed(1)}%`, ui.units.ofSize(formatBytes(done), formatBytes(total))];
       if (!waiting && speed > 0) {
-        parts.push(`${(speed / 1024 ** 2).toFixed(1)} ميجابايت/ث`);
-        parts.push(`متبقٍّ ${formatDuration((total - done) / speed)}`);
+        parts.push(ui.units.mbps((speed / 1024 ** 2).toFixed(1)));
+        parts.push(ui.units.left(formatDuration((total - done) / speed)));
       }
       return [
-        el('h2', null, waiting ? ar.phase.waitingNetwork : ar.phase.modelDownload, model ? ` (${model.name})` : ''),
+        el('h2', null, waiting ? ui.phase.waitingNetwork : ui.phase.modelDownload, model ? ` (${model.name})` : ''),
         bar,
-        el('p', { class: 'muted', dir: 'rtl' }, parts.join(' · ')),
-        waiting && el('div', { class: 'notice' }, ar.phase.waitingNetworkHint),
+        el('p', { class: 'muted', dir: DIR }, parts.join(' · ')),
+        waiting && el('div', { class: 'notice' }, ui.phase.waitingNetworkHint),
       ];
     }
     case 'loading':
-      return [el('div', { class: 'spinner' }), el('p', null, ar.phase.loading), el('p', { class: 'muted' }, ar.phase.loadingHint)];
+      return [el('div', { class: 'spinner' }), el('p', null, ui.phase.loading), el('p', { class: 'muted' }, ui.phase.loadingHint)];
     case 'stopped':
       return [
-        el('h2', null, ar.phase.stopped),
-        el('p', { class: 'muted' }, ar.phase.stoppedHint),
+        el('h2', null, ui.phase.stopped),
+        el('p', { class: 'muted' }, ui.phase.stoppedHint),
         el(
           'div',
           { class: 'row' },
-          el('button', { type: 'button', class: 'btn primary', onclick: () => window.blazma.retrySetup() }, ar.actions.startServer),
-          el('button', { type: 'button', class: 'btn', onclick: () => showChooser() }, ar.actions.chooseModel),
+          el('button', { type: 'button', class: 'btn primary', onclick: () => window.blazma.retrySetup() }, ui.actions.startServer),
+          el('button', { type: 'button', class: 'btn', onclick: () => showChooser() }, ui.actions.chooseModel),
         ),
       ];
     case 'error': {
@@ -225,14 +225,14 @@ function phaseView(state) {
         el(
           'div',
           { class: 'row' },
-          el('button', { type: 'button', class: 'btn primary', onclick: () => window.blazma.retrySetup() }, ar.actions.retry),
-          el('button', { type: 'button', class: 'btn', onclick: () => showChooser() }, ar.actions.chooseModel),
+          el('button', { type: 'button', class: 'btn primary', onclick: () => window.blazma.retrySetup() }, ui.actions.retry),
+          el('button', { type: 'button', class: 'btn', onclick: () => showChooser() }, ui.actions.chooseModel),
         ),
         e.detail &&
           el(
             'details',
             { class: 'tech' },
-            el('summary', null, ar.actions.details),
+            el('summary', null, ui.actions.details),
             el('pre', { dir: 'ltr' }, `${e.code}\n${e.detail}`),
           ),
       ];
@@ -261,10 +261,10 @@ function openModelMenu() {
   const menu = el(
     'div',
     { class: 'model-menu model-switch', role: 'menu' },
-    el('div', { class: 'model-menu-head' }, ar.chat.switchModel),
+    el('div', { class: 'model-menu-head' }, ui.chat.switchModel),
     ...items.map((m) => {
       const current = m.id === setupState.modelId;
-      const row = el('button', { type: 'button', class: `model-menu-item${current ? ' current' : ''}`, role: 'menuitem' }, el('span', { dir: 'ltr' }, m.name), current ? el('span', { class: 'tag tag-ok' }, ar.chat.currentModel) : m.fits ? null : el('span', { class: 'tag tag-warn' }, fitLabel(m, setupState.hardware)));
+      const row = el('button', { type: 'button', class: `model-menu-item${current ? ' current' : ''}`, role: 'menuitem' }, el('span', { dir: 'ltr' }, m.name), current ? el('span', { class: 'tag tag-ok' }, ui.chat.currentModel) : m.fits ? null : el('span', { class: 'tag tag-warn' }, fitLabel(m, setupState.hardware)));
       row.addEventListener('click', () => {
         closeModelMenu();
         if (!current) window.blazma.modelsUse(m.id);
@@ -272,7 +272,7 @@ function openModelMenu() {
       return row;
     }),
     (() => {
-      const more = el('button', { type: 'button', class: 'model-menu-item more' }, ar.chat.manageModels);
+      const more = el('button', { type: 'button', class: 'model-menu-item more' }, ui.chat.manageModels);
       more.addEventListener('click', () => {
         closeModelMenu();
         window.dispatchEvent(new CustomEvent('blazma:show-page', { detail: 'models' }));
@@ -314,13 +314,13 @@ function renderStatus(state) {
             ? 'error'
             : 'busy';
   pill.dataset.status = key;
-  pill.lastChild.textContent = key === 'ready' && state.sleeping ? ar.status.sleeping : ar.status[key];
-  pill.title = key === 'ready' && state.sleeping ? ar.status.sleepingHint : '';
+  pill.lastChild.textContent = key === 'ready' && state.sleeping ? ui.status.sleeping : ui.status[key];
+  pill.title = key === 'ready' && state.sleeping ? ui.status.sleepingHint : '';
 
   const engineNote = $('engine-note');
   const fb = state.engine && state.engine.fallbackFrom && state.engine.fallbackFrom.length;
   engineNote.hidden = !fb || state.phase !== 'ready';
-  if (fb) engineNote.textContent = ar.setup.fallbackNotice(state.engine.variant);
+  if (fb) engineNote.textContent = ui.setup.fallbackNotice(state.engine.variant);
 
   $('btn-stop-server').hidden = !['ready', 'loading', 'model-download'].includes(state.phase);
 }
@@ -361,7 +361,7 @@ function messageNode(msg, index) {
   if (!isUser && (msg.reasoning || (msg.streaming && !msg.content))) {
     const thinking = el('details', { class: 'thinking' });
     const done = Boolean(msg.content) || !msg.streaming;
-    const label = done && msg.thinkEnd ? ar.chat.thought(Math.max(1, Math.round((msg.thinkEnd - msg.thinkStart) / 1000))) : ar.chat.thinking;
+    const label = done && msg.thinkEnd ? ui.chat.thought(Math.max(1, Math.round((msg.thinkEnd - msg.thinkStart) / 1000))) : ui.chat.thinking;
     thinking.append(el('summary', { class: done ? '' : 'pulse' }, label));
     if (msg.reasoning) thinking.append(el('div', { class: 'thinking-body', dir: detectDir(msg.reasoning) }, msg.reasoning));
     if (msg.openThinking) thinking.open = true;
@@ -379,14 +379,14 @@ function messageNode(msg, index) {
         'div',
         { class: 'gen-images' },
         ...msg.images.map((src) => {
-          const saveBtn = el('button', { type: 'button', class: 'btn ghost small' }, ar.chat.saveImage);
+          const saveBtn = el('button', { type: 'button', class: 'btn ghost small' }, ui.chat.saveImage);
           saveBtn.addEventListener('click', () => window.blazma.imagesSave(src));
           return el('figure', { class: 'gen-image' }, el('img', { src, alt: msg.imagePrompt || '' }), saveBtn);
         }),
       ),
     );
   }
-  if (!isUser && msg.generatingImage) body.append(el('p', { class: 'muted pulse' }, ar.chat.imageWorking), el('p', { class: 'muted small image-elapsed', dir: 'rtl' }));
+  if (!isUser && msg.generatingImage) body.append(el('p', { class: 'muted pulse' }, ui.chat.imageWorking), el('p', { class: 'muted small image-elapsed', dir: DIR }));
   if (isUser && msg.files && msg.files.length) {
     body.append(el('div', { class: 'msg-files' }, ...msg.files.map((f) => fileChip(f))));
   }
@@ -401,8 +401,8 @@ function messageNode(msg, index) {
         el(
           'div',
           { class: 'row' },
-          el('button', { type: 'button', class: 'btn primary', onclick: () => saveEdit(index, box.value) }, ar.chat.saveEdit),
-          el('button', { type: 'button', class: 'btn ghost', onclick: () => ((editingIndex = null), renderMessages()) }, ar.chat.cancel),
+          el('button', { type: 'button', class: 'btn primary', onclick: () => saveEdit(index, box.value) }, ui.chat.saveEdit),
+          el('button', { type: 'button', class: 'btn ghost', onclick: () => ((editingIndex = null), renderMessages()) }, ui.chat.cancel),
         ),
       ),
     );
@@ -420,10 +420,10 @@ function messageNode(msg, index) {
         ...msg.steps.map((st) =>
           el(
             'div',
-            { class: `tool-step${st.failed ? ' failed' : ''}`, dir: 'rtl' },
+            { class: `tool-step${st.failed ? ' failed' : ''}`, dir: DIR },
             el('span', { class: 'tool-icon', 'aria-hidden': 'true' }, st.kind === 'search' ? '⌕' : '↗'),
-            el('bdi', null, st.kind === 'search' ? ar.chat.stepSearch(st.label) : ar.chat.stepOpen(st.label)),
-            st.failed ? el('span', { class: 'muted' }, ` · ${ar.chat.stepFailed}`) : null,
+            el('bdi', null, st.kind === 'search' ? ui.chat.stepSearch(st.label) : ui.chat.stepOpen(st.label)),
+            st.failed ? el('span', { class: 'muted' }, ` · ${ui.chat.stepFailed}`) : null,
           ),
         ),
       ),
@@ -437,7 +437,7 @@ function messageNode(msg, index) {
       el(
         'div',
         { class: 'sources' },
-        el('span', { class: 'muted small' }, `${ar.chat.sources}:`),
+        el('span', { class: 'muted small' }, `${ui.chat.sources}:`),
         ...unique.map((src) =>
           el(
             'button',
@@ -451,27 +451,27 @@ function messageNode(msg, index) {
     );
   }
 
-  if (msg.stopped) body.append(el('p', { class: 'muted small' }, ar.chat.stopped));
+  if (msg.stopped) body.append(el('p', { class: 'muted small' }, ui.chat.stopped));
   if (msg.error) body.append(el('div', { class: 'msg-error' }, msg.error));
 
   const footer = el('div', { class: 'msg-footer' });
   if (!msg.streaming && !msg.generatingImage) {
-    const copy = el('button', { type: 'button', class: 'icon-btn' }, ar.actions.copy);
+    const copy = el('button', { type: 'button', class: 'icon-btn' }, ui.actions.copy);
     copy.addEventListener('click', () =>
       navigator.clipboard.writeText(msg.content).then(() => {
-        copy.textContent = ar.actions.copied;
-        setTimeout(() => (copy.textContent = ar.actions.copy), 1500);
+        copy.textContent = ui.actions.copied;
+        setTimeout(() => (copy.textContent = ui.actions.copy), 1500);
       }),
     );
     if (msg.content) footer.append(copy);
     if (!isUser && msg.content) footer.append(listenButton(msg));
     if (!abortController && !imageBusy) {
-      if (isUser) footer.append(el('button', { type: 'button', class: 'icon-btn', onclick: () => startEdit(index) }, ar.chat.edit));
-      else if (index === messages.length - 1 && !msg.imagePrompt) footer.append(el('button', { type: 'button', class: 'icon-btn', onclick: regenerate }, ar.chat.regenerate));
+      if (isUser) footer.append(el('button', { type: 'button', class: 'icon-btn', onclick: () => startEdit(index) }, ui.chat.edit));
+      else if (index === messages.length - 1 && !msg.imagePrompt) footer.append(el('button', { type: 'button', class: 'icon-btn', onclick: regenerate }, ui.chat.regenerate));
     }
     if (msg.alts && msg.alts.length > 1) footer.append(branchNav(msg, index));
     if (msg.timings && msg.timings.predicted_per_second) {
-      footer.append(el('span', { class: 'stats', dir: 'rtl' }, ar.chat.speed(msg.timings.predicted_per_second, msg.timings.predicted_n)));
+      footer.append(el('span', { class: 'stats', dir: DIR }, ui.chat.speed(msg.timings.predicted_per_second, msg.timings.predicted_n)));
     }
   }
 
@@ -482,39 +482,39 @@ function messageNode(msg, index) {
 async function offerBlazmaVoice() {
   const plan = await window.blazma.ttsPlan();
   const mb = plan.ok ? Math.round(plan.result.bytes / 1e6) : 85;
-  if (!(await confirmDialog({ title: ar.chat.ttsOfferTitle, text: ar.chat.ttsOffer(mb), ok: ar.chat.ttsOfferOk, cancel: ar.chat.cancel }))) return false;
+  if (!(await confirmDialog({ title: ui.chat.ttsOfferTitle, text: ui.chat.ttsOffer(mb), ok: ui.chat.ttsOfferOk, cancel: ui.chat.cancel }))) return false;
   const off = window.blazma.onTtsProgress((p) => {
     const box = $('attach-preview');
     box.hidden = false;
-    box.replaceChildren(el('span', { class: 'muted small attach-note' }, ar.chat.ttsDownloading(p.total ? Math.floor((p.done / p.total) * 100) : 0)));
+    box.replaceChildren(el('span', { class: 'muted small attach-note' }, ui.chat.ttsDownloading(p.total ? Math.floor((p.done / p.total) * 100) : 0)));
   });
   const res = await window.blazma.ttsInstall();
   off();
   renderPreview();
-  if (!res.ok) showComposerNote(ar.chat.ttsInstallFailed, 8000);
+  if (!res.ok) showComposerNote(ui.chat.ttsInstallFailed, 8000);
   return res.ok;
 }
 
 // "استمع": reads the reply aloud (speech.js); a second click stops it.
 function listenButton(msg) {
-  const b = el('button', { type: 'button', class: 'icon-btn' }, ar.chat.listen);
-  b.addEventListener('speech-end', () => (b.textContent = ar.chat.listen));
+  const b = el('button', { type: 'button', class: 'icon-btn' }, ui.chat.listen);
+  b.addEventListener('speech-end', () => (b.textContent = ui.chat.listen));
   b.addEventListener('speech-error', (e) => {
-    b.textContent = ar.chat.listen;
-    showComposerNote(ar.chat.noVoice[e.detail] || ar.chat.noVoice['blazma-failed'], 9000);
+    b.textContent = ui.chat.listen;
+    showComposerNote(ui.chat.noVoice[e.detail] || ui.chat.noVoice['blazma-failed'], 9000);
   });
   const start = async () => {
     const res = await speak(msg.content, b);
     if (res.ok) {
-      b.textContent = isSpeaking(b) ? ar.chat.stopListen : ar.chat.listen;
+      b.textContent = isSpeaking(b) ? ui.chat.stopListen : ui.chat.listen;
       return;
     }
-    b.textContent = ar.chat.listen;
+    b.textContent = ui.chat.listen;
     if (res.reason === 'offer-blazma') {
       if (await offerBlazmaVoice()) start();
       return;
     }
-    showComposerNote(ar.chat.noVoice[res.reason], 9000);
+    showComposerNote(ui.chat.noVoice[res.reason], 9000);
   };
   b.addEventListener('click', start);
   return b;
@@ -523,7 +523,7 @@ function listenButton(msg) {
 // Welcome screen with starting suggestions; a click puts the text in the
 // input so it can be edited before sending.
 function welcomeView() {
-  const cards = ar.chat.suggestions.map((sg) => {
+  const cards = ui.chat.suggestions.map((sg) => {
     const card = el('button', { type: 'button', class: 'suggest-card' }, el('span', { class: 'suggest-icon', 'aria-hidden': 'true' }, sg.icon), el('b', null, sg.title), el('span', { class: 'muted small' }, sg.text));
     card.addEventListener('click', () => {
       const input = $('chat-input');
@@ -538,10 +538,10 @@ function welcomeView() {
     'div',
     { class: 'chat-empty' },
     el('img', { class: 'chat-empty-mark', src: 'logo.svg', alt: '', 'aria-hidden': 'true' }),
-    el('h2', null, ar.chat.emptyTitle),
-    el('p', { class: 'muted' }, ar.chat.emptyHint),
+    el('h2', null, ui.chat.emptyTitle),
+    el('p', { class: 'muted' }, ui.chat.emptyHint),
     el('div', { class: 'suggest-grid' }, ...cards),
-    el('p', { class: 'faint small' }, ar.chat.keysHint),
+    el('p', { class: 'faint small' }, ui.chat.keysHint),
   );
 }
 
@@ -611,13 +611,13 @@ async function prepareImage(file) {
 }
 
 function fileChip(f, onRemove) {
-  const meta = f.reading ? ar.chat.fileReading : [f.pages ? ar.chat.filePages(f.pages) : null, ar.chat.fileChars(f.chars)].filter(Boolean).join(' · ');
+  const meta = f.reading ? ui.chat.fileReading : [f.pages ? ui.chat.filePages(f.pages) : null, ui.chat.fileChars(f.chars)].filter(Boolean).join(' · ');
   return el(
     'div',
     { class: `file-chip${f.reading ? ' reading' : ''}`, title: f.name },
     el('span', { class: 'file-chip-icon', 'aria-hidden': 'true' }, f.kind === 'pdf' ? 'PDF' : f.kind === 'docx' ? 'DOC' : 'TXT'),
     el('span', { class: 'file-chip-text' }, el('bdi', { class: 'file-chip-name' }, f.name), el('span', { class: 'file-chip-meta' }, meta)),
-    onRemove ? el('button', { type: 'button', class: 'file-chip-x', title: ar.chat.removeFile, 'aria-label': ar.chat.removeFile, onclick: onRemove }, '×') : null,
+    onRemove ? el('button', { type: 'button', class: 'file-chip-x', title: ui.chat.removeFile, 'aria-label': ui.chat.removeFile, onclick: onRemove }, '×') : null,
   );
 }
 
@@ -628,11 +628,11 @@ async function addAttachments(files) {
   const docs = files.filter((f) => !f.type.startsWith('image/'));
   if (images.length) {
     if (visionEnabled) await addImages(images);
-    else showComposerNote(ar.chat.noVision);
+    else showComposerNote(ui.chat.noVision);
   }
   for (const file of docs) {
     if (pendingFiles.length >= MAX_FILES) {
-      showComposerNote(ar.chat.maxFiles);
+      showComposerNote(ui.chat.maxFiles);
       break;
     }
     const slot = { name: file.name, reading: true };
@@ -647,7 +647,7 @@ async function addAttachments(files) {
     } else {
       pendingFiles.splice(i, 1);
       renderPreview();
-      showComposerNote(ar.chat.fileErrors[res.error.code] ? ar.chat.fileErrors[res.error.code](file.name) : ar.chat.fileErrors['file-unreadable'](file.name), 6000);
+      showComposerNote(ui.chat.fileErrors[res.error.code] ? ui.chat.fileErrors[res.error.code](file.name) : ui.chat.fileErrors['file-unreadable'](file.name), 6000);
     }
   }
 }
@@ -657,13 +657,13 @@ async function addImages(files) {
   for (const file of files) {
     if (!file.type.startsWith('image/')) continue;
     if (pendingImages.length >= MAX_IMAGES) {
-      showComposerNote(ar.chat.maxImages);
+      showComposerNote(ui.chat.maxImages);
       break;
     }
     try {
       pendingImages.push(await prepareImage(file));
     } catch {
-      showComposerNote(ar.chat.imageFailed);
+      showComposerNote(ui.chat.imageFailed);
     }
   }
   renderPreview();
@@ -696,8 +696,8 @@ function renderPreview() {
           {
             type: 'button',
             class: 'thumb-x',
-            title: ar.chat.removeImage,
-            'aria-label': ar.chat.removeImage,
+            title: ui.chat.removeImage,
+            'aria-label': ui.chat.removeImage,
             onclick: () => {
               pendingImages.splice(i, 1);
               renderPreview();
@@ -718,9 +718,9 @@ function withFiles(m, fileBudget) {
   const per = Math.floor(fileBudget / m.files.length);
   const blocks = m.files.map((f) => {
     const cut = f.text.length > per;
-    return `<file name="${f.name.replace(/"/g, "'")}">\n${cut ? f.text.slice(0, per) : f.text}${cut ? `\n${ar.chat.fileCutMarker}` : ''}\n</file>`;
+    return `<file name="${f.name.replace(/"/g, "'")}">\n${cut ? f.text.slice(0, per) : f.text}${cut ? `\n${ui.chat.fileCutMarker}` : ''}\n</file>`;
   });
-  return `${blocks.join('\n\n')}\n\n${content || ar.chat.summarizeFile}`;
+  return `${blocks.join('\n\n')}\n\n${content || ui.chat.summarizeFile}`;
 }
 
 // OpenAI-style content: plain text, or text plus image_url parts.
@@ -732,11 +732,11 @@ function apiContent(m, fileBudget = Infinity) {
   const text = withFiles(m, fileBudget);
   const images = m.role === 'user' && visionEnabled ? m.images || [] : [];
   if (!images.length) {
-    if (m.role === 'assistant' && m.imagePrompt && m.images && m.images.length) return `${text}\n[${ar.chat.imageInHistory}: ${m.imagePrompt}]`.trim();
-    if (m.images && m.images.length && !text) return ar.chat.imageNotSeen;
+    if (m.role === 'assistant' && m.imagePrompt && m.images && m.images.length) return `${text}\n[${ui.chat.imageInHistory}: ${m.imagePrompt}]`.trim();
+    if (m.images && m.images.length && !text) return ui.chat.imageNotSeen;
     return text;
   }
-  return [{ type: 'text', text: text || ar.chat.describeImage }, ...images.map((url) => ({ type: 'image_url', image_url: { url } }))];
+  return [{ type: 'text', text: text || ui.chat.describeImage }, ...images.map((url) => ({ type: 'image_url', image_url: { url } }))];
 }
 
 // Tools the model may call when web search is on. Descriptions are for the
@@ -834,7 +834,7 @@ async function sendNow(text, images, files, command) {
     const { contextSize } = await window.blazma.getChatSettings();
     const budget = contextSize * CHARS_PER_TOKEN * FILE_SHARE;
     const total = files.reduce((n, f) => n + f.chars, 0);
-    if (total > budget) showComposerNote(ar.chat.fileTooLong(Math.max(1, Math.floor((budget / total) * 100))), 8000);
+    if (total > budget) showComposerNote(ui.chat.fileTooLong(Math.max(1, Math.floor((budget / total) * 100))), 8000);
   }
   messages.push({ role: 'user', content: text, images, files, ...(command ? { command } : {}) });
   renderLast();
@@ -865,7 +865,7 @@ async function generate() {
   try {
     const conn = await window.blazma.getConnection();
     if (!conn) {
-      reply.error = ar.chat.errors.notReady;
+      reply.error = ui.chat.errors.notReady;
       return;
     }
     const chatSettings = await window.blazma.getChatSettings();
@@ -877,23 +877,23 @@ async function generate() {
     if (chatSettings.kbInChat && lastUser && lastUser.content.trim()) {
       // A library problem is reported as such; the reply goes on without it.
       const res = await window.blazma.kbSearch(lastUser.content).catch(() => ({ ok: false }));
-      if (!res.ok) showComposerNote(ar.chat.kbFailed, 6000);
+      if (!res.ok) showComposerNote(ui.chat.kbFailed, 6000);
       const passages = res.ok ? res.result : [];
       if (passages.length) {
-        system += `\n\n${ar.chat.kbContext(passages.map((p, i) => `[${i + 1}] (${p.name})\n${p.text}`).join('\n\n'))}`;
+        system += `\n\n${ui.chat.kbContext(passages.map((p, i) => `[${i + 1}] (${p.name})\n${p.text}`).join('\n\n'))}`;
         reply.sources = passages.map((p) => ({ title: p.name, url: `file:${p.file}`, file: p.file }));
       }
     }
     if (chatSettings.shareDeviceInfo) {
       const summary = await window.blazma.deviceSummary().catch(() => null);
-      if (summary) system += `\n\n${ar.chat.deviceContext(summary)}`;
+      if (summary) system += `\n\n${ui.chat.deviceContext(summary)}`;
     }
     if (signal.aborted) throw new DOMException('aborted', 'AbortError');
     reply.thinkStart = Date.now(); // the model starts now (after the search above)
     await streamReply({ reply, system, conn, chatSettings, webOn, signal });
   } catch (err) {
     if (err.name === 'AbortError') reply.stopped = true;
-    else reply.error = ar.chat.errors.serverGone;
+    else reply.error = ui.chat.errors.serverGone;
   } finally {
     if (reply.reasoning && !reply.thinkEnd) reply.thinkEnd = Date.now();
     reply.streaming = false;
@@ -940,7 +940,7 @@ async function streamReply({ reply, system, conn, chatSettings, webOn, signal })
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       const type = err && err.error && err.error.type;
-      reply.error = type === 'exceed_context_size_error' ? ar.chat.errors.contextFull : ar.chat.errors.generic;
+      reply.error = type === 'exceed_context_size_error' ? ui.chat.errors.contextFull : ui.chat.errors.generic;
       break;
     }
 
@@ -951,7 +951,7 @@ async function streamReply({ reply, system, conn, chatSettings, webOn, signal })
       // leaving an empty answer.
       if (chunk.error) {
         const type = chunk.error.type || (chunk.error.error && chunk.error.error.type);
-        reply.error = type === 'exceed_context_size_error' ? ar.chat.errors.contextFull : ar.chat.errors.midStream;
+        reply.error = type === 'exceed_context_size_error' ? ui.chat.errors.contextFull : ui.chat.errors.midStream;
         return;
       }
       const delta = chunk.choices && chunk.choices[0] && chunk.choices[0].delta;
@@ -1043,14 +1043,14 @@ async function makeImage(text) {
   imageHold = true;
   setBusy(true);
   if (!messages.length) $('chat-log').replaceChildren();
-  messages.push({ role: 'user', content: `${ar.chat.imagePrefix} ${text}` });
+  messages.push({ role: 'user', content: `${ui.chat.imagePrefix} ${text}` });
   const reply = { role: 'assistant', content: '', generatingImage: true, imagePrompt: text };
   messages.push(reply);
   renderMessages();
   const started = Date.now();
   const tick = setInterval(() => {
     const t = document.querySelector('.image-elapsed');
-    if (t) t.textContent = ar.chat.imageElapsed(Math.floor((Date.now() - started) / 1000));
+    if (t) t.textContent = ui.chat.imageElapsed(Math.floor((Date.now() - started) / 1000));
   }, 1000);
   try {
     const prompt = await englishPrompt(text);
@@ -1058,9 +1058,9 @@ async function makeImage(text) {
     if (res.ok) {
       reply.images = [res.result.dataUrl];
       reply.imagePrompt = prompt;
-      reply.content = ar.chat.imageDone(res.result.size);
+      reply.content = ui.chat.imageDone(res.result.size);
     } else if (res.error.code === 'image-cancelled') reply.stopped = true;
-    else reply.error = (ar.errors[res.error.code] || ar.errors.unknown).title;
+    else reply.error = (ui.errors[res.error.code] || ui.errors.unknown).title;
   } finally {
     clearInterval(tick);
     delete reply.generatingImage;
@@ -1117,11 +1117,11 @@ function switchBranch(k, to) {
 
 function branchNav(msg, index) {
   const n = msg.alts.length;
-  const prev = el('button', { type: 'button', class: 'icon-btn', title: ar.chat.prevBranch, 'aria-label': ar.chat.prevBranch, disabled: msg.altIndex === 0 }, '›');
-  const next = el('button', { type: 'button', class: 'icon-btn', title: ar.chat.nextBranch, 'aria-label': ar.chat.nextBranch, disabled: msg.altIndex === n - 1 }, '‹');
+  const prev = el('button', { type: 'button', class: 'icon-btn', title: ui.chat.prevBranch, 'aria-label': ui.chat.prevBranch, disabled: msg.altIndex === 0 }, DIR === 'rtl' ? '›' : '‹');
+  const next = el('button', { type: 'button', class: 'icon-btn', title: ui.chat.nextBranch, 'aria-label': ui.chat.nextBranch, disabled: msg.altIndex === n - 1 }, DIR === 'rtl' ? '‹' : '›');
   prev.addEventListener('click', () => switchBranch(index, msg.altIndex - 1));
   next.addEventListener('click', () => switchBranch(index, msg.altIndex + 1));
-  return el('span', { class: 'branch-nav', title: ar.chat.branchHint }, prev, el('span', { class: 'branch-count' }, `${msg.altIndex + 1}/${n}`), next);
+  return el('span', { class: 'branch-nav', title: ui.chat.branchHint }, prev, el('span', { class: 'branch-count' }, `${msg.altIndex + 1}/${n}`), next);
 }
 
 // ---------- regenerate / edit ----------
@@ -1144,7 +1144,7 @@ function startEdit(index) {
 function saveEdit(index, text) {
   // An edit box left open while a reply started: wait for the reply.
   if (abortController || imageBusy || sending) {
-    showComposerNote(ar.chat.busySwitch, 4000);
+    showComposerNote(ui.chat.busySwitch, 4000);
     return;
   }
   const content = text.trim();
@@ -1183,35 +1183,35 @@ function setPersona(id, { remember = true } = {}) {
 
 function chatTitle() {
   const first = messages.find((m) => m.role === 'user' && m.content.trim());
-  return first ? first.content.replace(/\s+/g, ' ').trim().slice(0, 60) : ar.chat.untitled;
+  return first ? first.content.replace(/\s+/g, ' ').trim().slice(0, 60) : ui.chat.untitled;
 }
 
 function exportMarkdown() {
-  const lines = [`# ${chatTitle()}`, '', `_${ar.chat.exportedOn(new Date().toLocaleString('ar'))}_`, ''];
+  const lines = [`# ${chatTitle()}`, '', `_${ui.chat.exportedOn(new Date().toLocaleString(LOCALE))}_`, ''];
   for (const m of messages) {
     if (m.role === 'user') {
-      lines.push(`## ${ar.chat.you}`, '');
-      if (m.files && m.files.length) lines.push(`📎 ${m.files.map((f) => f.name).join('، ')}`, '');
-      if (m.images && m.images.length) lines.push(`🖼 ${ar.chat.imagesCount(m.images.length)}`, '');
+      lines.push(`## ${ui.chat.you}`, '');
+      if (m.files && m.files.length) lines.push(`📎 ${m.files.map((f) => f.name).join(ui.common.listSep)}`, '');
+      if (m.images && m.images.length) lines.push(`🖼 ${ui.chat.imagesCount(m.images.length)}`, '');
       const cmd = m.command && commandById(m.command);
       lines.push(`${cmd ? `/${cmd.name} ` : ''}${m.content || ''}`, '');
     } else if (m.content || m.error) {
-      lines.push(`## ${ar.chat.assistantName}`, '', m.content || m.error, '');
-      if (m.sources && m.sources.length) lines.push(`${ar.chat.sources}:`, ...m.sources.map((src) => `- [${src.title || src.url}](${src.url})`), '');
+      lines.push(`## ${ui.chat.assistantName}`, '', m.content || m.error, '');
+      if (m.sources && m.sources.length) lines.push(`${ui.chat.sources}:`, ...m.sources.map((src) => `- [${src.title || src.url}](${src.url})`), '');
     }
   }
   return lines.join('\n');
 }
 
 function exportHtml() {
-  const mdLabels = { copy: ar.actions.copy, copied: ar.actions.copied, code: ar.chat.code };
+  const mdLabels = { copy: ui.actions.copy, copied: ui.actions.copied, code: ui.chat.code };
   const box = document.createElement('div');
-  box.append(el('h1', null, chatTitle()), el('div', { class: 'meta' }, ar.chat.exportedOn(new Date().toLocaleString('ar'))));
+  box.append(el('h1', null, chatTitle()), el('div', { class: 'meta' }, ui.chat.exportedOn(new Date().toLocaleString(LOCALE))));
   for (const m of messages) {
     if (m.role !== 'user' && !m.content && !m.error) continue;
-    const body = el('div', { class: `msg ${m.role === 'user' ? 'user' : 'assistant'}` }, el('div', { class: 'who' }, m.role === 'user' ? ar.chat.you : ar.chat.assistantName));
+    const body = el('div', { class: `msg ${m.role === 'user' ? 'user' : 'assistant'}` }, el('div', { class: 'who' }, m.role === 'user' ? ui.chat.you : ui.chat.assistantName));
     if (m.role === 'user') {
-      if (m.files && m.files.length) body.append(el('div', { class: 'files' }, `📎 ${m.files.map((f) => f.name).join('، ')}`));
+      if (m.files && m.files.length) body.append(el('div', { class: 'files' }, `📎 ${m.files.map((f) => f.name).join(ui.common.listSep)}`));
       for (const src of m.images || []) body.append(el('img', { src, alt: '' }));
       const cmd = m.command && commandById(m.command);
       body.append(el('div', { dir: 'auto' }, ...`${cmd ? `/${cmd.name} ` : ''}${m.content || ''}`.split('\n').flatMap((l, i) => (i ? [el('br'), l] : [l]))));
@@ -1224,7 +1224,7 @@ function exportHtml() {
 async function exportChat(format) {
   if (!messages.length) return;
   const res = await window.blazma.exportChat({ title: chatTitle(), format, markdown: format === 'md' ? exportMarkdown() : '', html: format === 'pdf' ? exportHtml() : '' });
-  if (res.ok && res.result.saved) showComposerNote(ar.chat.exported);
+  if (res.ok && res.result.saved) showComposerNote(ui.chat.exported);
 }
 
 function openExportMenu() {
@@ -1242,7 +1242,7 @@ function openExportMenu() {
     });
     return b;
   };
-  const menu = el('div', { class: 'model-menu export-menu', role: 'menu' }, item(ar.chat.exportMd, 'md'), item(ar.chat.exportPdf, 'pdf'));
+  const menu = el('div', { class: 'model-menu export-menu', role: 'menu' }, item(ui.chat.exportMd, 'md'), item(ui.chat.exportPdf, 'pdf'));
   const r = btn.getBoundingClientRect();
   menu.style.top = `${r.bottom + 6}px`;
   menu.style.left = `${r.left}px`;
@@ -1260,7 +1260,7 @@ async function persist() {
   if (!messages.some((m) => m.role === 'user')) return;
   syncBranches();
   if (!currentChatId) currentChatId = crypto.randomUUID();
-  await window.blazma.chatsSave({ id: currentChatId, messages, personaId: currentPersonaId, fallbackTitle: ar.chat.untitled });
+  await window.blazma.chatsSave({ id: currentChatId, messages, personaId: currentPersonaId, fallbackTitle: ui.chat.untitled });
   refreshList();
 }
 
@@ -1279,7 +1279,7 @@ function newChat() {
 async function loadChat(id) {
   // Not while a reply or a picture is on its way: it belongs to this chat.
   if (abortController || imageBusy || sending) {
-    showComposerNote(ar.chat.busySwitch, 4000);
+    showComposerNote(ui.chat.busySwitch, 4000);
     return;
   }
   stopSpeaking();
@@ -1298,7 +1298,7 @@ function highlightCurrent() {
 }
 
 function startRename(item, chat) {
-  const input = el('input', { type: 'text', value: chat.title, dir: 'auto', 'aria-label': ar.chat.rename });
+  const input = el('input', { type: 'text', value: chat.title, dir: 'auto', 'aria-label': ui.chat.rename });
   const done = async (commit) => {
     if (commit && input.value.trim()) await window.blazma.chatsRename(chat.id, input.value.trim());
     refreshList();
@@ -1336,7 +1336,7 @@ function setFolderFilter(f) {
 // "All" plus one chip per folder that has chats.
 function renderFolders(items) {
   const bar = $('chat-folders');
-  const folders = [...new Set(items.map((c) => c.folder).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ar'));
+  const folders = [...new Set(items.map((c) => c.folder).filter(Boolean))].sort((a, b) => a.localeCompare(b, LOCALE));
   if (folderFilter && !folders.includes(folderFilter)) folderFilter = '';
   bar.hidden = !folders.length;
   const chip = (label, value) => {
@@ -1344,8 +1344,8 @@ function renderFolders(items) {
     b.addEventListener('click', () => setFolderFilter(value));
     return b;
   };
-  bar.setAttribute('aria-label', ar.chat.foldersLabel);
-  bar.replaceChildren(chip(ar.chat.allChats, ''), ...folders.map((f) => chip(`📁 ${f}`, f)));
+  bar.setAttribute('aria-label', ui.chat.foldersLabel);
+  bar.replaceChildren(chip(ui.chat.allChats, ''), ...folders.map((f) => chip(`📁 ${f}`, f)));
   return folders;
 }
 
@@ -1362,10 +1362,10 @@ function openFolderMenu(anchor, chat, folders) {
     b.addEventListener('click', () => move(folder));
     return b;
   };
-  const add = el('button', { type: 'button', class: 'model-menu-item more', role: 'menuitem' }, ar.chat.newFolder);
+  const add = el('button', { type: 'button', class: 'model-menu-item more', role: 'menuitem' }, ui.chat.newFolder);
   add.addEventListener('click', async () => {
     menu.remove();
-    const name = await promptDialog({ title: ar.chat.newFolderTitle, placeholder: ar.chat.newFolderPh, maxLength: 40, ok: ar.chat.moveToFolder, cancel: ar.chat.cancel });
+    const name = await promptDialog({ title: ui.chat.newFolderTitle, placeholder: ui.chat.newFolderPh, maxLength: 40, ok: ui.chat.moveToFolder, cancel: ui.chat.cancel });
     if (name) {
       await window.blazma.chatsSetMeta(chat.id, { folder: name });
       refreshList();
@@ -1374,8 +1374,8 @@ function openFolderMenu(anchor, chat, folders) {
   const menu = el(
     'div',
     { class: 'model-menu folder-menu', role: 'menu' },
-    el('div', { class: 'model-menu-head' }, ar.chat.moveToFolder),
-    row(ar.chat.noFolder, '', !chat.folder),
+    el('div', { class: 'model-menu-head' }, ui.chat.moveToFolder),
+    row(ui.chat.noFolder, '', !chat.folder),
     ...folders.map((f) => row(`📁 ${f}`, f, chat.folder === f)),
     add,
   );
@@ -1397,7 +1397,7 @@ function renderList(allItems, query) {
   const folders = renderFolders(allItems);
   const items = !query && folderFilter ? allItems.filter((c) => c.folder === folderFilter) : allItems;
   if (!items.length) {
-    box.replaceChildren(el('div', { class: 'chat-list-empty' }, query ? ar.chat.noResults : ar.chat.noChats));
+    box.replaceChildren(el('div', { class: 'chat-list-empty' }, query ? ui.chat.noResults : ui.chat.noChats));
     return;
   }
   // Pinned chats first, then by date when not searching: today, yesterday, this week, older.
@@ -1407,23 +1407,23 @@ function renderList(allItems, query) {
   box.replaceChildren(
     ...items.flatMap((chat) => {
       const group = query ? null : chat.pinned ? 'pinned' : chat.updatedAt ? groupOf(chat.updatedAt) : null;
-      const header = group && group !== lastGroup ? el('div', { class: 'chat-group' }, group === 'pinned' ? `📌 ${ar.chat.pinnedGroup}` : ar.chat.groups[group]) : null;
+      const header = group && group !== lastGroup ? el('div', { class: 'chat-group' }, group === 'pinned' ? `📌 ${ui.chat.pinnedGroup}` : ui.chat.groups[group]) : null;
       lastGroup = group || lastGroup;
       const item = el(
         'div',
         { class: `chat-item${chat.pinned ? ' pinned' : ''}`, role: 'button', tabindex: '0', 'data-id': chat.id, 'aria-current': String(chat.id === currentChatId) },
-        el('span', { class: 'chat-item-title', dir: 'auto' }, chat.title || ar.chat.untitled),
+        el('span', { class: 'chat-item-title', dir: 'auto' }, chat.title || ui.chat.untitled),
         chat.snippet ? el('span', { class: 'chat-item-snippet', dir: 'auto' }, chat.snippet) : null,
         chat.folder && !folderFilter ? el('span', { class: 'chat-item-folder' }, `📁 ${chat.folder}`) : null,
       );
-      const pinLabel = chat.pinned ? ar.chat.unpin : ar.chat.pin;
+      const pinLabel = chat.pinned ? ui.chat.unpin : ui.chat.pin;
       const actions = el(
         'span',
         { class: 'chat-item-actions' },
         el('button', { type: 'button', title: pinLabel, 'aria-label': pinLabel, 'aria-pressed': String(Boolean(chat.pinned)) }, '📌'),
-        el('button', { type: 'button', title: ar.chat.moveToFolder, 'aria-label': ar.chat.moveToFolder }, '📁'),
-        el('button', { type: 'button', title: ar.chat.rename, 'aria-label': ar.chat.rename }, '✎'),
-        el('button', { type: 'button', title: ar.chat.remove, 'aria-label': ar.chat.remove }, '🗑'),
+        el('button', { type: 'button', title: ui.chat.moveToFolder, 'aria-label': ui.chat.moveToFolder }, '📁'),
+        el('button', { type: 'button', title: ui.chat.rename, 'aria-label': ui.chat.rename }, '✎'),
+        el('button', { type: 'button', title: ui.chat.remove, 'aria-label': ui.chat.remove }, '🗑'),
       );
       const [pinBtn, folderBtn, renameBtn, deleteBtn] = actions.children;
       pinBtn.addEventListener('click', async (e) => {
@@ -1441,7 +1441,7 @@ function renderList(allItems, query) {
       });
       deleteBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
-        if (!(await confirmDialog({ text: ar.chat.confirmDelete(chat.title || ar.chat.untitled), danger: true }))) return;
+        if (!(await confirmDialog({ text: ui.chat.confirmDelete(chat.title || ui.chat.untitled), danger: true }))) return;
         await window.blazma.chatsDelete(chat.id);
         if (chat.id === currentChatId) newChat();
         refreshList();
@@ -1469,10 +1469,10 @@ export function initChat() {
   const input = $('chat-input');
   $('model-pill').addEventListener('click', () => (document.querySelector('.model-switch') ? closeModelMenu() : openModelMenu()));
   $('persona-pill').addEventListener('click', (e) => openPersonaMenu(e.currentTarget, currentPersonaId, (id) => setPersona(id)));
-  $('btn-export-chat').title = ar.chat.exportTitle;
+  $('btn-export-chat').title = ui.chat.exportTitle;
   $('btn-export-chat').addEventListener('click', openExportMenu);
   loadPersonas().then(renderPersonaPill);
-  input.placeholder = ar.chat.placeholder;
+  input.placeholder = ui.chat.placeholder;
   input.addEventListener('input', () => autoGrow(input));
   attachSlashMenu(input); // before the Enter handler: Enter picks a command while the list is open
   input.addEventListener('keydown', (e) => {
@@ -1486,16 +1486,16 @@ export function initChat() {
     const text = input.value.trim();
     if ((!text && !pendingImages.length && !pendingFiles.length) || abortController || imageBusy || sending) return;
     if (setupState && setupState.phase !== 'ready') {
-      showComposerNote(ar.chat.waitModel, 5000);
+      showComposerNote(ui.chat.waitModel, 5000);
       return;
     }
     if (pendingFiles.some((f) => f.reading)) {
-      showComposerNote(ar.chat.fileStillReading);
+      showComposerNote(ui.chat.fileStillReading);
       return;
     }
     const slash = parseCommand(text);
     if (slash && !slash.rest && !pendingFiles.length) {
-      showComposerNote(ar.chat.slashNeedText);
+      showComposerNote(ui.chat.slashNeedText);
       return;
     }
     const images = pendingImages;
@@ -1513,7 +1513,7 @@ export function initChat() {
   const webBtn = $('btn-web');
   const showWeb = (on) => {
     webBtn.setAttribute('aria-pressed', String(on));
-    webBtn.title = on ? ar.chat.webToggleOn : ar.chat.webToggleOff;
+    webBtn.title = on ? ui.chat.webToggleOn : ui.chat.webToggleOff;
     webBtn.setAttribute('aria-label', webBtn.title);
   };
   window.blazma.getSettings().then((st) => showWeb(st.webSearch));
@@ -1524,28 +1524,28 @@ export function initChat() {
 
   // Image generation: the text in the box describes the picture.
   const imgBtn = $('btn-image-gen');
-  imgBtn.title = ar.chat.imageGen;
-  imgBtn.setAttribute('aria-label', ar.chat.imageGen);
+  imgBtn.title = ui.chat.imageGen;
+  imgBtn.setAttribute('aria-label', ui.chat.imageGen);
   imgBtn.addEventListener('click', async () => {
     const text = input.value.trim();
     if (abortController || imageBusy) return;
-    if (!text) return showComposerNote(ar.chat.imageNeedText, 5000);
+    if (!text) return showComposerNote(ui.chat.imageNeedText, 5000);
     const st = await window.blazma.imagesStatus();
     if (!st.program || !st.models) {
       const plan = await window.blazma.imagesPlan();
       const gb = plan.ok ? (plan.result.bytes / 1e9).toFixed(1) : '6.5';
-      if (!(await confirmDialog({ text: ar.chat.imageInstall(gb), ok: ar.chat.download }))) return;
+      if (!(await confirmDialog({ text: ui.chat.imageInstall(gb), ok: ui.chat.download }))) return;
       imgBtn.disabled = true;
       const off = window.blazma.onImagesProgress((p) => {
         const box = $('attach-preview');
         box.hidden = false;
-        box.replaceChildren(el('span', { class: 'muted small attach-note' }, ar.chat.imageDownloading(p.stage, p.total ? Math.floor((p.done / p.total) * 100) : 0)));
+        box.replaceChildren(el('span', { class: 'muted small attach-note' }, ui.chat.imageDownloading(p.stage, p.total ? Math.floor((p.done / p.total) * 100) : 0)));
       });
       const res = await window.blazma.imagesInstall();
       off();
       imgBtn.disabled = false;
       renderPreview();
-      if (!res.ok) return showComposerNote((ar.errors[res.error.code] || ar.errors.unknown).title, 6000);
+      if (!res.ok) return showComposerNote((ui.errors[res.error.code] || ui.errors.unknown).title, 6000);
     }
     input.value = '';
     autoGrow(input);
@@ -1554,8 +1554,8 @@ export function initChat() {
 
   // Voice input: record, then whisper.cpp turns it into text in the input box.
   const micBtn = $('btn-mic');
-  micBtn.title = ar.chat.mic;
-  micBtn.setAttribute('aria-label', ar.chat.mic);
+  micBtn.title = ui.chat.mic;
+  micBtn.setAttribute('aria-label', ui.chat.mic);
   let recording = null;
   let micNote = null;
   const setMicNote = (text) => {
@@ -1573,14 +1573,14 @@ export function initChat() {
       recording = null;
       micBtn.classList.remove('recording');
       micBtn.setAttribute('aria-pressed', 'false');
-      setMicNote(ar.chat.micConverting);
+      setMicNote(ui.chat.micConverting);
       try {
         const { wav, seconds } = await rec.stop();
         if (seconds < 0.4) return setMicNote(null);
         const res = await window.blazma.voiceTranscribe(wav);
         setMicNote(null);
-        if (!res.ok) return showComposerNote((ar.errors[res.error.code] || ar.errors.unknown).title, 6000);
-        if (!res.result) return showComposerNote(ar.chat.micNothing, 4000);
+        if (!res.ok) return showComposerNote((ui.errors[res.error.code] || ui.errors.unknown).title, 6000);
+        if (!res.result) return showComposerNote(ui.chat.micNothing, 4000);
         const at = input.selectionStart ?? input.value.length;
         const before = input.value.slice(0, at);
         input.value = `${before}${before && !/\s$/.test(before) ? ' ' : ''}${res.result}${input.value.slice(at)}`;
@@ -1588,29 +1588,29 @@ export function initChat() {
         input.focus();
       } catch {
         setMicNote(null);
-        showComposerNote(ar.chat.micFailed, 5000);
+        showComposerNote(ui.chat.micFailed, 5000);
       }
       return;
     }
     const st = await window.blazma.voiceStatus();
     if (!st.program || !st.model) {
-      if (!(await confirmDialog({ text: ar.chat.micInstall(st.modelKind), ok: ar.chat.download }))) return;
+      if (!(await confirmDialog({ text: ui.chat.micInstall(st.modelKind), ok: ui.chat.download }))) return;
       micBtn.disabled = true;
-      const off = window.blazma.onVoiceProgress((p) => setMicNote(ar.chat.micDownloading(p.stage, p.total ? Math.floor((p.done / p.total) * 100) : 0)));
+      const off = window.blazma.onVoiceProgress((p) => setMicNote(ui.chat.micDownloading(p.stage, p.total ? Math.floor((p.done / p.total) * 100) : 0)));
       const res = await window.blazma.voiceInstall();
       off();
       micBtn.disabled = false;
       setMicNote(null);
-      if (!res.ok) return showComposerNote((ar.errors[res.error.code] || ar.errors.unknown).title, 6000);
+      if (!res.ok) return showComposerNote((ui.errors[res.error.code] || ui.errors.unknown).title, 6000);
     }
     try {
       recording = await startRecording();
     } catch {
-      return showComposerNote(ar.chat.micDenied, 6000);
+      return showComposerNote(ui.chat.micDenied, 6000);
     }
     micBtn.classList.add('recording');
     micBtn.setAttribute('aria-pressed', 'true');
-    setMicNote(ar.chat.micRecording);
+    setMicNote(ui.chat.micRecording);
   });
 
   // "مكتبتي" on/off, remembered in settings; without indexed files it opens
@@ -1618,14 +1618,14 @@ export function initChat() {
   const kbBtn = $('btn-kb');
   const showKb = (on) => {
     kbBtn.setAttribute('aria-pressed', String(on));
-    kbBtn.title = on ? ar.chat.kbOn : ar.chat.kbOff;
+    kbBtn.title = on ? ui.chat.kbOn : ui.chat.kbOff;
     kbBtn.setAttribute('aria-label', kbBtn.title);
   };
   window.blazma.getSettings().then((st) => showKb(st.kbInChat));
   kbBtn.addEventListener('click', async () => {
     const on = kbBtn.getAttribute('aria-pressed') !== 'true';
     if (on && !(await window.blazma.kbStatus()).chunks) {
-      showComposerNote(ar.chat.kbEmpty, 6000);
+      showComposerNote(ui.chat.kbEmpty, 6000);
       window.dispatchEvent(new CustomEvent('blazma:settings-tab', { detail: 'kb' }));
       window.dispatchEvent(new CustomEvent('blazma:show-page', { detail: 'settings' }));
       return;
@@ -1635,8 +1635,8 @@ export function initChat() {
   });
 
   // Images: button, paste, or drag and drop onto the chat.
-  $('btn-attach').title = ar.chat.attach;
-  $('btn-attach').setAttribute('aria-label', ar.chat.attach);
+  $('btn-attach').title = ui.chat.attach;
+  $('btn-attach').setAttribute('aria-label', ui.chat.attach);
   $('btn-attach').addEventListener('click', () => $('file-input').click());
   $('file-input').addEventListener('change', (e) => {
     addAttachments([...e.target.files]);
@@ -1672,7 +1672,7 @@ export function initChat() {
   const devBtn = $('btn-device-info');
   const showDev = (on) => {
     devBtn.setAttribute('aria-pressed', String(on));
-    devBtn.title = on ? ar.chat.deviceInfoOn : ar.chat.deviceInfoOff;
+    devBtn.title = on ? ui.chat.deviceInfoOn : ui.chat.deviceInfoOff;
     devBtn.setAttribute('aria-label', devBtn.title);
   };
   window.blazma.getSettings().then((st) => showDev(st.shareDeviceInfo));

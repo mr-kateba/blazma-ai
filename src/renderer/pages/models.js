@@ -2,11 +2,11 @@
 // flow as the chat page, so progress is real), delete from disk, and adding a
 // model from Hugging Face after checking it exists.
 
-import { ar, formatBytes } from '../i18n/ar.js';
+import { ui, formatBytes } from '../i18n/index.js';
 import { el } from '../lib/dom.js';
 import { confirmDialog } from '../lib/dialog.js';
 
-const M = ar.modelsPage;
+const M = ui.modelsPage;
 const $ = (id) => document.getElementById(id);
 
 let state = null;
@@ -57,9 +57,9 @@ function modelCard(m) {
   const pct = progressFor(m);
 
   const tags = [];
-  if (m.id === state.recommendedId) tags.push(el('span', { class: 'tag tag-accent' }, ar.setup.recommended));
+  if (m.id === state.recommendedId) tags.push(el('span', { class: 'tag tag-accent' }, ui.setup.recommended));
   if (isActive) tags.push(el('span', { class: 'tag tag-ok' }, M.active));
-  if (m.downloaded && !isActive) tags.push(el('span', { class: 'tag' }, ar.setup.downloaded));
+  if (m.downloaded && !isActive) tags.push(el('span', { class: 'tag' }, ui.setup.downloaded));
   if (m.vision) tags.push(el('span', { class: 'tag' }, M.vision));
   if ((m.tags || []).includes('code')) tags.push(el('span', { class: 'tag' }, M.code));
   if ((m.tags || []).includes('translate')) tags.push(el('span', { class: 'tag' }, M.translate));
@@ -68,8 +68,8 @@ function modelCard(m) {
   else if (m.local) tags.push(el('span', { class: 'tag' }, M.localFile));
   else if (m.custom) tags.push(el('span', { class: 'tag' }, M.custom));
   if (m.local && !m.downloaded) tags.push(el('span', { class: 'tag tag-warn' }, M.fileMissing));
-  if (m.fit === 'too-big') tags.push(el('span', { class: 'tag tag-warn' }, ar.setup.tooBig));
-  else if (m.fit === 'slow') tags.push(el('span', { class: 'tag tag-warn' }, state.hardware && state.hardware.nvidia ? ar.setup.usesRam : ar.setup.slowOnCpu));
+  if (m.fit === 'too-big') tags.push(el('span', { class: 'tag tag-warn' }, ui.setup.tooBig));
+  else if (m.fit === 'slow') tags.push(el('span', { class: 'tag tag-warn' }, state.hardware && state.hardware.nvidia ? ui.setup.usesRam : ui.setup.slowOnCpu));
 
   const actions = el('div', { class: 'row' });
   if (isActive) {
@@ -222,7 +222,7 @@ const SCANNERS = {
 };
 
 function localResult(res, okText) {
-  if (!res.ok) localStatus = { kind: 'error', text: (ar.errors[res.error.code] || ar.errors.unknown).title };
+  if (!res.ok) localStatus = { kind: 'error', text: (ui.errors[res.error.code] || ui.errors.unknown).title };
   else if (res.result) localStatus = { kind: 'ok', text: okText || M.added(res.result.name) };
 }
 
@@ -323,7 +323,7 @@ function setupDrop(root) {
     const files = [...e.dataTransfer.files];
     const gguf = files.filter((f) => /\.gguf$/i.test(f.name));
     if (!gguf.length) {
-      localStatus = { kind: 'error', text: ar.errors['not-gguf'].title };
+      localStatus = { kind: 'error', text: ui.errors['not-gguf'].title };
       render();
       return;
     }

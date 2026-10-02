@@ -1,12 +1,12 @@
 // "جهازي": live hardware readings. Every value shown is a reading from its
 // source; anything missing is shown as "غير متاح" with the reason.
 
-import { ar, formatBytes } from '../i18n/ar.js';
+import { ui, formatBytes, DIR } from '../i18n/index.js';
 import { el } from '../lib/dom.js';
 import { LineChart } from '../lib/chart.js';
 import { store } from '../lib/store.js';
 
-const D = ar.device;
+const D = ui.device;
 const GB = 1024 ** 3;
 
 let info = null;
@@ -34,7 +34,7 @@ function card(label, value, { sub, status, why } = {}) {
     'div',
     { class: `stat${status ? ` st-${status}` : ''}` },
     el('div', { class: 'stat-label' }, label),
-    el('div', { class: `stat-value${missing ? ' na' : ''}`, dir: 'rtl' }, ...(missing ? [D.unavailable] : [].concat(value))),
+    el('div', { class: `stat-value${missing ? ' na' : ''}`, dir: DIR }, ...(missing ? [D.unavailable] : [].concat(value))),
     missing && why ? el('div', { class: 'stat-note' }, why) : sub ? el('div', { class: 'stat-note' }, sub) : null,
   );
 }
@@ -58,7 +58,7 @@ function gpuSection(s) {
     return section(
       D.gpuSection,
       el('div', { class: 'notice' }, D.why.noNvidia),
-      el('div', { class: 'stats' }, card(D.otherGpus, names.length ? names.join('، ') : null, { why: winWhy() })),
+      el('div', { class: 'stats' }, card(D.otherGpus, names.length ? names.join(ui.common.listSep) : null, { why: winWhy() })),
     );
   }
   const g = s && s.gpu;
@@ -73,7 +73,7 @@ function gpuSection(s) {
     D.gpuSection,
     el(
       'div',
-      { class: 'dev-sub', dir: 'rtl' },
+      { class: 'dev-sub', dir: DIR },
       el('bdi', { dir: 'ltr' }, info.gpu.name),
       ` · ${D.driver} `,
       el('bdi', { dir: 'ltr' }, info.gpu.driver),
@@ -84,14 +84,14 @@ function gpuSection(s) {
       'div',
       { class: 'stats' },
       card(D.usage, g && num(g.util) != null ? `${num(g.util)}%` : null, { why }),
-      card(D.vram, g && g.memUsed != null && g.memTotal != null ? `${num(g.memUsed / 1024, 1)} ${D.of} ${num(g.memTotal / 1024, 1)} جيجابايت` : null, {
+      card(D.vram, g && g.memUsed != null && g.memTotal != null ? `${num(g.memUsed / 1024, 1)} ${D.of} ${ui.units.gbShort(num(g.memTotal / 1024, 1))}` : null, {
         why,
         sub: vramPct != null ? `${num(vramPct)}%` : null,
         status: level(vramPct, 90, 97),
       }),
-      card(D.power, g && g.power != null ? `${num(g.power)} واط` : null, {
+      card(D.power, g && g.power != null ? ui.units.watts(num(g.power)) : null, {
         why,
-        sub: g && g.powerLimit != null ? `${D.limit} ${num(g.powerLimit)} واط` : null,
+        sub: g && g.powerLimit != null ? `${D.limit} ${ui.units.watts(num(g.powerLimit))}` : null,
       }),
       card(D.temp, g && g.temp != null ? deg(g.temp) : null, {
         why,
@@ -99,13 +99,13 @@ function gpuSection(s) {
         sub: info.gpu.limits && info.gpu.limits.maxOperating ? D.maxTempNote(info.gpu.limits.maxOperating) : null,
       }),
       card(D.fan, g && g.fan != null ? `${num(g.fan)}%` : null, { why }),
-      card(D.clocks, g && g.clockGr != null ? `${num(g.clockGr)} / ${g.clockMem != null ? num(g.clockMem) : '—'} ميجاهرتز` : null, { why }),
+      card(D.clocks, g && g.clockGr != null ? ui.units.mhz(`${num(g.clockGr)} / ${g.clockMem != null ? num(g.clockMem) : '—'}`) : null, { why }),
       card(D.pstate, g && g.pstate ? g.pstate : null, { why }),
-      card(D.slowdown, g && reasons.length ? (activeReasons.length ? activeReasons.join('، ') : D.slowdownNone) : null, {
+      card(D.slowdown, g && reasons.length ? (activeReasons.length ? activeReasons.join(ui.common.listSep) : D.slowdownNone) : null, {
         why,
-        status: activeReasons.some((r) => r.includes('حرارة')) ? 'danger' : null,
+        status: reasons.some(([k, v]) => v && /thermal/.test(k)) ? 'danger' : null,
       }),
-      card(D.modelVram, server && server.vramMB != null ? `${num(server.vramMB / 1024, 2)} جيجابايت` : null, {
+      card(D.modelVram, server && server.vramMB != null ? ui.units.gbShort(num(server.vramMB / 1024, 2)) : null, {
         why: !server ? D.why.waiting : !server.running ? D.why.serverOff : D.why.processVram,
       }),
     ),
@@ -135,9 +135,9 @@ function cpuSection(s) {
       { class: 'stats' },
       card(D.usage, c ? `${num(c.total)}%` : null, { why: D.why.waiting }),
       card(D.cores, info.cpu.threads ? `${info.cpu.cores ?? '—'} / ${info.cpu.threads}` : null, { why: winOnly }),
-      card(D.cpuClock, c && c.clockMHz != null ? `${num(c.clockMHz / 1000, 2)} جيجاهرتز` : null, { why: s ? winOnly : D.why.waiting }),
+      card(D.cpuClock, c && c.clockMHz != null ? ui.units.ghz(num(c.clockMHz / 1000, 2)) : null, { why: s ? winOnly : D.why.waiting }),
       card(D.cpuTemp, c && c.tempC != null ? `${num(c.tempC)}°` : null, { why: sensorWhy(c) }),
-      card(D.cpuPower, c && c.powerW != null ? `${num(c.powerW)} واط` : null, { why: sensorWhy(c) }),
+      card(D.cpuPower, c && c.powerW != null ? ui.units.watts(num(c.powerW)) : null, { why: sensorWhy(c) }),
     ),
     coreBars && el('div', { class: 'dev-sub' }, D.perCore),
     coreBars,
@@ -159,14 +159,14 @@ function ramSection(s) {
     el(
       'div',
       { class: 'stats' },
-      card(D.ramUsed, r ? `${num(r.usedBytes / GB, 1)} ${D.of} ${num(r.totalBytes / GB, 1)} جيجابايت` : null, {
+      card(D.ramUsed, r ? `${num(r.usedBytes / GB, 1)} ${D.of} ${ui.units.gbShort(num(r.totalBytes / GB, 1))}` : null, {
         why: D.why.waiting,
         sub: r ? `${num(r.usedPct)}%` : null,
         status: level(r && r.usedPct, 85, 95),
       }),
-      card(D.ramAvailable, r ? `${num(r.availableBytes / GB, 1)} جيجابايت` : null, { why: D.why.waiting }),
+      card(D.ramAvailable, r ? ui.units.gbShort(num(r.availableBytes / GB, 1)) : null, { why: D.why.waiting }),
       card(D.ramType, m.type ? `${m.type}${m.speedMTs ? ` · ${m.speedMTs} MT/s` : ''}` : null, { why: winWhy() }),
-      card(D.modelRam, server && server.ramBytes != null ? `${num(server.ramBytes / GB, 2)} جيجابايت` : null, {
+      card(D.modelRam, server && server.ramBytes != null ? ui.units.gbShort(num(server.ramBytes / GB, 2)) : null, {
         why: !server ? D.why.waiting : !server.running ? D.why.serverOff : winWhy(),
       }),
     ),
@@ -222,8 +222,8 @@ function nowRunning() {
     { class: 'now-running' },
     el('span', { class: 'muted' }, D.nowRunning),
     el('span', null, `${D.model}: `, el('b', { dir: 'ltr' }, model ? model.name : D.none)),
-    el('span', null, `${D.server}: `, el('b', null, ar.status[phaseKey])),
-    el('span', null, `${D.lastSpeed}: `, el('b', { dir: 'rtl' }, store.lastSpeed ? `${store.lastSpeed.toFixed(1)} توكن/ث` : D.none)),
+    el('span', null, `${D.server}: `, el('b', null, ui.status[phaseKey])),
+    el('span', null, `${D.lastSpeed}: `, el('b', { dir: DIR }, store.lastSpeed ? ui.units.tps(store.lastSpeed.toFixed(1)) : D.none)),
   );
 }
 
@@ -232,15 +232,15 @@ function benchView() {
   if (bench.error) return el('div', { class: 'bench msg-error' }, bench.error);
   const r = bench.result;
   if (!r) return null;
-  const item = (label, v) => el('div', { class: 'bench-item' }, el('span', { class: 'muted' }, label), el('b', { dir: 'rtl' }, ...[].concat(v ?? D.unavailable)));
+  const item = (label, v) => el('div', { class: 'bench-item' }, el('span', { class: 'muted' }, label), el('b', { dir: DIR }, ...[].concat(v ?? D.unavailable)));
   return el(
     'div',
     { class: 'bench' },
-    item(D.benchGen, r.genPerSecond != null ? `${r.genPerSecond.toFixed(1)} توكن/ث` : null),
-    item(D.benchPrompt, r.promptPerSecond != null ? `${r.promptPerSecond.toFixed(0)} توكن/ث` : null),
+    item(D.benchGen, r.genPerSecond != null ? ui.units.tps(r.genPerSecond.toFixed(1)) : null),
+    item(D.benchPrompt, r.promptPerSecond != null ? ui.units.tps(r.promptPerSecond.toFixed(0)) : null),
     item(D.benchMaxTemp, r.maxTempC != null ? deg(r.maxTempC) : null),
-    item(D.benchMaxPower, r.maxPowerW != null ? `${Math.round(r.maxPowerW)} واط` : null),
-    item(D.benchDuration, `${r.seconds.toFixed(1)} ث`),
+    item(D.benchMaxPower, r.maxPowerW != null ? ui.units.watts(Math.round(r.maxPowerW)) : null),
+    item(D.benchDuration, ui.units.secShort(r.seconds.toFixed(1))),
   );
 }
 
