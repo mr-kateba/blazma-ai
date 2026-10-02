@@ -11,6 +11,7 @@ import { speak, stopSpeaking } from '../lib/speech.js';
 import { startRecording } from '../lib/recorder.js';
 import { loadPersonas, personaById, openPersonaMenu } from './personas.js';
 import { confirmDialog } from '../lib/dialog.js';
+import { attachSlashMenu, parseCommand, withCommand, commandById } from '../lib/slash.js';
 
 // Today's date and time in Arabic (Gregorian and Umm al-Qura Hijri), with
 // Western digits to match the rest of the app.
@@ -406,7 +407,11 @@ function messageNode(msg, index) {
       ),
     );
     setTimeout(() => box.focus(), 0);
-  } else if (isUser && msg.content) body.append(el('p', { dir: detectDir(msg.content), class: 'plain' }, msg.content));
+  } else if (isUser && (msg.content || msg.command)) {
+    const cmd = msg.command && commandById(msg.command);
+    if (cmd) body.append(el('span', { class: 'slash-chip', title: cmd.desc }, `/${cmd.name}`));
+    if (msg.content) body.append(el('p', { dir: detectDir(msg.content), class: 'plain' }, msg.content));
+  }
   if (!isUser && msg.steps && msg.steps.length) {
     body.append(
       el(
@@ -682,13 +687,14 @@ function renderPreview() {
 // Attached files go before the question, each inside <file> tags, cut to
 // fit the share of the context given to files.
 function withFiles(m, fileBudget) {
-  if (!m.files || !m.files.length) return m.content;
+  const content = m.command ? withCommand(m.command, m.content || '') : m.content;
+  if (!m.files || !m.files.length) return content;
   const per = Math.floor(fileBudget / m.files.length);
   const blocks = m.files.map((f) => {
     const cut = f.text.length > per;
     return `<file name="${f.name.replace(/"/g, "'")}">\n${cut ? f.text.slice(0, per) : f.text}${cut ? `\n${ar.chat.fileCutMarker}` : ''}\n</file>`;
   });
-  return `${blocks.join('\n\n')}\n\n${m.content || ar.chat.summarizeFile}`;
+  return `${blocks.join('\n\n')}\n\n${content || ar.chat.summarizeFile}`;
 }
 
 // OpenAI-style content: plain text, or text plus image_url parts.
@@ -786,17 +792,17 @@ async function runTool(call, reply) {
 // second Enter during the first awaits cannot send another message.
 let sending = false;
 
-async function send(text, images = [], files = []) {
+async function send(text, images = [], files = [], command = null) {
   if (sending || abortController) return;
   sending = true;
   try {
-    await sendNow(text, images, files);
+    await sendNow(text, images, files, command);
   } finally {
     sending = false;
   }
 }
 
-async function sendNow(text, images, files) {
+async function sendNow(text, images, files, command) {
   if (!messages.length) $('chat-log').replaceChildren();
   if (files.length) {
     const { contextSize } = await window.blazma.getChatSettings();
@@ -804,7 +810,7 @@ async function sendNow(text, images, files) {
     const total = files.reduce((n, f) => n + f.chars, 0);
     if (total > budget) showComposerNote(ar.chat.fileTooLong(Math.max(1, Math.floor((budget / total) * 100))), 8000);
   }
-  messages.push({ role: 'user', content: text, images, files });
+  messages.push({ role: 'user', content: text, images, files, ...(command ? { command } : {}) });
   renderLast();
   await generate();
 }
@@ -1161,7 +1167,8 @@ function exportMarkdown() {
       lines.push(`## ${ar.chat.you}`, '');
       if (m.files && m.files.length) lines.push(`📎 ${m.files.map((f) => f.name).join('، ')}`, '');
       if (m.images && m.images.length) lines.push(`🖼 ${ar.chat.imagesCount(m.images.length)}`, '');
-      lines.push(m.content || '', '');
+      const cmd = m.command && commandById(m.command);
+      lines.push(`${cmd ? `/${cmd.name} ` : ''}${m.content || ''}`, '');
     } else if (m.content || m.error) {
       lines.push(`## ${ar.chat.assistantName}`, '', m.content || m.error, '');
       if (m.sources && m.sources.length) lines.push(`${ar.chat.sources}:`, ...m.sources.map((src) => `- [${src.title || src.url}](${src.url})`), '');
@@ -1180,7 +1187,8 @@ function exportHtml() {
     if (m.role === 'user') {
       if (m.files && m.files.length) body.append(el('div', { class: 'files' }, `📎 ${m.files.map((f) => f.name).join('، ')}`));
       for (const src of m.images || []) body.append(el('img', { src, alt: '' }));
-      body.append(el('div', { dir: 'auto' }, ...String(m.content || '').split('\n').flatMap((l, i) => (i ? [el('br'), l] : [l]))));
+      const cmd = m.command && commandById(m.command);
+      body.append(el('div', { dir: 'auto' }, ...`${cmd ? `/${cmd.name} ` : ''}${m.content || ''}`.split('\n').flatMap((l, i) => (i ? [el('br'), l] : [l]))));
     } else body.append(renderMarkdown(m.content || m.error, mdLabels));
     box.append(body);
   }
@@ -1346,6 +1354,7 @@ export function initChat() {
   loadPersonas().then(renderPersonaPill);
   input.placeholder = ar.chat.placeholder;
   input.addEventListener('input', () => autoGrow(input));
+  attachSlashMenu(input); // before the Enter handler: Enter picks a command while the list is open
   input.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) {
       e.preventDefault();
@@ -1364,6 +1373,11 @@ export function initChat() {
       showComposerNote(ar.chat.fileStillReading);
       return;
     }
+    const slash = parseCommand(text);
+    if (slash && !slash.rest && !pendingFiles.length) {
+      showComposerNote(ar.chat.slashNeedText);
+      return;
+    }
     const images = pendingImages;
     const files = pendingFiles;
     pendingImages = [];
@@ -1371,7 +1385,8 @@ export function initChat() {
     renderPreview();
     input.value = '';
     autoGrow(input);
-    send(text, images, files);
+    if (slash) send(slash.rest, images, files, slash.command);
+    else send(text, images, files);
   });
 
   // Web search on/off, remembered in settings.

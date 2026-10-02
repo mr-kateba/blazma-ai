@@ -41,6 +41,7 @@ function cleanMessage(m, depth = 0) {
     }));
   }
   if (typeof m.imagePrompt === 'string') out.imagePrompt = m.imagePrompt.slice(0, 2000);
+  if (out.role === 'user' && typeof m.command === 'string' && /^[a-z]{1,20}$/.test(m.command)) out.command = m.command;
   if (m.error) out.error = String(m.error);
   if (m.stopped) out.stopped = true;
   if (Array.isArray(m.alts) && m.alts.length > 1 && depth < MAX_BRANCH_DEPTH) {
