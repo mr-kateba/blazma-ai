@@ -1,6 +1,6 @@
 // The programming page: VS Code (VSCodium's web server, BLAZMA_VSCODE_DIR =
 // the Linux build from tests/setup.js) shown inside the app window.
-// Checks: old studio projects become folders, the editor opens in the page,
+// Checks: the editor opens in the page on "Blazma Projects",
 // its terminal really runs commands, webviews load from the local copy (not
 // Microsoft's CDN), it hides on other pages, code from the chat opens in
 // it, the AI config for Continue points at the local API, and the server
@@ -30,11 +30,17 @@ const ps = () => execSync('ps -eo args').toString();
     check('own tar.gz reader: same files as tar, Arabic folder name', same && (fs.statSync(dest + '/node').mode & 0o111) !== 0, `${count(dest)} files`);
     fs.rmSync(dest, { recursive: true, force: true });
   }
-  // A project from the old built-in studio, to be moved to a folder.
+  // A project already in "Blazma Projects".
   fs.rmSync(HOME, { recursive: true, force: true });
   fs.rmSync(USER + '/vscode', { recursive: true, force: true });
-  fs.mkdirSync(USER + '/studio', { recursive: true });
-  fs.writeFileSync(USER + '/studio/11111111-2222-3333-4444-555555555555.json', JSON.stringify({ id: '11111111-2222-3333-4444-555555555555', name: 'لعبتي', updatedAt: Date.now(), files: { 'index.html': '<h1>مرحبا</h1>', 'js/game.js': 'console.log(1)', '../evil.txt': 'no' } }));
+  // As left by the previous version: our old theme name, renamed by VS Code in the file.
+  fs.mkdirSync(USER + '/vscode/data/data/Machine', { recursive: true });
+  fs.writeFileSync(USER + '/vscode/data/data/Machine/settings.json', JSON.stringify({ 'workbench.colorTheme': 'Dark Modern' }));
+  fs.writeFileSync(USER + '/vscode/settings-blazma.json', JSON.stringify({ 'workbench.colorTheme': 'Default Dark Modern' }));
+  const projectsDir = HOME + '/Blazma Projects';
+  fs.mkdirSync(projectsDir + '/لعبتي/js', { recursive: true });
+  fs.writeFileSync(projectsDir + '/لعبتي/index.html', '<h1>مرحبا</h1>');
+  fs.writeFileSync(projectsDir + '/لعبتي/js/game.js', 'console.log(1)');
 
   const app = await _electron.launch({ executablePath: root + '/node_modules/electron/dist/electron', args: [root, '--no-sandbox', '--lang=ar'], cwd: root, env });
   const win = await app.firstWindow(); await win.waitForLoadState('load');
@@ -73,12 +79,13 @@ const ps = () => execSync('ps -eo args').toString();
   await win.evaluate(() => window.blazma.updateSettings({ theme: 'light' }));
   let light = false;
   for (let i = 0; i < 20 && !light; i++) { await code.waitForTimeout(500); light = await code.evaluate(() => document.querySelector('.monaco-workbench').classList.contains('vs')); }
+  const afterLight = JSON.parse(fs.readFileSync(USER + '/vscode/data/data/Machine/settings.json', 'utf8'))['workbench.colorTheme'];
   await win.evaluate(() => window.blazma.updateSettings({ theme: 'dark' }));
-  check('follows the app\'s light theme', light);
+  check('follows the app\'s light theme', light, afterLight);
   check('server on 127.0.0.1 with a token file, telemetry off', /server-main\.js --host 127\.0\.0\.1 --port \d+ --connection-token-file .* --telemetry-level off/.test(ps()) && !/--connection-token [0-9a-f]/.test(ps()));
 
   const projects = (await win.evaluate(() => window.blazma.vscodeStatus())).projects;
-  check('old studio project moved to a folder', fs.readFileSync(projects + '/لعبتي/js/game.js', 'utf8') === 'console.log(1)' && !fs.existsSync(projects + '/evil.txt') && !fs.existsSync(path.dirname(projects) + '/evil.txt'), projects);
+  check('projects folder is "Blazma Projects" in Documents', projects === projectsDir || projects.endsWith('/Blazma Projects'), projects);
   await code.waitForSelector('.explorer-folders-view, .explorer-viewlet', { timeout: 60000 }).catch(() => {});
   await code.waitForTimeout(2500);
   const tree = await code.locator('.monaco-list-row').allInnerTexts().catch(() => []);

@@ -395,7 +395,7 @@ function registerIpc({ setup, monitor, getWindow }) {
     wrap(async () => {
       const b = cleanBounds(bounds);
       if (!b) throw new AppError('vscode-failed', 'bad bounds');
-      vscode.migrateStudioProjects();
+      fs.mkdirSync(vscode.projectsDir(), { recursive: true });
       refreshAiConfig();
       const folder = codeFolder;
       codeFolder = null;
