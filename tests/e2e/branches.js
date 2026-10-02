@@ -20,7 +20,8 @@ const navOf = (win, sel) => win.locator(`${sel} .branch-count`).allTextContents(
   await ready(win);
   if (await win.evaluate(() => localStorage.getItem('blazma.persona'))) { await win.evaluate(() => localStorage.removeItem('blazma.persona')); await win.reload(); await win.waitForLoadState('load'); await ready(win); }
   if ((await win.evaluate(() => window.blazma.getSetupState())).modelId !== 'qwen3.5-2b') { await win.evaluate(() => window.blazma.modelsUse('qwen3.5-2b')); await win.waitForTimeout(800); await ready(win); }
-  await win.evaluate(() => window.blazma.updateSettings({ webSearch: false, kbInChat: false }));
+  // Windows voices here (Blazma's own voice has its own test, tts.js).
+  await win.evaluate(() => window.blazma.updateSettings({ webSearch: false, kbInChat: false, ttsEngine: 'windows' }));
 
   await win.fill('#chat-input', 'اذكر اسم لون واحد فقط بكلمة واحدة.'); await win.press('#chat-input', 'Enter'); await waitIdle(win);
   const a1 = await lastAi(win);

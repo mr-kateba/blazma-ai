@@ -284,7 +284,7 @@ xvfb-run -a npm test                                                 # كل ال
 
 **Blazma AI** is a free, open-source Windows app with a fully Arabic (RTL) interface, and an optional English one (Settings › General › Interface language). It combines a chat with open models running locally on your GPU or CPU (through llama.cpp's `llama-server`), a live hardware monitor (GPU, CPU, RAM, temperatures, power draw), and the full VS Code inside the app with its AI wired to the local model.
 
-**Status:** feature-complete for 0.1.0 and tested end to end on Linux (22 Playwright test files that drive the real app with small real models). On Windows so far: install, engine download and run on an RTX 5070, and the VS Code page (download, folder, Continue install); the rest follows the [checklist](docs/CHECKLIST-WINDOWS.md). Features:
+**Status:** feature-complete for 0.1.0 and tested end to end on Linux (27 Playwright test files that drive the real app with small real models). On Windows so far: install, engine download and run on an RTX 5070, and the VS Code page (download, folder, Continue install); the rest follows the [checklist](docs/CHECKLIST-WINDOWS.md). Features:
 - local chat with streaming, reasoning, safe Markdown, images in, files (PDF, Word, text), web search, personas, saved chats with versions (regenerate / edit keep earlier replies), export;
 - "My library": answers from your own folders of documents (Qwen3-Embedding 0.6B, semantic search, file names shown as sources);
 - voice input (whisper.cpp), read-aloud with Windows voices, image generation (stable-diffusion.cpp + Z-Image Turbo);
