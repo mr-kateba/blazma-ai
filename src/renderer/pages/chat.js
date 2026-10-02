@@ -10,7 +10,7 @@ import { store } from '../lib/store.js';
 import { speak, stopSpeaking } from '../lib/speech.js';
 import { startRecording } from '../lib/recorder.js';
 import { loadPersonas, personaById, openPersonaMenu } from './personas.js';
-import { confirmDialog } from '../lib/dialog.js';
+import { confirmDialog, promptDialog } from '../lib/dialog.js';
 import { attachSlashMenu, parseCommand, withCommand, commandById } from '../lib/slash.js';
 
 // Today's date and time in Arabic (Gregorian and Umm al-Qura Hijri), with
@@ -1288,38 +1288,132 @@ function startRename(item, chat) {
   input.select();
 }
 
-function renderList(items, query) {
+// The folder shown in the list ('' = all chats), kept between starts.
+let folderFilter = (() => {
+  try {
+    return localStorage.getItem('blazma.chatFolder') || '';
+  } catch {
+    return '';
+  }
+})();
+
+function setFolderFilter(f) {
+  folderFilter = f;
+  try {
+    localStorage.setItem('blazma.chatFolder', f);
+  } catch {
+    /* not kept */
+  }
+  refreshList();
+}
+
+// "All" plus one chip per folder that has chats.
+function renderFolders(items) {
+  const bar = $('chat-folders');
+  const folders = [...new Set(items.map((c) => c.folder).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ar'));
+  if (folderFilter && !folders.includes(folderFilter)) folderFilter = '';
+  bar.hidden = !folders.length;
+  const chip = (label, value) => {
+    const b = el('button', { type: 'button', class: `folder-chip${folderFilter === value ? ' active' : ''}`, 'aria-pressed': String(folderFilter === value) }, label);
+    b.addEventListener('click', () => setFolderFilter(value));
+    return b;
+  };
+  bar.setAttribute('aria-label', ar.chat.foldersLabel);
+  bar.replaceChildren(chip(ar.chat.allChats, ''), ...folders.map((f) => chip(`📁 ${f}`, f)));
+  return folders;
+}
+
+// "Move to folder": the folders there are, no folder, or a new one.
+function openFolderMenu(anchor, chat, folders) {
+  document.querySelectorAll('.folder-menu').forEach((m) => m.remove());
+  const move = async (folder) => {
+    menu.remove();
+    await window.blazma.chatsSetMeta(chat.id, { folder });
+    refreshList();
+  };
+  const row = (label, folder, current) => {
+    const b = el('button', { type: 'button', class: `model-menu-item${current ? ' current' : ''}`, role: 'menuitem' }, label);
+    b.addEventListener('click', () => move(folder));
+    return b;
+  };
+  const add = el('button', { type: 'button', class: 'model-menu-item more', role: 'menuitem' }, ar.chat.newFolder);
+  add.addEventListener('click', async () => {
+    menu.remove();
+    const name = await promptDialog({ title: ar.chat.newFolderTitle, placeholder: ar.chat.newFolderPh, maxLength: 40, ok: ar.chat.moveToFolder, cancel: ar.chat.cancel });
+    if (name) {
+      await window.blazma.chatsSetMeta(chat.id, { folder: name });
+      refreshList();
+    }
+  });
+  const menu = el(
+    'div',
+    { class: 'model-menu folder-menu', role: 'menu' },
+    el('div', { class: 'model-menu-head' }, ar.chat.moveToFolder),
+    row(ar.chat.noFolder, '', !chat.folder),
+    ...folders.map((f) => row(`📁 ${f}`, f, chat.folder === f)),
+    add,
+  );
+  const r = anchor.getBoundingClientRect();
+  menu.style.top = `${r.bottom + 4}px`;
+  menu.style.right = `${Math.max(8, window.innerWidth - r.right)}px`;
+  document.body.append(menu);
+  const off = (e) => {
+    if (!menu.contains(e.target)) {
+      menu.remove();
+      document.removeEventListener('mousedown', off);
+    }
+  };
+  setTimeout(() => document.addEventListener('mousedown', off), 0);
+}
+
+function renderList(allItems, query) {
   const box = $('chat-items');
+  const folders = renderFolders(allItems);
+  const items = !query && folderFilter ? allItems.filter((c) => c.folder === folderFilter) : allItems;
   if (!items.length) {
     box.replaceChildren(el('div', { class: 'chat-list-empty' }, query ? ar.chat.noResults : ar.chat.noChats));
     return;
   }
-  // Group by date when not searching: today, yesterday, this week, older.
+  // Pinned chats first, then by date when not searching: today, yesterday, this week, older.
   const dayStart = new Date().setHours(0, 0, 0, 0);
   const groupOf = (t) => (t >= dayStart ? 'today' : t >= dayStart - 864e5 ? 'yesterday' : t >= dayStart - 7 * 864e5 ? 'week' : t >= dayStart - 30 * 864e5 ? 'month' : 'older');
   let lastGroup = null;
   box.replaceChildren(
     ...items.flatMap((chat) => {
-      const group = !query && chat.updatedAt ? groupOf(chat.updatedAt) : null;
-      const header = group && group !== lastGroup ? el('div', { class: 'chat-group' }, ar.chat.groups[group]) : null;
+      const group = query ? null : chat.pinned ? 'pinned' : chat.updatedAt ? groupOf(chat.updatedAt) : null;
+      const header = group && group !== lastGroup ? el('div', { class: 'chat-group' }, group === 'pinned' ? `📌 ${ar.chat.pinnedGroup}` : ar.chat.groups[group]) : null;
       lastGroup = group || lastGroup;
       const item = el(
         'div',
-        { class: 'chat-item', role: 'button', tabindex: '0', 'data-id': chat.id, 'aria-current': String(chat.id === currentChatId) },
+        { class: `chat-item${chat.pinned ? ' pinned' : ''}`, role: 'button', tabindex: '0', 'data-id': chat.id, 'aria-current': String(chat.id === currentChatId) },
         el('span', { class: 'chat-item-title', dir: 'auto' }, chat.title || ar.chat.untitled),
         chat.snippet ? el('span', { class: 'chat-item-snippet', dir: 'auto' }, chat.snippet) : null,
+        chat.folder && !folderFilter ? el('span', { class: 'chat-item-folder' }, `📁 ${chat.folder}`) : null,
       );
+      const pinLabel = chat.pinned ? ar.chat.unpin : ar.chat.pin;
       const actions = el(
         'span',
         { class: 'chat-item-actions' },
+        el('button', { type: 'button', title: pinLabel, 'aria-label': pinLabel, 'aria-pressed': String(Boolean(chat.pinned)) }, '📌'),
+        el('button', { type: 'button', title: ar.chat.moveToFolder, 'aria-label': ar.chat.moveToFolder }, '📁'),
         el('button', { type: 'button', title: ar.chat.rename, 'aria-label': ar.chat.rename }, '✎'),
         el('button', { type: 'button', title: ar.chat.remove, 'aria-label': ar.chat.remove }, '🗑'),
       );
-      actions.children[0].addEventListener('click', (e) => {
+      const [pinBtn, folderBtn, renameBtn, deleteBtn] = actions.children;
+      pinBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await window.blazma.chatsSetMeta(chat.id, { pinned: !chat.pinned });
+        refreshList();
+      });
+      folderBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        openFolderMenu(folderBtn, chat, folders);
+      });
+      renameBtn.addEventListener('click', (e) => {
         e.stopPropagation();
         startRename(item, chat);
       });
-      actions.children[1].addEventListener('click', async (e) => {
+      deleteBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
         if (!(await confirmDialog({ text: ar.chat.confirmDelete(chat.title || ar.chat.untitled), danger: true }))) return;
         await window.blazma.chatsDelete(chat.id);
@@ -1328,7 +1422,7 @@ function renderList(items, query) {
       });
       item.append(actions);
       item.addEventListener('click', () => loadChat(chat.id));
-      item.addEventListener('keydown', (e) => e.key === 'Enter' && loadChat(chat.id));
+      item.addEventListener('keydown', (e) => e.target === item && e.key === 'Enter' && loadChat(chat.id));
       return header ? [header, item] : [item];
     }),
   );
@@ -1541,6 +1635,7 @@ export function initChat() {
   });
   $('btn-new-chat').addEventListener('click', newChat);
   let searchTimer = null;
+  window.addEventListener('blazma:chats-changed', () => refreshList());
   $('chat-search').addEventListener('input', () => {
     clearTimeout(searchTimer);
     searchTimer = setTimeout(refreshList, 250);

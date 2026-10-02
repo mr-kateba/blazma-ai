@@ -11,7 +11,7 @@ const settings = require('./settings');
 const models = require('./models');
 const { runBenchmark } = require('./benchmark');
 const { exportReport } = require('./report');
-const { toAppError } = require('./errors');
+const { toAppError, AppError } = require('./errors');
 const web = require('./web');
 const chats = require('./chats');
 const vscode = require('./vscode');
@@ -364,6 +364,38 @@ function registerIpc({ setup, monitor, getWindow }) {
   handle('chats:save', (chat) => chats.save(chat || {}));
   handle('chats:rename', (id, title) => chats.rename(String(id), String(title || '')));
   handle('chats:delete', (id) => chats.remove(String(id)));
+  handle('chats:setMeta', (id, meta) => chats.setMeta(String(id), { pinned: meta && meta.pinned !== undefined ? Boolean(meta.pinned) : undefined, folder: meta && meta.folder !== undefined ? String(meta.folder) : undefined }));
+  // Backup of every chat in one file, and restoring from such a file. The
+  // user picks the file each time.
+  handle('chats:backup', () =>
+    wrap(async () => {
+      const stamp = new Date().toISOString().slice(0, 10);
+      const { canceled, filePath } = await dialog.showSaveDialog(getWindow(), { title: 'نسخة احتياطية للمحادثات', defaultPath: `blazma-chats-${stamp}.json`, filters: [{ name: 'JSON', extensions: ['json'] }] });
+      if (canceled || !filePath) return null;
+      const data = chats.exportAll();
+      fs.writeFileSync(filePath, JSON.stringify(data), 'utf8');
+      return { count: data.chats.length };
+    }),
+  );
+  handle('chats:restore', () =>
+    wrap(async () => {
+      const { canceled, filePaths } = await dialog.showOpenDialog(getWindow(), { title: 'استعادة المحادثات من نسخة احتياطية', properties: ['openFile'], filters: [{ name: 'JSON', extensions: ['json'] }] });
+      if (canceled || !filePaths[0]) return null;
+      const st = fs.statSync(filePaths[0]);
+      if (st.size > 1024 * 1024 * 1024) throw new AppError('backup-invalid', 'file over 1 GB');
+      let data;
+      try {
+        data = JSON.parse(fs.readFileSync(filePaths[0], 'utf8'));
+      } catch (err) {
+        throw new AppError('backup-invalid', err.message);
+      }
+      try {
+        return chats.importAll(data);
+      } catch (err) {
+        throw new AppError('backup-invalid', err.message);
+      }
+    }),
+  );
   handle('chats:search', (q) => chats.search(String(q || '').slice(0, 200)));
 
   handle('device:summary', () => monitor.modelSummary());

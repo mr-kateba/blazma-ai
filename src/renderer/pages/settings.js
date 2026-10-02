@@ -111,6 +111,22 @@ function chatSection() {
     (v) => save({ temperature: v === 'auto' ? null : Number(v) }),
   );
 
+  const backupBtn = el('button', { type: 'button', class: 'btn small' }, S.chat.backupBtn);
+  backupBtn.addEventListener('click', async () => {
+    const res = await window.blazma.chatsBackup();
+    if (!res.ok) return toast(errorText(res.error), 'error');
+    if (res.result) toast(S.chat.backupDone(res.result.count));
+  });
+  const restoreBtn = el('button', { type: 'button', class: 'btn ghost small' }, S.chat.restoreBtn);
+  restoreBtn.addEventListener('click', async () => {
+    const res = await window.blazma.chatsRestore();
+    if (!res.ok) return toast(errorText(res.error), 'error');
+    if (res.result) {
+      toast(S.chat.restoreDone(res.result));
+      window.dispatchEvent(new CustomEvent('blazma:chats-changed'));
+    }
+  });
+
   return section(
     'chat',
     S.chat.title,
@@ -119,6 +135,7 @@ function chatSection() {
     item(S.chat.device, S.chat.deviceDesc, toggle(values.shareDeviceInfo, (on) => save({ shareDeviceInfo: on }))),
     item(S.chat.temp, S.chat.tempDesc, temp),
     item(S.chat.prompt, S.chat.promptDesc, null, el('div', { class: 'set-stack' }, prompt, el('div', { class: 'row' }, resetPrompt))),
+    item(S.chat.backup, S.chat.backupDesc, null, el('div', { class: 'row' }, backupBtn, restoreBtn)),
   );
 }
 

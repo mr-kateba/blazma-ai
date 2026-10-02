@@ -793,6 +793,15 @@ details.tech pre {
 .chat-item-actions button:hover { color: var(--text); }
 .chat-item input { width: 100%; padding: 4px 6px; border-radius: 6px; border: 1px solid var(--accent); background: var(--surface-2); color: var(--text); font: inherit; }
 .chat-list-empty { color: var(--faint); font-size: 13px; padding: 8px; }
+/* Folders above the chat list, and the folder tag on a chat. */
+.chat-folders { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 0 6px; }
+.chat-folders[hidden] { display: none; }
+.folder-chip { padding: 2px 10px; border: 1px solid var(--border); border-radius: 999px; background: transparent; color: var(--muted); font: inherit; font-size: 12px; cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.folder-chip:hover { border-color: var(--hover-border); color: var(--text); }
+.folder-chip.active { border-color: rgba(255, 109, 0, 0.5); background: var(--accent-soft); color: var(--accent-text); }
+.chat-item-folder { display: block; margin-top: 2px; color: var(--faint); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dlg-input { width: 100%; margin: 0 0 16px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); color: var(--text); font: inherit; }
+.dlg-input:focus { outline: none; border-color: var(--accent); }
 
 /* edit a sent message */
 .edit-box { display: flex; flex-direction: column; gap: 6px; min-width: 320px; }
