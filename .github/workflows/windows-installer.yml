@@ -5,6 +5,7 @@
 #   docs/releases/v<version>.md), which stays private until someone publishes it.
 #   Running it again updates that draft (files replaced, commit and notes
 #   updated); a release that is already published is never changed.
+# - With "publish" ticked too, the draft is published after it is updated.
 name: Windows installer
 
 on:
@@ -12,6 +13,10 @@ on:
     inputs:
       release:
         description: Create a draft release v<version> at this commit with the installer
+        type: boolean
+        default: false
+      publish:
+        description: Then publish that release (makes it public and the latest)
         type: boolean
         default: false
   push:
@@ -51,6 +56,14 @@ jobs:
             echo "::error::v$VERSION is already published; raise the version in package.json first."
             exit 1
           fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Publish release
+        if: ${{ inputs.release && inputs.publish }}
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          gh release edit "v$VERSION" --draft=false --latest
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - uses: actions/upload-artifact@v7

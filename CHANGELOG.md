@@ -2,7 +2,7 @@
 
 كل التغييرات المهمة في Blazma AI. الصيغة مبنية على [Keep a Changelog](https://keepachangelog.com/)، والإصدارات تتبع [Semantic Versioning](https://semver.org/).
 
-## [0.1.0] — لم يُنشر بعد
+## [0.1.0] — 2026-10-02
 
 أول إصدار.
 
