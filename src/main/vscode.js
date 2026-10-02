@@ -26,6 +26,7 @@ const { run } = require('./exec');
 const { pickPort, killTree } = require('./server');
 const { extractTarGz } = require('./untar');
 const { AppError } = require('./errors');
+const { t: tr } = require('./i18n');
 
 const RELEASES_API = 'https://api.github.com/repos/VSCodium/vscodium/releases?per_page=5';
 const ASSET_RE = process.platform === 'win32' ? /^vscodium-reh-web-win32-x64-([\d.]+)\.tar\.gz$/ : /^vscodium-reh-web-linux-x64-([\d.]+)\.tar\.gz$/;
@@ -408,7 +409,7 @@ function reloadView() {
 function saveSnippet(code, lang) {
   const ext = { html: 'html', htm: 'html', css: 'css', js: 'js', javascript: 'js', ts: 'ts', typescript: 'ts', python: 'py', py: 'py', json: 'json', md: 'md' }[String(lang || '').toLowerCase()] || 'txt';
   const stamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 14);
-  const dir = path.join(projectsDir(), 'من المحادثة', stamp);
+  const dir = path.join(projectsDir(), tr('fromChat'), stamp);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, ext === 'html' ? 'index.html' : `main.${ext}`), String(code || ''));
   return dir;
@@ -540,7 +541,7 @@ function syncContinueConfig({ port, apiKey, modelName }) {
     let text = fs.readFileSync(file, 'utf8');
     const addRule = !meta.arabic && !/^rules:/m.test(text);
     if (meta.port === port && meta.apiKey === apiKey && !addRule) return;
-    if (addRule) text = `${text.replace(/\s*$/, '\n')}${ARABIC_RULE.join('\n')}\n`;
+    if (addRule) text = `${text.replace(/\s*$/, '\n')}${ARABIC_RULE_LINES().join('\n')}\n`;
     text = text.split(`http://127.0.0.1:${meta.port}/v1`).join(`http://127.0.0.1:${port}/v1`);
     if (meta.apiKey) text = text.split(meta.apiKey).join(apiKey);
     fs.writeFileSync(file, text, { mode: 0o600 });
@@ -549,7 +550,8 @@ function syncContinueConfig({ port, apiKey, modelName }) {
 }
 
 // The model answers in Arabic (code and names stay as they are).
-const ARABIC_RULE = ['rules:', `  - ${JSON.stringify('أجب دائماً باللغة العربية الفصحى المبسطة. اترك الكود وأسماء الملفات والأوامر كما هي بالإنجليزية.')}`];
+// (In the interface language: Arabic answers, or the user's own language.)
+const ARABIC_RULE_LINES = () => ['rules:', `  - ${JSON.stringify(tr('continueRule'))}`];
 
 function writeContinueConfig({ port, apiKey, modelName }) {
   fs.mkdirSync(continueDir(), { recursive: true });
@@ -568,7 +570,7 @@ function writeContinueConfig({ port, apiKey, modelName }) {
     '      - chat',
     '      - edit',
     '      - apply',
-    ...ARABIC_RULE,
+    ...ARABIC_RULE_LINES(),
     '',
   ].join('\n');
   fs.writeFileSync(path.join(continueDir(), 'config.yaml'), yaml, { mode: 0o600 });
@@ -590,7 +592,7 @@ function syncAutocomplete(server, modelName) {
     const q = (s) => JSON.stringify(String(s));
     const block = [
       AC_START,
-      `  - name: ${q('Blazma: إكمال الكود (Qwen2.5 Coder 1.5B)')}`,
+      `  - name: ${q(tr('autocompleteName'))}`,
       '    provider: llama.cpp',
       `    model: ${modelName}`,
       `    apiBase: ${q(`http://127.0.0.1:${server.port}/`)}`,

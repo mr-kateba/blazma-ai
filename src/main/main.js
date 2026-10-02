@@ -2,6 +2,7 @@
 
 const path = require('node:path');
 const settings = require('./settings');
+const { t: tr } = require('./i18n');
 const { app, BrowserWindow, Menu, Notification, nativeTheme, session } = require('electron');
 const { registerScheme, handleAppProtocol, setServerPort, APP_ORIGIN } = require('./protocol');
 const vscode = require('./vscode');
@@ -22,9 +23,9 @@ const monitor = new Monitor(setup);
 // System notifications are only for when the window is not in view; the
 // page shows its own banner otherwise.
 const NOTIFY_TEXT = {
-  'gpu-temp': (a) => `حرارة كرت الشاشة ${Math.round(a.value)} درجة مئوية`,
-  'thermal-slowdown': () => 'كرت الشاشة خفّض سرعته بسبب الحرارة',
-  'hw-slowdown': () => 'كرت الشاشة خفّض سرعته',
+  'gpu-temp': (a) => tr('gpuTemp')(a.value),
+  'thermal-slowdown': () => tr('thermalSlowdown'),
+  'hw-slowdown': () => tr('hwSlowdown'),
 };
 
 function onAlerts(alerts) {

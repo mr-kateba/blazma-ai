@@ -1,7 +1,55 @@
-// All user-facing strings produced from JavaScript live here, in Arabic.
-// Static labels live directly in index.html.
+// Every user-facing string of the interface, in Arabic (the default
+// language). en.js has the same keys in English; index.js picks one.
 
 export const ar = Object.freeze({
+  // Fixed labels of index.html (data-i18n, data-i18n-label/-title/-ph).
+  html: {
+    brandSub: 'ذكاء اصطناعي يعمل على جهازك',
+    pagesNav: 'الصفحات',
+    navChat: 'المحادثة',
+    navDevice: 'جهازي',
+    navModels: 'الموديلات',
+    navSettings: 'الإعدادات',
+    version: 'الإصدار',
+    chatsList: 'المحادثات',
+    newChat: 'محادثة جديدة',
+    searchChats: 'بحث في المحادثات…',
+    chatTitle: 'المحادثة',
+    switchModel: 'تبديل الموديل',
+    persona: 'الشخصية',
+    overlay: 'شاشة المراقبة المصغرة',
+    export: 'تصدير',
+    stopServer: 'إيقاف المحرك',
+    yourMessage: 'رسالتك',
+    send: 'إرسال',
+    stop: 'إيقاف',
+    deviceTitle: 'جهازي',
+    deviceDesc: 'مراقبة حيّة لكرت الشاشة والمعالج والذاكرة. كل رقم هنا قراءة حقيقية من الجهاز.',
+    last5min: 'آخر 5 دقائق',
+    modelsTitle: 'الموديلات',
+    modelsDesc: 'نزّل الموديلات وبدّل بينها بدون إعادة تشغيل البرنامج، أو أضف موديلاً من Hugging Face.',
+    settingsTitle: 'الإعدادات',
+    settingsDesc: 'اختر قسماً من القائمة. كل تغيير يُحفظ تلقائياً.',
+  },
+  // Small pieces used in many places.
+  common: { ok: 'موافق', cancel: 'إلغاء', listSep: '، ', help: '؟' },
+  // Sizes and durations (index.js formatBytes / formatDuration).
+  units: {
+    mb: (n) => `${n} ميجابايت`,
+    gb: (n) => `${n} جيجابايت`,
+    sec: (n) => `${n} ثانية`,
+    min: (n) => `${n} دقيقة`,
+    hourMin: (h, m) => `${h} ساعة و${m} دقيقة`,
+    ofSize: (a, b) => `${a} من ${b}`,
+    mbps: (n) => `${n} ميجابايت/ث`,
+    left: (d) => `متبقٍّ ${d}`,
+    gbShort: (n) => `${n} جيجابايت`,
+    watts: (n) => `${n} واط`,
+    mhz: (n) => `${n} ميجاهرتز`,
+    ghz: (n) => `${n} جيجاهرتز`,
+    tps: (n) => `${n} توكن/ث`,
+    secShort: (n) => `${n} ث`,
+  },
   versionUnknown: 'غير معروف',
 
   phase: {
@@ -697,6 +745,7 @@ export const ar = Object.freeze({
       useDesc: 'يمكن أيضاً تشغيلها وإيقافها من زر الكتاب بجانب مربع الكتابة.',
     },
     api: {
+      hello: 'مرحبا',
       title: 'للمبرمجين (API)',
       desc: 'تخلّي برامجك الأخرى على هذا الجهاز تستخدم الموديل بصيغة OpenAI. لا يصل إليها أي جهاز آخر.',
       enable: 'السماح للبرامج الأخرى',
@@ -715,6 +764,8 @@ export const ar = Object.freeze({
     },
     general: {
       title: 'عام',
+      language: 'لغة الواجهة (Language)',
+      languageDesc: 'العربية أو الإنجليزية. تُعاد تهيئة الصفحة بعد التغيير.',
       theme: 'المظهر',
       themeDesc: 'داكن أو فاتح أو حسب ويندوز.',
       tour: 'الجولة التعريفية',
@@ -727,7 +778,7 @@ export const ar = Object.freeze({
       loginDesc: 'يفتح البرنامج تلقائياً عند تسجيل الدخول.',
       loginUnsupported: 'متاح على ويندوز فقط.',
       data: 'مجلد بيانات البرنامج',
-      dataDesc: 'فيه المحادثات ومشاريع الاستوديو والإعدادات والمحرك.',
+      dataDesc: 'فيه المحادثات والإعدادات والمحرك وأدوات البرنامج المنزّلة.',
     },
     updates: {
       title: 'التحديثات',
@@ -761,7 +812,7 @@ export const ar = Object.freeze({
       privacy: 'الخصوصية',
       privacyDesc: 'لا تتبع ولا تحليلات. المحادثات والمشاريع تبقى على جهازك، والموديل يعمل بدون إنترنت.',
       credits: 'شكر',
-      creditsDesc: 'llama.cpp وwhisper.cpp وstable-diffusion.cpp وVSCodium وelectron-updater (MIT)، إضافة Continue (Apache-2.0)، موديلات Qwen3.5 وGemma 4 وQwen3-Embedding وZ-Image Turbo (Apache-2.0)، pdf.js (Apache-2.0)، mammoth (BSD-2)، خط IBM Plex Sans Arabic (OFL).',
+      creditsDesc: 'llama.cpp وwhisper.cpp وstable-diffusion.cpp وVSCodium وPiper وelectron-updater (MIT)، إضافة Continue (Apache-2.0)، موديلات Qwen3.5 وGemma 4 وQwen3-Embedding وQwen2.5-Coder وZ-Image Turbo (Apache-2.0)، pdf.js (Apache-2.0)، mammoth (BSD-2)، خط IBM Plex Sans Arabic (OFL).',
     },
   },
 
@@ -890,22 +941,3 @@ export const ar = Object.freeze({
     },
   },
 });
-
-export function errorText(code) {
-  return ar.errors[code] || ar.errors.unknown;
-}
-
-export function formatBytes(bytes) {
-  if (!Number.isFinite(bytes) || bytes <= 0) return '0 ميجابايت';
-  const gb = bytes / 1024 ** 3;
-  if (gb >= 1) return `${gb.toFixed(2)} جيجابايت`;
-  return `${Math.round(bytes / 1024 ** 2)} ميجابايت`;
-}
-
-export function formatDuration(seconds) {
-  if (!Number.isFinite(seconds) || seconds < 0) return '';
-  if (seconds < 60) return `${Math.ceil(seconds)} ثانية`;
-  const min = Math.ceil(seconds / 60);
-  if (min < 60) return `${min} دقيقة`;
-  return `${Math.floor(min / 60)} ساعة و${min % 60} دقيقة`;
-}

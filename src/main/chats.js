@@ -161,7 +161,7 @@ function importAll(data) {
     const messages = c.messages.slice(0, 5000).map((m) => cleanMessage(m || {}));
     const out = {
       id: c.id,
-      title: String(c.title || '').replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE) || 'محادثة',
+      title: String(c.title || '').replace(/\s+/g, ' ').trim().slice(0, MAX_TITLE) || require('./i18n').t('untitled'),
       createdAt: Number(c.createdAt) || updatedAt,
       updatedAt,
       personaId: typeof c.personaId === 'string' && /^[a-z0-9-]{1,64}$/.test(c.personaId) ? c.personaId : undefined,

@@ -3,13 +3,19 @@
 const paths = require('./paths');
 const { readJson, writeJson } = require('./jsonfile');
 
+// The default instructions for the model, in the interface language.
+const DEFAULT_PROMPTS = Object.freeze({
+  ar: 'أنت مساعد ذكي ومفيد. أجب باللغة العربية الفصحى بوضوح ودقة، إلا إذا طلب المستخدم لغة أخرى.',
+  en: 'You are a helpful, knowledgeable assistant. Answer clearly and accurately, in the language the user writes in.',
+});
+
 const DEFAULTS = Object.freeze({
   port: 18080,
   contextSize: 8192,
   gpuLayers: -1, // -1 = automatic: llama.cpp --fit keeps what fits on the card, the rest in RAM
-  kvCache: 'q8_0',
-  idleUnloadMin: 0,
-  speculative: 'off', // 'off' | 'ngram' (no extra model) | 'draft' (a small helper model when there is one) // minutes without use before the model leaves memory (0 = never) // conversation memory precision: f16 (full), q8_0 (half the memory), q4_0
+  kvCache: 'q8_0', // conversation memory precision: f16 (full), q8_0 (half the memory), q4_0
+  idleUnloadMin: 0, // minutes without use before the model leaves memory (0 = never)
+  speculative: 'off', // 'off' | 'ngram' (no extra model) | 'draft' (a small helper model when there is one)
   modelsDir: '',
   activeModelId: '',
   temperature: null, // null = use the model's recommended value
@@ -31,8 +37,8 @@ const DEFAULTS = Object.freeze({
   lhmPort: 8085,
   gpuTempWarn: null, // null = derived from the card's own limits (monitor.js)
   gpuTempDanger: null,
-  systemPrompt:
-    'أنت مساعد ذكي ومفيد. أجب باللغة العربية الفصحى بوضوح ودقة، إلا إذا طلب المستخدم لغة أخرى.',
+  language: 'ar', // interface language: 'ar' | 'en'
+  systemPrompt: DEFAULT_PROMPTS.ar,
 });
 
 const isInt = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
@@ -66,6 +72,7 @@ const VALIDATORS = {
   lhmPort: (v) => isInt(v, 1, 65535),
   gpuTempWarn: (v) => v === null || isInt(v, 30, 110),
   gpuTempDanger: (v) => v === null || isInt(v, 30, 110),
+  language: (v) => ['ar', 'en'].includes(v),
 };
 
 let current = null;
@@ -88,6 +95,9 @@ function update(patch) {
   for (const [key, value] of Object.entries(patch || {})) {
     if (VALIDATORS[key] && VALIDATORS[key](value)) next[key] = value;
   }
+  // A new language brings its default instructions, unless they were edited.
+  const before = get();
+  if (next.language !== before.language && before.systemPrompt === DEFAULT_PROMPTS[before.language]) next.systemPrompt = DEFAULT_PROMPTS[next.language];
   current = next;
   writeJson(paths.settingsFile(), current);
   return current;
@@ -97,4 +107,6 @@ function modelsDir() {
   return get().modelsDir || paths.defaultModelsDir();
 }
 
-module.exports = { DEFAULTS, get, update, modelsDir };
+const defaultPrompt = () => DEFAULT_PROMPTS[get().language] || DEFAULT_PROMPTS.ar;
+
+module.exports = { DEFAULTS, get, update, modelsDir, defaultPrompt };

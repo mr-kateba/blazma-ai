@@ -4,12 +4,13 @@
 // These dialogs also match the app's look and return focus where it was.
 
 import { el } from './dom.js';
+import { ui } from '../i18n/index.js';
 
 let open = null;
 
 // field: null for a yes/no question, or { value, placeholder, maxLength } for
 // a short text. Resolves with true/false, or with the text / null.
-function showDialog({ title, text = '', ok = 'موافق', cancel = 'إلغاء', danger = false, field = null }) {
+function showDialog({ title, text = '', ok = ui.common.ok, cancel = ui.common.cancel, danger = false, field = null }) {
   if (open) open.finish(null);
   const back = document.activeElement;
   return new Promise((resolve) => {

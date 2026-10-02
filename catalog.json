@@ -9,6 +9,7 @@
       "minVramMB": 10240,
       "license": "Apache-2.0",
       "note": "الموديل المقترح لكروت 12 جيجابايت. الأفضل في سلامة اللغة العربية في اختبارنا.",
+      "noteEn": "Recommended for 12 GB cards. The best Arabic in our test.",
       "thinking": true,
       "sampling": {
         "temperature": 1.0,
@@ -31,6 +32,7 @@
       "minVramMB": 7680,
       "license": "Apache-2.0",
       "note": "مقترح لكروت 8 جيجابايت. أخف وأسرع، لكن عربيته أضعف قليلاً من Gemma في اختبارنا.",
+      "noteEn": "Recommended for 8 GB cards. Lighter and faster, but its Arabic was a little weaker than Gemma in our test.",
       "thinking": true,
       "sampling": {
         "temperature": 1.0,
@@ -56,6 +58,7 @@
       "minVramMB": 3584,
       "license": "Apache-2.0",
       "note": "موديل أصغر لكروت الشاشة ذات الذاكرة القليلة.",
+      "noteEn": "A smaller model for graphics cards with little memory.",
       "thinking": true,
       "sampling": {
         "temperature": 1.0,
@@ -82,6 +85,7 @@
       "cpu": true,
       "license": "Apache-2.0",
       "note": "موديل صغير يعمل على المعالج للأجهزة بدون كرت NVIDIA. الردود أبطأ وأبسط.",
+      "noteEn": "A small model that runs on the processor, for computers without an NVIDIA card. Replies are slower and simpler.",
       "thinking": false,
       "sampling": {
         "temperature": 0.7,
@@ -110,6 +114,7 @@
       "origin": "cn",
       "tags": [],
       "note": "أصغر موديل في القائمة، يعمل على أي جهاز. عربيته ضعيفة في اختبارنا، فهو للأجهزة الضعيفة جداً أو للتجربة.",
+      "noteEn": "The smallest model in the list; runs on any computer. Its Arabic was weak in our test, so it is for very weak computers or for trying things out.",
       "thinking": false,
       "sampling": {
         "temperature": 0.7,
@@ -134,6 +139,7 @@
         "arabic"
       ],
       "note": "صغير وسريع على المعالج، وأجاب بعربية سليمة في اختبارنا. يفهم الصور.",
+      "noteEn": "Small and fast on the processor, and answered in correct Arabic in our test. Understands pictures.",
       "thinking": true,
       "sampling": {
         "temperature": 1.0,
@@ -150,11 +156,13 @@
       "minVramMB": 5632,
       "license": "Apache-2.0",
       "maker": "سدايا",
+      "makerEn": "SDAIA",
       "origin": "sa",
       "tags": [
         "arabic"
       ],
       "note": "من المركز الوطني للذكاء الاصطناعي في سدايا، مدرَّب خصيصاً للعربية (نسخة تجريبية). أجاب بعربية سليمة في اختبارنا. يتذكر من المحادثة 4096 رمزاً فقط.",
+      "noteEn": "From SDAIA's National Center for AI, trained especially for Arabic (preview). Answered in correct Arabic in our test. Remembers only 4096 tokens of the chat.",
       "thinking": false,
       "sampling": {
         "temperature": 0.6,
@@ -177,6 +185,7 @@
         "arabic"
       ],
       "note": "من معهد الابتكار التكنولوجي في أبوظبي، يدعم 18 لغة منها العربية. أجاب بعربية سليمة في اختبارنا.",
+      "noteEn": "From the Technology Innovation Institute in Abu Dhabi; supports 18 languages including Arabic. Answered in correct Arabic in our test.",
       "thinking": false,
       "sampling": {},
       "vision": false
@@ -194,6 +203,7 @@
         "arabic"
       ],
       "note": "أكبر وأدق من E2B، لكروت 8 جيجابايت. يفهم الصور، ومدرَّب على أكثر من 140 لغة.",
+      "noteEn": "Larger and more accurate than E2B, for 8 GB cards. Understands pictures and was trained on over 140 languages.",
       "thinking": true,
       "sampling": {
         "temperature": 1.0,
@@ -215,6 +225,7 @@
         "code"
       ],
       "note": "من Xiaomi، مبني على Qwen3.5 9B ومدرَّب أكثر على البرمجة واستخدام الأدوات. يفهم الصور.",
+      "noteEn": "From Xiaomi, built on Qwen3.5 9B and trained further on coding and tool use. Understands pictures.",
       "thinking": true,
       "sampling": {},
       "vision": true
@@ -232,6 +243,7 @@
         "code"
       ],
       "note": "موديل OpenAI المفتوح، يفكّر قبل الإجابة وقوي في البرمجة. من نوع MoE (3.6 مليار نشطة من 21) فيبقى سريعاً حتى مع الاستعانة بذاكرة الجهاز.",
+      "noteEn": "OpenAI's open model; thinks before answering and is strong at coding. A MoE model (3.6B active of 21B), so it stays fast even when it uses computer memory.",
       "thinking": true,
       "sampling": {},
       "vision": false
@@ -247,6 +259,7 @@
       "origin": "cn",
       "tags": [],
       "note": "من Baidu، يفكّر قبل الإجابة. من نوع MoE (3 مليارات نشطة من 21) فيبقى سريعاً حتى مع الاستعانة بذاكرة الجهاز.",
+      "noteEn": "From Baidu; thinks before answering. A MoE model (3B active of 21B), so it stays fast even when it uses computer memory.",
       "thinking": true,
       "sampling": {},
       "vision": false
@@ -264,6 +277,7 @@
         "arabic"
       ],
       "note": "من معهد قطر لبحوث الحوسبة، مدرَّب على العربية والإنجليزية فوق Gemma 3. لكروت 24 جيجابايت.",
+      "noteEn": "From the Qatar Computing Research Institute, trained on Arabic and English on top of Gemma 3. For 24 GB cards.",
       "thinking": false,
       "sampling": {
         "temperature": 0.7
@@ -283,6 +297,7 @@
         "code"
       ],
       "note": "أحدث موديل من Qwen، قوي في البرمجة والتفكير ويفهم الصور. لكروت 24 جيجابايت.",
+      "noteEn": "The newest Qwen model, strong at coding and reasoning, and understands pictures. For 24 GB cards.",
       "thinking": true,
       "sampling": {
         "temperature": 1.0,
@@ -306,6 +321,7 @@
         "code"
       ],
       "note": "من Zhipu، قوي في البرمجة والمهام متعددة الخطوات. من نوع MoE (3 مليارات نشطة من 30) فيبقى سريعاً حتى مع الاستعانة بذاكرة الجهاز.",
+      "noteEn": "From Zhipu, strong at coding and multi-step tasks. A MoE model (3B active of 30B), so it stays fast even when it uses computer memory.",
       "thinking": true,
       "sampling": {
         "temperature": 1.0,
@@ -326,6 +342,7 @@
         "code"
       ],
       "note": "مخصص للبرمجة من Qwen، يجيب مباشرة بدون تفكير طويل. من نوع MoE (3 مليارات نشطة من 30) فيبقى سريعاً حتى مع الاستعانة بذاكرة الجهاز.",
+      "noteEn": "Qwen's coding model; answers directly without long thinking. A MoE model (3B active of 30B), so it stays fast even when it uses computer memory.",
       "thinking": false,
       "sampling": {
         "temperature": 0.7,
@@ -348,6 +365,7 @@
         "arabic"
       ],
       "note": "من نوع MoE (3.8 مليار نشطة من 26) فيبقى سريعاً حتى مع الاستعانة بذاكرة الجهاز. يفهم الصور.",
+      "noteEn": "A MoE model (3.8B active of 26B), so it stays fast even when it uses computer memory. Understands pictures.",
       "thinking": true,
       "sampling": {
         "temperature": 1.0,
@@ -369,6 +387,7 @@
         "arabic"
       ],
       "note": "أكبر موديلات Gemma 4 وأدقها، ويفهم الصور. لكروت 24 جيجابايت.",
+      "noteEn": "The largest and most accurate Gemma 4, and it understands pictures. For 24 GB cards.",
       "thinking": true,
       "sampling": {
         "temperature": 1.0,
@@ -390,6 +409,7 @@
         "code"
       ],
       "note": "من نوع MoE (3 مليارات نشطة من 35)، فيعمل بسرعة مقبولة على كرت 12 أو 16 جيجابايت مع الاستعانة بذاكرة الجهاز. يفهم الصور.",
+      "noteEn": "A MoE model (3B active of 35B), so it runs at a fair speed on a 12 or 16 GB card with help from computer memory. Understands pictures.",
       "thinking": true,
       "sampling": {
         "temperature": 1.0,
@@ -407,12 +427,14 @@
       "sizeBytes": 4624950272,
       "minVramMB": 6144,
       "license": "Tencent Hunyuan Community License (لا تشمل الاتحاد الأوروبي وبريطانيا وكوريا الجنوبية)",
+      "licenseEn": "Tencent Hunyuan Community License (excludes the EU, UK and South Korea)",
       "maker": "Tencent",
       "origin": "cn",
       "tags": [
         "translate"
       ],
       "note": "موديل ترجمة من Tencent بين 33 لغة منها العربية. في اختبارنا ترجم من الإنجليزية إلى العربية والعكس ترجمة دقيقة. للترجمة فقط، وليس للمحادثة العامة.",
+      "noteEn": "A translation model from Tencent between 33 languages including Arabic. In our test it translated accurately between English and Arabic. For translation only, not general chat.",
       "thinking": false,
       "sampling": {
         "temperature": 0.7,
@@ -429,10 +451,12 @@
       "sizeBytes": 4621992960,
       "minVramMB": 6144,
       "license": "Tencent Hunyuan Community License (لا تشمل الاتحاد الأوروبي وبريطانيا وكوريا الجنوبية)",
+      "licenseEn": "Tencent Hunyuan Community License (excludes the EU, UK and South Korea)",
       "maker": "Tencent",
       "origin": "cn",
       "tags": [],
       "note": "موديل عام من Tencent. في اختبارنا أخطأ في سؤال بسيط بالعربية وأظهر وسوم <answer> في الرد، فهو أنسب للصينية والإنجليزية.",
+      "noteEn": "A general model from Tencent. In our test it got a simple Arabic question wrong and showed <answer> tags in the reply, so it suits Chinese and English better.",
       "thinking": false,
       "sampling": {
         "temperature": 0.7,
@@ -449,12 +473,14 @@
       "sizeBytes": 5056982720,
       "minVramMB": 6656,
       "license": "CC-BY-NC-4.0 (للاستخدام غير التجاري فقط)",
+      "licenseEn": "CC-BY-NC-4.0 (non-commercial use only)",
       "maker": "Cohere",
       "origin": "ca",
       "tags": [
         "arabic"
       ],
       "note": "من Cohere، مدرَّب على 23 لغة منها العربية، وأجاب بعربية سليمة في اختبارنا. يتذكر من المحادثة 8192 رمزاً.",
+      "noteEn": "From Cohere, trained on 23 languages including Arabic; answered in correct Arabic in our test. Remembers 8192 tokens of the chat.",
       "thinking": false,
       "sampling": {
         "stop": [
@@ -477,6 +503,7 @@
         "code"
       ],
       "note": "موديل عملاق (197 مليار معامل) من StepFun، مضغوط بقوة (2 بت) ليصغر حجمه، فقد تقل دقته قليلاً. يحتاج كرتاً كبيراً مع ذاكرة جهاز 96 جيجابايت تقريباً.",
+      "noteEn": "A giant model (197B parameters) from StepFun, strongly compressed (2-bit) to shrink it, so it may be a little less accurate. Needs a big card plus about 96 GB of computer memory.",
       "thinking": true,
       "sampling": {},
       "vision": false
@@ -494,6 +521,7 @@
         "code"
       ],
       "note": "موديل عملاق من Qwen (6 مليارات نشطة لكل كلمة)، مضغوط بقوة (2 بت) ليصغر حجمه، فقد تقل دقته قليلاً. يحتاج كرتاً كبيراً مع ذاكرة جهاز 128 جيجابايت تقريباً.",
+      "noteEn": "A giant Qwen model (6B active per word), strongly compressed (2-bit) to shrink it, so it may be a little less accurate. Needs a big card plus about 128 GB of computer memory.",
       "thinking": true,
       "sampling": {
         "temperature": 1.0,
@@ -517,6 +545,7 @@
         "code"
       ],
       "note": "موديل DeepSeek العملاق (284 مليار معامل)، مضغوط بقوة (2 بت) ليصغر حجمه، فقد تقل دقته قليلاً. يحتاج كرتاً كبيراً مع ذاكرة جهاز 128 جيجابايت أو أكثر.",
+      "noteEn": "DeepSeek's giant model (284B parameters), strongly compressed (2-bit) to shrink it, so it may be a little less accurate. Needs a big card plus 128 GB or more of computer memory.",
       "thinking": true,
       "sampling": {
         "temperature": 1.0,

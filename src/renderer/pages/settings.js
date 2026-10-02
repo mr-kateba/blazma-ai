@@ -4,14 +4,14 @@
 // behind a "؟" with a tooltip. Changes are saved at once; engine settings
 // apply after restarting the engine, offered in place.
 
-import { ar } from '../i18n/ar.js';
+import { ui } from '../i18n/index.js';
 import { el } from '../lib/dom.js';
 import { speak } from '../lib/speech.js';
 import { refreshDeviceInfo } from './device.js';
 import { refreshOverlaySettings } from './overlay.js';
 import { confirmDialog } from '../lib/dialog.js';
 
-const S = ar.settingsPage;
+const S = ui.settingsPage;
 const $ = (id) => document.getElementById(id);
 
 let values = null;
@@ -62,7 +62,7 @@ function item(title, desc, control, extra = null, help = null) {
     const fields = part.matches('input, select, textarea') ? [part] : [...part.querySelectorAll('input, select, textarea')];
     for (const f of fields) if (!f.getAttribute('aria-label')) f.setAttribute('aria-label', name);
   }
-  const head = el('div', { class: 'set-title' }, title, help ? el('span', { class: 'set-help', tabindex: '0', title: help, 'aria-label': help }, '؟') : null);
+  const head = el('div', { class: 'set-title' }, title, help ? el('span', { class: 'set-help', tabindex: '0', title: help, 'aria-label': help }, ui.common.help) : null);
   return el(
     'div',
     { class: 'set-item' },
@@ -123,7 +123,7 @@ function chatSection() {
     const get = el('button', { type: 'button', class: 'btn small' }, S.chat.ttsInstall);
     get.addEventListener('click', async () => {
       get.disabled = true;
-      const off = window.blazma.onTtsProgress((p) => (get.textContent = ar.chat.ttsDownloading(p.total ? Math.floor((p.done / p.total) * 100) : 0)));
+      const off = window.blazma.onTtsProgress((p) => (get.textContent = ui.chat.ttsDownloading(p.total ? Math.floor((p.done / p.total) * 100) : 0)));
       const res = await window.blazma.ttsInstall();
       off();
       if (!res.ok) {
@@ -371,7 +371,7 @@ function kbSection(kb) {
     const res = await window.blazma.kbUpdate();
     off();
     kbBusy = false;
-    if (!res.ok) toast((ar.errors[res.error.code] || ar.errors.unknown).title, 'error');
+    if (!res.ok) toast((ui.errors[res.error.code] || ui.errors.unknown).title, 'error');
     else toast(K.updated);
     render();
   });
@@ -388,11 +388,11 @@ function kbSection(kb) {
 // Other programs on this computer can use the running model through the
 // same OpenAI-compatible server the chat uses (127.0.0.1 only).
 function copyButton(text) {
-  const b = el('button', { type: 'button', class: 'btn ghost small' }, ar.actions.copy);
+  const b = el('button', { type: 'button', class: 'btn ghost small' }, ui.actions.copy);
   b.addEventListener('click', () =>
     navigator.clipboard.writeText(text).then(() => {
-      b.textContent = ar.actions.copied;
-      setTimeout(() => (b.textContent = ar.actions.copy), 1500);
+      b.textContent = ui.actions.copied;
+      setTimeout(() => (b.textContent = ui.actions.copy), 1500);
     }),
   );
   return b;
@@ -434,7 +434,7 @@ function apiSection(conn) {
       `client = OpenAI(base_url="${base}", api_key="${key}")`,
       'reply = client.chat.completions.create(',
       '    model="local",',
-      '    messages=[{"role": "user", "content": "مرحبا"}],',
+      `    messages=[{"role": "user", "content": "${ui.settingsPage.api.hello}"}],`,
       ')',
       'print(reply.choices[0].message.content)',
     ].join('\n');
@@ -456,10 +456,22 @@ function generalSection() {
     values.theme,
     (v) => save({ theme: v }),
   );
+  // Interface language: saved, then the page reloads in it. The labels of
+  // this choice are in both languages so either can be found.
+  const language = select([['ar', 'العربية'], ['en', 'English']], values.language || 'ar', async (v) => {
+    await save({ language: v });
+    try {
+      localStorage.setItem('blazma.lang', v);
+    } catch {
+      /* the saved setting is applied on the next start */
+    }
+    location.reload();
+  });
   return section(
     'general',
     S.general.title,
     null,
+    item(S.general.language, S.general.languageDesc, language),
     item(S.general.theme, S.general.themeDesc, theme),
     item(S.general.tour, S.general.tourDesc, (() => {
       const b = el('button', { type: 'button', class: 'btn small' }, S.general.tourStart);
@@ -493,7 +505,7 @@ function updatesSection() {
 }
 
 function errorText(err) {
-  const e = ar.errors[err && err.code];
+  const e = ui.errors[err && err.code];
   return e ? e.title : S.updates.failed;
 }
 

@@ -4,6 +4,7 @@
 // resolve model -> start llama-server (which downloads the model) -> ready.
 // Publishes a single state object that the renderer renders.
 
+const { lang } = require('./i18n');
 const fs = require('node:fs');
 const os = require('node:os');
 const http = require('node:http');
@@ -101,20 +102,23 @@ class Setup extends EventEmitter {
   modelList() {
     const manifest = models.manifest();
     const vram = this.nvidia && this.nvidia.available ? this.nvidia.best.vramMB : 0;
+    // Catalog texts in the interface language (noteEn etc. when English).
+    const en = lang() === 'en';
+    const pick = (m, k) => (en && m[`${k}En`]) || m[k] || null;
     return models.getCatalog().map((m) => ({
       id: m.id,
       name: m.name,
       hf: m.hf,
       sizeBytes: m.sizeBytes,
-      note: m.note,
-      license: m.license || null,
+      note: pick(m, 'note'),
+      license: pick(m, 'license'),
       cpu: Boolean(m.cpu),
       custom: Boolean(m.custom),
       vision: Boolean(m.vision),
       fits: this.fitLevel(m, vram) === 'ok',
       fit: this.fitLevel(m, vram),
       minVramMB: m.minVramMB || 0,
-      maker: m.maker || null,
+      maker: pick(m, 'maker'),
       origin: m.origin || null,
       tags: Array.isArray(m.tags) ? m.tags : [],
       featured: Boolean(m.featured),

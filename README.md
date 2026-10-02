@@ -4,7 +4,7 @@
 
 # Blazma AI
 
-تطبيق ويندوز مجاني ومفتوح المصدر بواجهة عربية كاملة، يجمع ثلاثة أشياء:
+تطبيق ويندوز مجاني ومفتوح المصدر بواجهة عربية كاملة (والإنجليزية اختيارية)، يجمع ثلاثة أشياء:
 
 1. **محادثة مع ذكاء اصطناعي يعمل على جهازك** بكرت الشاشة أو المعالج (موديلات مفتوحة فوق محرك [llama.cpp](https://github.com/ggml-org/llama.cpp)): يفهم الصور والملفات، ويبحث في الإنترنت، ويجيب من مستنداتك، ويسمع صوتك، ويقرأ ردوده، ويرسم الصور. بدون اشتراك، ومحادثاتك لا تخرج من جهازك.
 2. **لوحة مراقبة حيّة للجهاز**: كرت الشاشة والمعالج والذاكرة والحرارة وسحب الطاقة، مع شاشة مصغرة فوق المحادثة مثل الألعاب.
@@ -54,6 +54,7 @@
 | صفحة الموديلات: تنزيل وتبديل بدون إعادة تشغيل، حذف من الجهاز، إضافة موديل من Hugging Face بعد التحقق منه | ✅ مُجرّب على لينكس |
 | صفحة الإعدادات الكاملة: تعليمات الذكاء، درجة الإبداع، ذاكرة المحادثة، طبقات الكرت، المنفذ، مجلد الموديلات، التشغيل مع ويندوز، التحقق من التحديثات وتحديث المحرك | ✅ مُجرّب على لينكس، ⚠️ تحديث المحرك والتشغيل مع ويندوز يُجرَّبان على ويندوز |
 | المحادثة: شاشة ترحيب باقتراحات، تبديل الموديل من أعلى المحادثة، تجميع المحادثات حسب التاريخ، اختصارات Ctrl+1 إلى Ctrl+5 للصفحات | ✅ مُجرّب |
+| واجهة إنجليزية اختيارية (الإعدادات ← عام ← لغة الواجهة): كل النصوص، والاتجاه من اليسار لليمين، وأوصاف الموديلات، وتعليمات الذكاء الافتراضية | ✅ مُجرّب على لينكس (لا يبقى نص عربي في أي صفحة أو قسم إعدادات) |
 | تنظيم المحادثات: تثبيت في الأعلى، ومجلدات، ونسخة احتياطية لكل المحادثات في ملف واحد واستعادتها (الإعدادات ← المحادثة) | ✅ مُجرّب على لينكس |
 | أوامر سريعة: اكتب `/` لقائمة الأوامر (ترجم، لخّص، صحّح، اشرح، أعد الصياغة، نقاط، رسالة، كود) | ✅ مُجرّب على لينكس بالموديل الحقيقي |
 | ملف التنصيب (NSIS) والأيقونة، وبناؤه تلقائياً على ويندوز عبر GitHub Actions | ✅ يُبنى على ويندوز، ومُجرّب التثبيت عليه |
@@ -281,7 +282,7 @@ xvfb-run -a npm test                                                 # كل ال
 
 ## English
 
-**Blazma AI** is a free, open-source Windows app with a fully Arabic (RTL) interface. It combines a chat with open models running locally on your GPU or CPU (through llama.cpp's `llama-server`), a live hardware monitor (GPU, CPU, RAM, temperatures, power draw), and the full VS Code inside the app with its AI wired to the local model.
+**Blazma AI** is a free, open-source Windows app with a fully Arabic (RTL) interface, and an optional English one (Settings › General › Interface language). It combines a chat with open models running locally on your GPU or CPU (through llama.cpp's `llama-server`), a live hardware monitor (GPU, CPU, RAM, temperatures, power draw), and the full VS Code inside the app with its AI wired to the local model.
 
 **Status:** feature-complete for 0.1.0 and tested end to end on Linux (22 Playwright test files that drive the real app with small real models). On Windows so far: install, engine download and run on an RTX 5070, and the VS Code page (download, folder, Continue install); the rest follows the [checklist](docs/CHECKLIST-WINDOWS.md). Features:
 - local chat with streaming, reasoning, safe Markdown, images in, files (PDF, Word, text), web search, personas, saved chats with versions (regenerate / edit keep earlier replies), export;
