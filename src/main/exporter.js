@@ -41,8 +41,10 @@ async function exportChat(win, { title, format, markdown, html }) {
     fs.writeFileSync(filePath, String(markdown || ''), 'utf8');
     return { saved: true };
   }
+  // Nothing in the page may load anything (only the chat's own data: images),
+  // even from a chat file edited by hand.
   const tmp = path.join(os.tmpdir(), `blazma-export-${crypto.randomBytes(6).toString('hex')}.html`);
-  fs.writeFileSync(tmp, `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><style>${PDF_CSS}</style></head><body>${String(html || '')}</body></html>`, 'utf8');
+  fs.writeFileSync(tmp, `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'"><style>${PDF_CSS}</style></head><body>${String(html || '')}</body></html>`, 'utf8');
   const printer = new BrowserWindow({ show: false, webPreferences: { javascript: false, sandbox: true, contextIsolation: true } });
   try {
     await printer.loadFile(tmp);
