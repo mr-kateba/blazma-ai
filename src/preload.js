@@ -39,6 +39,15 @@ contextBridge.exposeInMainWorld(
       ipcRenderer.on('images:progress', listener);
       return () => ipcRenderer.removeListener('images:progress', listener);
     },
+    ttsStatus: () => ipcRenderer.invoke('tts:status'),
+    ttsPlan: () => ipcRenderer.invoke('tts:plan'),
+    ttsInstall: () => ipcRenderer.invoke('tts:install'),
+    ttsSynth: (text) => ipcRenderer.invoke('tts:synth', String(text)),
+    onTtsProgress(cb) {
+      const listener = (_e, p) => cb(p);
+      ipcRenderer.on('tts:progress', listener);
+      return () => ipcRenderer.removeListener('tts:progress', listener);
+    },
     voiceStatus: () => ipcRenderer.invoke('voice:status'),
     voiceInstall: () => ipcRenderer.invoke('voice:install'),
     voiceTranscribe: (wav) => ipcRenderer.invoke('voice:transcribe', wav),

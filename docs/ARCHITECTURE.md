@@ -16,6 +16,7 @@
 │ documents.js → doc-worker.js (utilityProcess) PDF/Word     │
 │ knowledge.js "مكتبتي" (Qwen3-Embedding عبر llama.cpp)      │
 │ voice.js     الصوت إلى نص (whisper-server)                 │
+│ tts.js       صوت القراءة العربي (piper، نص عبر stdin)       │
 │ images.js    رسم الصور (sd-server + Z-Image Turbo)          │
 │ vscode.js    VS Code (خادم VSCodium) + untar.js             │
 │ chats.js / personas.js / exporter.js                       │
@@ -72,6 +73,7 @@
 | `personas.json` | الشخصيات المخصصة |
 | `knowledge/` | فهرس "مكتبتي" |
 | `voice/` | whisper.cpp وموديله |
+| `tts/` | Piper وصوت القراءة العربي |
 | `vscode/` | خادم VSCodium (`bin/`)، وبياناته وإضافاته، وإعدادات Continue (`continue/`) |
 
 مشاريع VS Code نفسها في `المستندات\Blazma Projects` افتراضياً.

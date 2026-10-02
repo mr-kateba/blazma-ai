@@ -2,6 +2,8 @@
 // Serves unsloth/<Name>-GGUF repos from files in DIR named <Name>-Q4_K_M.gguf
 // (falling back to the 0.8B file), supports HEAD/Range/ETag, throttles
 // bandwidth, and simulates a network cut via GET /__cut?seconds=N.
+// Any other repo is served from DIR/repos/<owner>/<repo>/<path> (file list
+// and resolve), and plain files from DIR/files/<name> (program archives).
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
 const DIR = process.argv[2]; const PORT = +process.argv[3] || 18999;
 const RATE = +(process.env.RATE || 40e6);
@@ -23,6 +25,29 @@ const srv = http.createServer((req, res) => {
   console.log(new Date().toISOString(), req.method, req.url, req.headers.range || '');
   if (u.pathname === '/__cut') { cutUntil = Date.now() + (+u.searchParams.get('seconds') || 10) * 1000; res.end('cut'); for (const s of sockets) s.destroy(); return; }
   if (Date.now() < cutUntil) { req.socket.destroy(); return; }
+  // Plain files and generic repos (see the header).
+  const plainFile = /^\/files\/([\w.-]+)$/.exec(u.pathname);
+  const tree = /^\/api\/models\/([\w.-]+\/[\w.-]+)\/tree\/[^/]+\/?(.*)$/.exec(u.pathname);
+  const resolve = /^\/([\w.-]+\/[\w.-]+)\/resolve\/[^/]+\/(.+)$/.exec(u.pathname);
+  const repoDir = (r) => path.join(DIR, 'repos', r);
+  if (tree && fs.existsSync(repoDir(tree[1]))) {
+    const dir = path.join(repoDir(tree[1]), tree[2]);
+    if (!fs.existsSync(dir)) { res.writeHead(404); return res.end('{"error":"not found"}'); }
+    return json(res, fs.readdirSync(dir).map((n) => {
+      const full = path.join(dir, n), st = fs.statSync(full), rel = path.posix.join(tree[2], n);
+      if (st.isDirectory()) return { type: 'directory', oid: 'f'.repeat(40), size: 0, path: rel };
+      const lfs = st.size > 1e6 ? { oid: crypto.createHash('sha256').update(fs.readFileSync(full)).digest('hex'), size: st.size, pointerSize: 134 } : undefined;
+      return { type: 'file', oid: '1'.repeat(40), size: st.size, path: rel, ...(lfs ? { lfs } : {}) };
+    }));
+  }
+  const served = plainFile ? path.join(DIR, 'files', plainFile[1]) : resolve && fs.existsSync(repoDir(resolve[1])) ? path.join(repoDir(resolve[1]), resolve[2]) : null;
+  if (served) {
+    if (!fs.existsSync(served) || !served.startsWith(DIR)) { res.writeHead(404); return res.end('not found'); }
+    const size = fs.statSync(served).size;
+    res.writeHead(200, { 'Content-Length': size, 'Content-Type': 'application/octet-stream' });
+    if (req.method === 'HEAD') return res.end();
+    return fs.createReadStream(served).pipe(res);
+  }
   const m = /^\/(api\/models\/)?(unsloth\/([\w.-]+)-GGUF)(\/.*)?$/.exec(u.pathname);
   if (!m) { res.writeHead(404); return res.end('{"error":"not found"}'); }
   const [, api, repo, base, rest = ''] = m; const name = `${base}-Q4_K_M.gguf`;

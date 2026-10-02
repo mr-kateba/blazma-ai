@@ -7,7 +7,7 @@ import { renderMarkdown } from '../lib/markdown.js';
 import { readSse } from '../lib/sse.js';
 import { extractTextToolCalls, visibleText } from '../lib/toolcalls.js';
 import { store } from '../lib/store.js';
-import { speak, stopSpeaking } from '../lib/speech.js';
+import { speak, stopSpeaking, isSpeaking } from '../lib/speech.js';
 import { startRecording } from '../lib/recorder.js';
 import { loadPersonas, personaById, openPersonaMenu } from './personas.js';
 import { confirmDialog, promptDialog } from '../lib/dialog.js';
@@ -478,19 +478,45 @@ function messageNode(msg, index) {
   return el('div', { class: `msg ${isUser ? 'msg-user' : 'msg-ai'}`, 'data-index': index }, body, footer);
 }
 
-// "استمع": reads the reply with a Windows voice; a second click stops it.
+// Downloads Blazma's Arabic voice after the user agrees. True when it is ready.
+async function offerBlazmaVoice() {
+  const plan = await window.blazma.ttsPlan();
+  const mb = plan.ok ? Math.round(plan.result.bytes / 1e6) : 85;
+  if (!(await confirmDialog({ title: ar.chat.ttsOfferTitle, text: ar.chat.ttsOffer(mb), ok: ar.chat.ttsOfferOk, cancel: ar.chat.cancel }))) return false;
+  const off = window.blazma.onTtsProgress((p) => {
+    const box = $('attach-preview');
+    box.hidden = false;
+    box.replaceChildren(el('span', { class: 'muted small attach-note' }, ar.chat.ttsDownloading(p.total ? Math.floor((p.done / p.total) * 100) : 0)));
+  });
+  const res = await window.blazma.ttsInstall();
+  off();
+  renderPreview();
+  if (!res.ok) showComposerNote(ar.chat.ttsInstallFailed, 8000);
+  return res.ok;
+}
+
+// "استمع": reads the reply aloud (speech.js); a second click stops it.
 function listenButton(msg) {
   const b = el('button', { type: 'button', class: 'icon-btn' }, ar.chat.listen);
   b.addEventListener('speech-end', () => (b.textContent = ar.chat.listen));
-  b.addEventListener('click', async () => {
+  b.addEventListener('speech-error', (e) => {
+    b.textContent = ar.chat.listen;
+    showComposerNote(ar.chat.noVoice[e.detail] || ar.chat.noVoice['blazma-failed'], 9000);
+  });
+  const start = async () => {
     const res = await speak(msg.content, b);
-    if (!res.ok) {
-      b.textContent = ar.chat.listen;
-      showComposerNote(ar.chat.noVoice[res.reason], 9000);
+    if (res.ok) {
+      b.textContent = isSpeaking(b) ? ar.chat.stopListen : ar.chat.listen;
       return;
     }
-    b.textContent = b.textContent === ar.chat.listen ? ar.chat.stopListen : ar.chat.listen;
-  });
+    b.textContent = ar.chat.listen;
+    if (res.reason === 'offer-blazma') {
+      if (await offerBlazmaVoice()) start();
+      return;
+    }
+    showComposerNote(ar.chat.noVoice[res.reason], 9000);
+  };
+  b.addEventListener('click', start);
   return b;
 }
 
