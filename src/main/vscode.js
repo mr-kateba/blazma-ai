@@ -574,6 +574,38 @@ function writeContinueConfig({ port, apiKey, modelName }) {
   fs.writeFileSync(path.join(continueDir(), 'config.yaml'), yaml, { mode: 0o600 });
 }
 
+// Continue's code completion model (coder.js), kept between two marker
+// comments so it can be replaced or removed without touching the rest of the
+// file. server: { port, key } to add it, null to remove it.
+const AC_START = '  # blazma-autocomplete (managed by Blazma AI)';
+const AC_END = '  # end blazma-autocomplete';
+function syncAutocomplete(server, modelName) {
+  const file = path.join(continueDir(), 'config.yaml');
+  if (!fs.existsSync(file)) return false;
+  let text = fs.readFileSync(file, 'utf8');
+  const a = text.indexOf(AC_START);
+  const b = text.indexOf(AC_END);
+  if (a >= 0 && b > a) text = text.slice(0, a) + text.slice(b + AC_END.length).replace(/^\r?\n/, '');
+  if (server) {
+    const q = (s) => JSON.stringify(String(s));
+    const block = [
+      AC_START,
+      `  - name: ${q('Blazma: إكمال الكود (Qwen2.5 Coder 1.5B)')}`,
+      '    provider: llama.cpp',
+      `    model: ${modelName}`,
+      `    apiBase: ${q(`http://127.0.0.1:${server.port}/`)}`,
+      `    apiKey: ${q(server.key)}`,
+      '    roles:',
+      '      - autocomplete',
+      AC_END,
+    ].join('\n');
+    if (!/^models:\s*$/m.test(text)) text = `${text.replace(/\s*$/, '\n')}models:\n`;
+    text = text.replace(/^models:\s*$/m, (m) => `${m}\n${block}`);
+  }
+  fs.writeFileSync(file, text, { mode: 0o600 });
+  return true;
+}
+
 function aiInstalled() {
   try {
     return fs.readdirSync(extDir()).some((n) => n.toLowerCase().startsWith('continue.continue-'));
@@ -613,6 +645,7 @@ module.exports = {
   saveSnippet,
   projectsDir,
   syncContinueConfig,
+  syncAutocomplete,
   aiInstalled,
   installAi,
 };

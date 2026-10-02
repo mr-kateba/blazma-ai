@@ -17,6 +17,7 @@
 │ knowledge.js "مكتبتي" (Qwen3-Embedding عبر llama.cpp)      │
 │ voice.js     الصوت إلى نص (whisper-server)                 │
 │ tts.js       صوت القراءة العربي (piper، نص عبر stdin)       │
+│ coder.js     موديل إكمال الكود (llama-server ثانٍ)          │
 │ images.js    رسم الصور (sd-server + Z-Image Turbo)          │
 │ vscode.js    VS Code (خادم VSCodium) + untar.js             │
 │ chats.js / personas.js / exporter.js                       │
@@ -91,4 +92,5 @@
 2. `ensureServer()` يشغّل `node out/server-main.js` بمعاملات ثابتة، وينتظر `/version`.
 3. `showView()` يضع الصفحة فوق `#code-host` بالأبعاد التي ترسلها الواجهة (مع عكس الموضع عندما تكون لغة النظام من اليمين لليسار، لأن Chromium يعكس مواضع الطبقات حينها).
 4. "ربط الذكاء": يفعّل الواجهة البرمجية، ويثبّت Continue من Open VSX، ويكتب `continue/config.yaml` بعنوان الخادم المحلي ومفتاحه.
-5. يتوقف الخادم وكل عملياته (الطرفيات) عند إغلاق البرنامج.
+5. "إكمال الكود": يشغّل `coder.js` (llama-server ثانٍ بموديل Qwen2.5 Coder 1.5B)، ويضيف لـ`config.yaml` موديلاً بدور `autocomplete` بين سطرين علامة، فيُستبدل أو يُحذف دون لمس باقي الملف.
+6. يتوقف الخادم وكل عملياته (الطرفيات) وخادم الإكمال عند إغلاق البرنامج.

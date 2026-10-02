@@ -1199,6 +1199,8 @@ body.compact-nav .sidebar-foot { display: none; }
 .page-studio { max-width: none; height: 100%; margin: 0; padding: 0 !important; display: flex; flex-direction: column; min-height: 0; }
 .page-studio[hidden] { display: none; }
 #studio-root { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* A toolbar switch that is on (code completion). */
+.code-bar .btn.on { border-color: rgba(255, 109, 0, 0.55); background: var(--accent-soft); color: var(--accent-text); }
 .code-bar { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--surface); flex-wrap: wrap; }
 .code-bar-title { font-weight: 600; }
 .code-folder { color: var(--muted); font-size: 12.5px; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

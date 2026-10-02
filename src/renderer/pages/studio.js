@@ -139,9 +139,31 @@ function toolbar(st) {
     await showView();
   });
   let ai;
+  let complete = null;
   if (st.aiReady) {
     ai = el('button', { type: 'button', class: 'btn primary small', title: C.aiOnHint }, C.aiOn);
     ai.addEventListener('click', () => window.blazma.vscodeAskAi());
+    // Code completion while typing, on/off.
+    complete = el('button', { type: 'button', class: `btn small${st.codeComplete ? ' on' : ' ghost'}`, title: C.completeHint, 'aria-pressed': String(Boolean(st.codeComplete)) }, st.codeComplete ? C.completeOn : C.complete);
+    complete.addEventListener('click', async () => {
+      const on = complete.getAttribute('aria-pressed') !== 'true';
+      if (on && !(await ask({ title: C.complete, text: C.completeConfirm, ok: C.completeOk }))) return;
+      complete.disabled = true;
+      complete.textContent = on ? C.completeBusy : C.complete;
+      const res = await window.blazma.vscodeCodeComplete(on);
+      complete.disabled = false;
+      if (!res.ok) {
+        complete.textContent = C.complete;
+        complete.setAttribute('aria-pressed', 'false');
+        note(errorTitle(res), 'error');
+        return;
+      }
+      complete.setAttribute('aria-pressed', String(on));
+      complete.classList.toggle('on', on);
+      complete.classList.toggle('ghost', !on);
+      complete.textContent = on ? C.completeOn : C.complete;
+      note(on ? C.completeDone : C.completeOffDone, 'ok');
+    });
   }
   else {
     ai = el('button', { type: 'button', class: 'btn primary small' }, C.aiConnect);
@@ -160,7 +182,7 @@ function toolbar(st) {
       render();
     });
   }
-  return el('div', { class: 'code-bar' }, el('span', { class: 'code-bar-title' }, 'VS Code'), folder, el('span', { class: 'code-bar-gap' }), ai, open, projects, restart);
+  return el('div', { class: 'code-bar' }, el('span', { class: 'code-bar-title' }, 'VS Code'), folder, el('span', { class: 'code-bar-gap' }), ai, complete, open, projects, restart);
 }
 
 async function render() {

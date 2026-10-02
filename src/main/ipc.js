@@ -21,6 +21,7 @@ const localmodels = require('./localmodels');
 const knowledge = require('./knowledge');
 const voice = require('./voice');
 const tts = require('./tts');
+const coder = require('./coder');
 const images = require('./images');
 const personas = require('./personas');
 const { exportChat } = require('./exporter');
@@ -427,7 +428,23 @@ function registerIpc({ setup, monitor, getWindow }) {
   // The engine moved to another port: Continue follows.
   setup.on('port-changed', () => refreshAiConfig());
   let codeFolder = null; // a folder to open next time the page shows (then cleared)
-  handle('vscode:status', () => ({ ...vscode.status(), ai: vscode.aiInstalled(), aiReady: vscode.aiInstalled() && settings.get().apiEnabled, folder: vscode.currentFolder() || codeFolder || vscode.projectsDir() }));
+  // Code completion: the coding model's server, and Continue pointed at it.
+  const refreshCoder = async () => {
+    if (!settings.get().codeComplete || !vscode.aiInstalled()) return false;
+    const s = await coder.ensureServer();
+    vscode.syncAutocomplete({ port: s.port, key: s.key }, coder.MODEL_NAME);
+    return true;
+  };
+  handle('vscode:codeComplete', (on) =>
+    wrap(async () => {
+      settings.update({ codeComplete: Boolean(on) });
+      if (on) return refreshCoder();
+      coder.stop();
+      vscode.syncAutocomplete(null);
+      return false;
+    }),
+  );
+  handle('vscode:status', () => ({ ...vscode.status(), codeComplete: settings.get().codeComplete, ai: vscode.aiInstalled(), aiReady: vscode.aiInstalled() && settings.get().apiEnabled, folder: vscode.currentFolder() || codeFolder || vscode.projectsDir() }));
   handle('vscode:plan', () => wrap(() => vscode.plan()));
   handle('vscode:install', () =>
     wrap(() =>
@@ -443,6 +460,7 @@ function registerIpc({ setup, monitor, getWindow }) {
       if (!b) throw new AppError('vscode-failed', 'bad bounds');
       fs.mkdirSync(vscode.projectsDir(), { recursive: true });
       refreshAiConfig();
+      refreshCoder().catch(() => {}); // in the background; the page opens meanwhile
       const folder = codeFolder;
       codeFolder = null;
       return vscode.showView(getWindow(), b, folder);

@@ -96,6 +96,7 @@ contextBridge.exposeInMainWorld(
     vscodeRestart: () => ipcRenderer.invoke('vscode:restart'),
     vscodeConnectAi: () => ipcRenderer.invoke('vscode:connectAi'),
     vscodeAskAi: () => ipcRenderer.invoke('vscode:askAi'),
+    vscodeCodeComplete: (on) => ipcRenderer.invoke('vscode:codeComplete', Boolean(on)),
     chatsSetMeta: (id, meta) => ipcRenderer.invoke('chats:setMeta', id, meta),
     chatsBackup: () => ipcRenderer.invoke('chats:backup'),
     chatsRestore: () => ipcRenderer.invoke('chats:restore'),

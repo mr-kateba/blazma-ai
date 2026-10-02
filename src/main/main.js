@@ -130,7 +130,7 @@ if (!app.requestSingleInstanceLock()) {
   // Every helper program started by the app ends with it: the embedding
   // server (مكتبتي), whisper-server (voice), sd-server (drawing) and llama-server.
   const stopHelpers = () => {
-    for (const mod of ['./knowledge', './voice', './images', './vscode']) {
+    for (const mod of ['./knowledge', './voice', './images', './vscode', './coder']) {
       try {
         require(mod).stop();
       } catch {

@@ -11,7 +11,7 @@ const path = require('path');
 const { execSync } = require('child_process');
 const SP = process.argv[2], root = path.resolve(__dirname, '../..');
 const HOME = SP + '/vs-home';
-const env = { ...process.env, HOME, XDG_CONFIG_HOME: SP + '/e2e-home', BLAZMA_LLAMA_SERVER: SP + '/llama.cpp/build/bin/llama-server', BLAZMA_HF_ENDPOINT: 'http://127.0.0.1:18999', BLAZMA_VSCODE_DIR: SP + '/vscodium/linux' };
+const env = { ...process.env, HOME, XDG_CONFIG_HOME: SP + '/e2e-home', BLAZMA_LLAMA_SERVER: SP + '/llama.cpp/build/bin/llama-server', BLAZMA_HF_ENDPOINT: 'http://127.0.0.1:18999', BLAZMA_VSCODE_DIR: SP + '/vscodium/linux', BLAZMA_CODER_MODEL: SP + '/hfsrc/Qwen3.5-0.8B-Q4_K_M.gguf' };
 const USER = SP + '/e2e-home/Blazma AI';
 let failed = 0;
 const check = (name, ok, info = '') => { console.log(`${ok ? 'ok  ' : 'FAIL'} ${name}${info ? ' | ' + info : ''}`); if (!ok) failed++; };
@@ -156,6 +156,29 @@ const ps = () => execSync('ps -eo args').toString();
   await win.click('.nav-item[data-page="chat"]'); await win.click('.nav-item[data-page="studio"]');
   await win.waitForSelector('.code-bar button:has-text("اسأل الذكاء")', { timeout: 10000 }).catch(() => {});
   check('"اسأل الذكاء" button in the bar', (await win.locator('.code-bar button:has-text("اسأل الذكاء")').count()) === 1 && (await win.evaluate(() => window.blazma.vscodeAskAi())) === true);
+  // Code completion: switched on from the bar (after the in-app question),
+  // Continue gets a llama.cpp autocomplete model, and that server answers a
+  // fill-in-the-middle request with its key (and refuses one without).
+  // (A small chat model stands in for the coding model here.)
+  await win.click('.code-bar button:has-text("إكمال الكود")');
+  await win.waitForSelector('.dlg');
+  check('code completion asks first, saying what it downloads', (await win.locator('.dlg').innerText()).includes('1.6 جيجابايت'));
+  await win.click('.dlg-ok');
+  for (let i = 0; i < 240 && !(await win.locator('.code-bar button:has-text("✓ إكمال الكود")').count()); i++) await win.waitForTimeout(500);
+  const cfg2 = fs.readFileSync(cfgFile, 'utf8');
+  const port = Number((/blazma-autocomplete[\s\S]*?apiBase: "http:\/\/127\.0\.0\.1:(\d+)\//.exec(cfg2) || [])[1]);
+  const acKey = (/blazma-autocomplete[\s\S]*?apiKey: "([0-9a-f]+)"/.exec(cfg2) || [])[1];
+  check('Continue gets the autocomplete model (llama.cpp, qwen coder name)', /provider: llama\.cpp\n    model: qwen2\.5-coder-1\.5b/.test(cfg2) && /roles:\n      - autocomplete/.test(cfg2) && port > 0 && cfg2.includes('provider: openai'), `port ${port}`);
+  const fim = (k) => new Promise((resolve) => {
+    const body = JSON.stringify({ prompt: '<|fim_prefix|>def add(a, b):\n    return <|fim_suffix|>\n<|fim_middle|>', n_predict: 8, temperature: 0 });
+    const req = require('http').request({ host: '127.0.0.1', port, path: '/completion', method: 'POST', headers: { 'Content-Type': 'application/json', ...(k ? { Authorization: `Bearer ${k}` } : {}) } }, (res) => { let d = ''; res.on('data', (c) => (d += c)); res.on('end', () => resolve({ status: res.statusCode, body: d })); });
+    req.on('error', (e) => resolve({ status: 0, body: e.message })); req.end(body);
+  });
+  const ok = await fim(acKey);
+  const noKey = await fim(null);
+  check('the completion server answers with its key, refuses without', ok.status === 200 && typeof JSON.parse(ok.body).content === 'string' && noKey.status === 401, `${ok.status} / ${noKey.status}`);
+  await win.click('.code-bar button:has-text("✓ إكمال الكود")'); await win.waitForTimeout(800);
+  check('switched off: removed from Continue and the server stops', !fs.readFileSync(cfgFile, 'utf8').includes('blazma-autocomplete') && (await fim(acKey)).status === 0 && fs.readFileSync(cfgFile, 'utf8').includes('provider: openai'));
   check('Continue settings kept in the app folder', /CONTINUE_GLOBAL_DIR/.test(execSync(`cat /proc/$(pgrep -f "server-main.js --host 127.0.0.1" | head -1)/environ | tr '\\0' '\\n' | grep CONTINUE || true`).toString()));
   await win.evaluate(() => window.blazma.apiSetEnabled(false));
 
