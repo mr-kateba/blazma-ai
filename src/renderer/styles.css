@@ -141,6 +141,8 @@
 }
 
 * { box-sizing: border-box; }
+/* Thin scroll bars in the app's colors instead of the wide grey system ones. */
+* { scrollbar-width: thin; scrollbar-color: var(--hover-border) transparent; }
 
 html, body {
   height: 100%;
