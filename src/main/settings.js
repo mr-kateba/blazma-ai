@@ -19,6 +19,8 @@ const DEFAULTS = Object.freeze({
   kbInChat: false, // answer from the user's documents (knowledge.js)
   tourDone: false, // the first-run guided tour was finished or skipped
   voiceModel: 'small', // speech to text: 'small' (faster) or 'turbo' (more accurate)
+  codeComplete: false, // code completion in VS Code with a small coding model (coder.js)
+  coderKey: '', // that server's key, kept so Continue's settings stay valid
   ttsEngine: 'auto', // reading aloud: 'auto' (Blazma's Arabic voice when downloaded), 'blazma' or 'windows'
   shareDeviceInfo: false, // add a hardware summary to the system prompt (monitor.modelSummary)
   monitorIntervalMs: 2000,
@@ -53,6 +55,8 @@ const VALIDATORS = {
   tourDone: (v) => typeof v === 'boolean',
   voiceModel: (v) => ['small', 'turbo'].includes(v),
   ttsEngine: (v) => ['auto', 'blazma', 'windows'].includes(v),
+  codeComplete: (v) => typeof v === 'boolean',
+  coderKey: (v) => v === '' || /^[0-9a-f]{48}$/.test(v),
   shareDeviceInfo: (v) => typeof v === 'boolean',
   monitorIntervalMs: (v) => [500, 1000, 2000, 5000].includes(v),
   theme: (v) => ['dark', 'light', 'system'].includes(v),
