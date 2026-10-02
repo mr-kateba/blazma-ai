@@ -34,7 +34,7 @@ const SKIP = /افتراضي|تنزيل|تثبيت|إيقاف المحرك|إع�
   await win.click('.nav-item[data-page="chat"]');
   await win.fill('#chat-input', 'قل مرحبا في كلمة واحدة.');
   await win.press('#chat-input', 'Enter');
-  for (let i = 0; i < 120 && (await win.locator('.msg.assistant .msg-actions button').count()) === 0; i++) await win.waitForTimeout(1000);
+  for (let i = 0; i < 120 && (await win.locator('.msg-ai .msg-footer button').count()) === 0; i++) await win.waitForTimeout(1000);
 
   const pageNow = () => win.evaluate(() => (document.querySelector('.nav-item.active') || {}).dataset?.page);
   const stuck = new Set(); // things that do not close with Escape
