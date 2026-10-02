@@ -404,45 +404,6 @@ function reloadView() {
 
 // ---------- folders ----------
 
-
-function safeName(name) {
-  return String(name || 'project').replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').replace(/[. ]+$/, '').slice(0, 80) || 'project';
-}
-
-// Projects from the earlier built-in studio (<userData>/studio/*.json) are
-// written once as normal folders under "Blazma Projects", so nothing is lost.
-function migrateStudioProjects() {
-  const marker = path.join(root(), 'studio-migrated');
-  if (fs.existsSync(marker)) return 0;
-  const src = path.join(paths.userData(), 'studio');
-  let count = 0;
-  if (fs.existsSync(src)) {
-    for (const f of fs.readdirSync(src).filter((n) => n.endsWith('.json'))) {
-      try {
-        const p = JSON.parse(fs.readFileSync(path.join(src, f), 'utf8'));
-        if (!p || typeof p.files !== 'object') continue;
-        let dir = path.join(projectsDir(), safeName(p.name));
-        for (let i = 2; fs.existsSync(dir); i++) dir = path.join(projectsDir(), `${safeName(p.name)} (${i})`);
-        for (const [rel, content] of Object.entries(p.files)) {
-          const clean = String(rel).replace(/\\/g, '/');
-          if (!clean || clean.split('/').some((part) => !part || part === '.' || part === '..') || /^[a-z]:/i.test(clean)) continue;
-          const full = path.join(dir, ...clean.split('/'));
-          if (!full.startsWith(dir + path.sep)) continue;
-          fs.mkdirSync(path.dirname(full), { recursive: true });
-          fs.writeFileSync(full, String(content ?? ''));
-        }
-        count++;
-      } catch {
-        /* a broken project file is skipped */
-      }
-    }
-  }
-  fs.mkdirSync(projectsDir(), { recursive: true });
-  fs.mkdirSync(root(), { recursive: true });
-  fs.writeFileSync(marker, String(count));
-  return count;
-}
-
 // Code from the chat ("افتح في VS Code"): saved as a file in its own folder.
 function saveSnippet(code, lang) {
   const ext = { html: 'html', htm: 'html', css: 'css', js: 'js', javascript: 'js', ts: 'ts', typescript: 'ts', python: 'py', py: 'py', json: 'json', md: 'md' }[String(lang || '').toLowerCase()] || 'txt';
@@ -504,7 +465,7 @@ const LIGHT = {
 
 function wantedSettings(dark) {
   return {
-    'workbench.colorTheme': dark ? 'Default Dark Modern' : 'Default Light Modern',
+    'workbench.colorTheme': dark ? 'Dark Modern' : 'Light Modern',
     'workbench.colorCustomizations': dark ? DARK : LIGHT,
     'workbench.startupEditor': 'none',
     'continue.telemetryEnabled': false,
@@ -530,7 +491,11 @@ function syncMachineSettings() {
     last = {};
   }
   const want = wantedSettings(nativeTheme.shouldUseDarkColors);
-  const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+  // VS Code renames its old theme names in the file ("Default Dark Modern" ->
+  // "Dark Modern"); the old name we wrote before still counts as ours.
+  const RENAMED = { 'Default Dark Modern': 'Dark Modern', 'Default Light Modern': 'Light Modern' };
+  const norm = (v) => (typeof v === 'string' && RENAMED[v]) || v;
+  const same = (a, b) => JSON.stringify(norm(a)) === JSON.stringify(norm(b));
   let changed = false;
   for (const [k, v] of Object.entries(want)) {
     if ((!(k in current) || same(current[k], last[k])) && !same(current[k], v)) {
@@ -645,7 +610,6 @@ module.exports = {
   allowsNavigation,
   currentFolder,
   ownsContents,
-  migrateStudioProjects,
   saveSnippet,
   projectsDir,
   syncContinueConfig,

@@ -73,7 +73,6 @@
 | `knowledge/` | فهرس "مكتبتي" |
 | `voice/` | whisper.cpp وموديله |
 | `vscode/` | خادم VSCodium (`bin/`)، وبياناته وإضافاته، وإعدادات Continue (`continue/`) |
-| `studio/` | مشاريع الاستوديو القديم (تُنسخ مرة واحدة إلى `المستندات\Blazma Projects`) |
 
 مشاريع VS Code نفسها في `المستندات\Blazma Projects` افتراضياً.
 
