@@ -4,19 +4,22 @@
 
 # Blazma AI
 
-تطبيق ويندوز مفتوح المصدر بواجهة عربية كاملة، يجمع شيئين:
+تطبيق ويندوز مجاني ومفتوح المصدر بواجهة عربية كاملة، يجمع ثلاثة أشياء:
 
-1. **محادثة مع ذكاء اصطناعي يعمل محلياً** على كرت الشاشة في جهازك (موديلات مفتوحة فوق محرك [llama.cpp](https://github.com/ggml-org/llama.cpp)).
-2. **لوحة مراقبة حيّة للجهاز**: كرت الشاشة والمعالج والذاكرة والحرارة وسحب الطاقة.
+1. **محادثة مع ذكاء اصطناعي يعمل على جهازك** بكرت الشاشة أو المعالج (موديلات مفتوحة فوق محرك [llama.cpp](https://github.com/ggml-org/llama.cpp)): يفهم الصور والملفات، ويبحث في الإنترنت، ويجيب من مستنداتك، ويسمع صوتك، ويقرأ ردوده، ويرسم الصور. بدون اشتراك، ومحادثاتك لا تخرج من جهازك.
+2. **لوحة مراقبة حيّة للجهاز**: كرت الشاشة والمعالج والذاكرة والحرارة وسحب الطاقة، مع شاشة مصغرة فوق المحادثة مثل الألعاب.
+3. **VS Code الكامل داخل البرنامج**، والذكاء داخله مربوط بالموديل الذي يعمل على جهازك.
 
-> ⚠️ كل المراحل مكتوبة ومُختبرة على لينكس، وبانتظار التجربة الكاملة على ويندوز بحسب [قائمة التحقق](docs/CHECKLIST-WINDOWS.md). الإصدار 0.1.0 جاهز كمسودة ولم يُنشر بعد.
+> ⚠️ كل الميزات مُختبرة على لينكس باختبارات تشغيل كاملة. على ويندوز جُرّب حتى الآن: التثبيت، وتنزيل المحرك وتشغيله على كرت RTX 5070، وتنزيل VS Code وفتحه وتثبيت إضافة الذكاء. الباقي يُجرَّب بحسب [قائمة التحقق](docs/CHECKLIST-WINDOWS.md).
 
 ## التثبيت
 
-1. نزّل `Blazma-AI-Setup-<الإصدار>.exe` من صفحة [Releases](https://github.com/mr-kateba/blazma-ai/releases)، بعد نشر أول إصدار.
+1. نزّل `Blazma-AI-Setup-<الإصدار>.exe` من صفحة [Releases](https://github.com/mr-kateba/blazma-ai/releases).
 2. شغّله واختر مكان التثبيت.
    - البرنامج غير موقّع رقمياً بعد، فقد يظهر تحذير SmartScreen. اضغط "مزيد من المعلومات" ثم "تشغيل على أي حال".
-3. عند أول تشغيل يفحص البرنامج جهازك، ويقترح الموديل المناسب، وينزّل المحرك والموديل مرة واحدة.
+3. عند أول تشغيل يفحص البرنامج جهازك، ويقترح الموديل المناسب، وينزّل المحرك والموديل مرة واحدة. بعدها تشرح لك جولة قصيرة كل صفحة وكل زر.
+
+**المتطلبات:** ويندوز 10 أو 11 (64 بت)، ومساحة فاضية بقدر الموديل (من 1 إلى 8 جيجابايت للموديلات المقترحة). كرت NVIDIA يعطي أفضل سرعة، وبدونه يعمل على المعالج بموديل صغير.
 
 | المحادثة | VS Code |
 |---|---|
@@ -51,7 +54,7 @@
 | صفحة الموديلات: تنزيل وتبديل بدون إعادة تشغيل، حذف من الجهاز، إضافة موديل من Hugging Face بعد التحقق منه | ✅ مُجرّب على لينكس |
 | صفحة الإعدادات الكاملة: تعليمات الذكاء، درجة الإبداع، ذاكرة المحادثة، طبقات الكرت، المنفذ، مجلد الموديلات، التشغيل مع ويندوز، التحقق من التحديثات وتحديث المحرك | ✅ مُجرّب على لينكس، ⚠️ تحديث المحرك والتشغيل مع ويندوز يُجرَّبان على ويندوز |
 | المحادثة: شاشة ترحيب باقتراحات، تبديل الموديل من أعلى المحادثة، تجميع المحادثات حسب التاريخ، اختصارات Ctrl+1 إلى Ctrl+5 للصفحات | ✅ مُجرّب |
-| ملف التنصيب (NSIS) والأيقونة، وبناؤه تلقائياً على ويندوز عبر GitHub Actions | ✅ البرنامج المغلّف مُجرّب، ⚠️ ملف Setup.exe النهائي يُبنى على ويندوز |
+| ملف التنصيب (NSIS) والأيقونة، وبناؤه تلقائياً على ويندوز عبر GitHub Actions | ✅ يُبنى على ويندوز، ومُجرّب التثبيت عليه |
 | نسخ الردود: إعادة التوليد والتعديل يحفظان النسخ السابقة مع أسهم للتنقل | ✅ مُجرّب على لينكس |
 | زر "استمع" لقراءة الرد بأصوات ويندوز | ✅ المنطق مُجرّب بصوت عربي محاكى، ⚠️ الصوت الفعلي يُجرَّب على ويندوز |
 | مكتبتي: الإجابة من مستنداتك مع ذكر الملف (Qwen3-Embedding) | ✅ مُجرّب على لينكس (8 ملفات PDF وWord وHTML ونصوص، والسؤال الإنجليزي وجد الملاحظة العربية) |
@@ -207,7 +210,7 @@ npm start
 اختبارات تشغيل كاملة في `tests/`، تشغّل البرنامج الحقيقي بـPlaywright مع موديلات صغيرة حقيقية:
 
 ```bash
-LLAMA_SERVER=~/llama.cpp/build/bin/llama-server npm run test:setup   # مرة واحدة (أضف FEATURES=1 لاختبارات مكتبتي والصوت والرسم)
+LLAMA_SERVER=~/llama.cpp/build/bin/llama-server npm run test:setup   # مرة واحدة (أضف FEATURES=1 لاختبارات مكتبتي والصوت والرسم وVS Code)
 xvfb-run -a npm test                                                 # كل الاختبارات، أو: npm test -- chat kb
 ```
 
@@ -217,6 +220,7 @@ xvfb-run -a npm test                                                 # كل ال
 - المحادثات تبقى على جهازك فقط.
 - التطبيق يتصل بالإنترنت فقط من أجل:
   - تنزيل المحرك من GitHub.
+  - تنزيل VS Code (VSCodium من GitHub) عند أول فتح لصفحته وبعد موافقتك، والإضافات من [Open VSX](https://open-vsx.org) عندما تطلبها (ومنها Continue عند "ربط الذكاء"). ما تفعله داخل VS Code نفسه (الطرفية والإضافات وGit) يتصل بالإنترنت كما في VS Code العادي.
   - تنزيل الموديلات من Hugging Face.
   - **البحث في الإنترنت عندما يقرر الموديل ذلك** (زر الكرة الأرضية بجانب خانة الكتابة، مفعّل افتراضياً ويمكن إيقافه).
     - عند البحث يُرسل **نص البحث فقط** إلى DuckDuckGo، وليس المحادثة.
@@ -270,18 +274,18 @@ xvfb-run -a npm test                                                 # كل ال
 
 ## English
 
-**Blazma AI** is an open-source Windows app with a fully Arabic (RTL) interface. It combines a chat with open models running locally on your GPU (through llama.cpp's `llama-server`) and a live hardware monitor (GPU, CPU, RAM, temperatures, power draw).
+**Blazma AI** is a free, open-source Windows app with a fully Arabic (RTL) interface. It combines a chat with open models running locally on your GPU or CPU (through llama.cpp's `llama-server`), a live hardware monitor (GPU, CPU, RAM, temperatures, power draw), and the full VS Code inside the app with its AI wired to the local model.
 
-**Status:** feature-complete for 0.1.0 and tested end to end on Linux (24 Playwright tests that drive the real app with small real models); Windows-specific paths are written and await testing on a real Windows + NVIDIA machine ([checklist](docs/CHECKLIST-WINDOWS.md)). Features:
+**Status:** feature-complete for 0.1.0 and tested end to end on Linux (22 Playwright test files that drive the real app with small real models). On Windows so far: install, engine download and run on an RTX 5070, and the VS Code page (download, folder, Continue install); the rest follows the [checklist](docs/CHECKLIST-WINDOWS.md). Features:
 - local chat with streaming, reasoning, safe Markdown, images in, files (PDF, Word, text), web search, personas, saved chats with versions (regenerate / edit keep earlier replies), export;
 - "My library": answers from your own folders of documents (Qwen3-Embedding 0.6B, semantic search, file names shown as sources);
 - voice input (whisper.cpp), read-aloud with Windows voices, image generation (stable-diffusion.cpp + Z-Image Turbo);
 - model catalog, any local GGUF / Ollama / LM Studio model, OpenAI-compatible local API, idle unload, speculative decoding (experimental);
-- the full VS Code (VSCodium's web server, downloaded on first use) inside the app, with the Continue extension wired to the local model;
+- the full VS Code (VSCodium's web server, downloaded on first use) inside the app, in the app's colors, with the Continue extension wired to the local model and answering in Arabic (VS Code's own UI stays in English: there is no official Arabic language pack);
 - a live hardware dashboard with a small in-chat overlay; light and dark themes; in-app updates.
 
 **Run from source:** `npm install && npm start`.
 
-**Privacy:** no telemetry. The network is used to download the engine (GitHub), models (Hugging Face) and, on first use and after consent, whisper.cpp, stable-diffusion.cpp and their models; for optional web search by the model (only the search query goes to DuckDuckGo; pages are fetched only from search results or links the user typed; local/private addresses are blocked), and to check for / download updates only when asked. Documents, recordings and image prompts never leave the machine. All local servers bind to 127.0.0.1, requires a per-session random API key, and only accepts the app's own origin.
+**Privacy:** no telemetry (VS Code's and Continue's are turned off too). The network is used to download the engine (GitHub), models (Hugging Face) and, on first use and after consent, whisper.cpp, stable-diffusion.cpp, VSCodium and their models or extensions (Open VSX); for optional web search by the model (only the search query goes to DuckDuckGo; pages are fetched only from search results or links the user typed; local/private addresses are blocked), and to check for / download updates only when asked. Documents, recordings and image prompts never leave the machine. All local servers bind to 127.0.0.1, requires a per-session random API key, and only accepts the app's own origin.
 
-**License:** MIT. llama.cpp, whisper.cpp, stable-diffusion.cpp and electron-updater are MIT. Qwen3.5, Gemma 4, Qwen3-Embedding and Z-Image Turbo are Apache-2.0. IBM Plex Sans Arabic is OFL-1.1.
+**License:** MIT. llama.cpp, whisper.cpp, stable-diffusion.cpp, VSCodium and electron-updater are MIT. Continue, Qwen3.5, Gemma 4, Qwen3-Embedding and Z-Image Turbo are Apache-2.0. IBM Plex Sans Arabic is OFL-1.1.
