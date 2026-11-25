@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="256" height="256">
+  <defs>
+    <linearGradient id="blazma" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFB300"/>
+      <stop offset="1" stop-color="#FF3D00"/>
+    </linearGradient>
+  </defs>
+  <path d="M 50,3 L 91,26.5 L 91,73.5 L 50,97 L 9,73.5 L 9,26.5 Z" fill="url(#blazma)"/>
+  <path d="M 57,14 L 27,55 L 46,55 L 40,86 L 73,43 L 54,43 L 61,14 Z" fill="#FFFFFF"/>
+</svg>

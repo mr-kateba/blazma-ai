@@ -91,7 +91,13 @@ function codeBlock(lang, code, labels) {
     studio = el('button', { type: 'button', class: 'md-copy' }, labels.openInStudio);
     studio.addEventListener('click', () => labels.studio(code, lang));
   }
-  const head = el('div', { class: 'md-code-head' }, el('span', null, lang || labels.code), el('span', { class: 'row' }, studio, save, copy));
+  // "شغّل": the live preview (lib/preview.js) for HTML, SVG and browser JS.
+  let run = null;
+  if (labels.run && labels.canRun && labels.canRun(code, lang)) {
+    run = el('button', { type: 'button', class: 'md-copy md-run' }, labels.runLabel);
+    run.addEventListener('click', () => labels.run(code, lang));
+  }
+  const head = el('div', { class: 'md-code-head' }, el('span', null, lang || labels.code), el('span', { class: 'row' }, run, studio, save, copy));
   return el('div', { class: 'md-code', dir: 'ltr' }, head, el('pre', null, el('code', null, code)));
 }
 

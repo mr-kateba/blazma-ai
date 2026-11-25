@@ -26,9 +26,13 @@ function save(persona) {
   const id = persona.id && /^custom-[a-f0-9]{12}$/.test(persona.id) ? persona.id : `custom-${crypto.randomBytes(6).toString('hex')}`;
   const next = all.filter((p) => p.id !== id);
   if (next.length >= MAX) throw new AppError('persona-invalid', 'too many');
-  next.push({ id, name, icon, prompt });
+  // 0.2.0: the assistant's own library folders, and "only from its documents".
+  const folders = Array.isArray(persona.folders) ? persona.folders.filter((f) => typeof f === 'string' && f.length < 1000).slice(0, 20) : [];
+  const strict = Boolean(persona.strict) && folders.length > 0;
+  const saved = { id, name, icon, prompt, ...(folders.length ? { folders } : {}), ...(strict ? { strict } : {}) };
+  next.push(saved);
   writeJson(file(), next);
-  return { id, name, icon, prompt };
+  return saved;
 }
 
 function remove(id) {

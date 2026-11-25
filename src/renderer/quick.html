@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; connect-src http://127.0.0.1:*; base-uri 'none'; form-action 'none'; object-src 'none'">
+  <title>Blazma AI</title>
+  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="quick.css">
+  <script type="module" src="quick.js"></script>
+</head>
+<body class="quick">
+  <div class="q-shell">
+    <header class="q-head">
+      <img src="logo.svg" alt="" class="q-logo">
+      <strong id="q-title"></strong>
+      <button id="q-close" class="icon-btn" type="button" aria-label="✕">✕</button>
+    </header>
+    <div id="q-selected" class="q-selected"></div>
+    <div id="q-actions" class="q-actions"></div>
+    <div id="q-answer" class="q-answer" aria-live="polite"></div>
+    <footer class="q-foot">
+      <form id="q-form" class="q-form">
+        <input id="q-input" class="input" type="text" dir="auto" autocomplete="off">
+      </form>
+      <div class="row q-tools">
+        <button id="q-copy" class="btn ghost small" type="button" hidden></button>
+        <button id="q-chat" class="btn ghost small" type="button" hidden></button>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

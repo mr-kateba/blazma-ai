@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="512" height="512">
+  <defs>
+    <linearGradient id="blazma" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFB300"/>
+      <stop offset="1" stop-color="#FF3D00"/>
+    </linearGradient>
+  </defs>
+  <path d="M 50,3 L 91,26.5 L 91,73.5 L 50,97 L 9,73.5 L 9,26.5 Z" fill="url(#blazma)"/>
+  <path d="M50,24 L72,36 L72,62 L50,74 L28,62 L28,36 Z M28,36 L50,48 L72,36 M50,48 L50,74" fill="none" stroke="#fff" stroke-width="6" stroke-linejoin="round" stroke-linecap="round"/>
+</svg>

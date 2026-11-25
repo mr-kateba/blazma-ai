@@ -39,6 +39,11 @@ const DEFAULTS = Object.freeze({
   gpuTempDanger: null,
   language: 'ar', // interface language: 'ar' | 'en'
   systemPrompt: DEFAULT_PROMPTS.ar,
+  memoryEnabled: true, // facts about the user added to every chat
+  memory: [], // [{ id, text }]
+  quickEnabled: true, // the quick assistant on a global shortcut (quick.js)
+  quickKey: 'Alt+Space',
+  tasks: [], // scheduled prompts (tasks.js): [{ id, title, prompt, time: 'HH:MM', days: [0-6], web, enabled, lastRun }]
 });
 
 const isInt = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
@@ -73,6 +78,26 @@ const VALIDATORS = {
   gpuTempWarn: (v) => v === null || isInt(v, 30, 110),
   gpuTempDanger: (v) => v === null || isInt(v, 30, 110),
   language: (v) => ['ar', 'en'].includes(v),
+  memoryEnabled: (v) => typeof v === 'boolean',
+  memory: (v) => Array.isArray(v) && v.length <= 200 && v.every((m) => m && typeof m.id === 'string' && typeof m.text === 'string' && m.text.length <= 500),
+  quickEnabled: (v) => typeof v === 'boolean',
+  quickKey: (v) => typeof v === 'string' && /^((Ctrl|Alt|Shift|Super)\+){1,3}([A-Z0-9]|Space|F([1-9]|1[0-2]))$/.test(v),
+  tasks: (v) =>
+    Array.isArray(v) &&
+    v.length <= 30 &&
+    v.every(
+      (t) =>
+        t &&
+        typeof t.id === 'string' &&
+        typeof t.title === 'string' &&
+        t.title.length <= 80 &&
+        typeof t.prompt === 'string' &&
+        t.prompt.length <= 4000 &&
+        /^([01]\d|2[0-3]):[0-5]\d$/.test(t.time) &&
+        Array.isArray(t.days) &&
+        t.days.every((d) => Number.isInteger(d) && d >= 0 && d <= 6) &&
+        typeof t.enabled === 'boolean',
+    ),
 };
 
 let current = null;

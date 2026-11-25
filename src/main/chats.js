@@ -45,6 +45,13 @@ function cleanMessage(m, depth = 0) {
     }));
   }
   if (typeof m.imagePrompt === 'string') out.imagePrompt = m.imagePrompt.slice(0, 2000);
+  // 0.2.0: which model wrote the reply, and a comparison with another model.
+  if (typeof m.model === 'string' && m.model) out.model = m.model.slice(0, 120);
+  if (out.role === 'assistant' && m.compare && depth === 0 && typeof m.compare.content === 'string') {
+    out.compare = { model: String(m.compare.model || '').slice(0, 120), content: m.compare.content.slice(0, 200000) };
+    if (m.compare.reasoning) out.compare.reasoning = String(m.compare.reasoning);
+    if (m.compare.error) out.compare.error = String(m.compare.error).slice(0, 500);
+  }
   if (out.role === 'user' && typeof m.command === 'string' && /^[a-z]{1,20}$/.test(m.command)) out.command = m.command;
   if (m.error) out.error = String(m.error);
   if (m.stopped) out.stopped = true;

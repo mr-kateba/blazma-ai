@@ -60,7 +60,7 @@ contextBridge.exposeInMainWorld(
     kbAddFolder: () => ipcRenderer.invoke('kb:addFolder'),
     kbRemoveFolder: (folder) => ipcRenderer.invoke('kb:removeFolder', String(folder)),
     kbUpdate: () => ipcRenderer.invoke('kb:update'),
-    kbSearch: (question) => ipcRenderer.invoke('kb:search', String(question)),
+    kbSearch: (question, folders) => ipcRenderer.invoke('kb:search', String(question), Array.isArray(folders) ? folders.map(String) : null),
     kbReveal: (file) => ipcRenderer.invoke('kb:reveal', String(file)),
     onKbProgress(cb) {
       const listener = (_e, p) => cb(p);
@@ -102,6 +102,35 @@ contextBridge.exposeInMainWorld(
     chatsRestore: () => ipcRenderer.invoke('chats:restore'),
     saveTextFile: (content, lang) => ipcRenderer.invoke('file:saveText', String(content), String(lang || '')),
     getSettings: () => ipcRenderer.invoke('settings:get'),
+    previewSet: (code, lang) => ipcRenderer.invoke('preview:set', String(code), String(lang || '')),
+    crashStatus: () => ipcRenderer.invoke('crash:status'),
+    crashOpen: () => ipcRenderer.invoke('crash:open'),
+    quickSetKey: (key) => ipcRenderer.invoke('quick:setKey', String(key)),
+    quickSetEnabled: (on) => ipcRenderer.invoke('quick:setEnabled', Boolean(on)),
+    quickContext: () => ipcRenderer.invoke('quick:context'),
+    quickHide: () => ipcRenderer.invoke('quick:hide'),
+    quickToChat: (text) => ipcRenderer.invoke('quick:toChat', String(text)),
+    tasksRun: (id) => ipcRenderer.invoke('tasks:run', String(id)),
+    onQuickContext(cb) {
+      const listener = (_e, c) => cb(c);
+      ipcRenderer.on('quick:context', listener);
+      return () => ipcRenderer.removeListener('quick:context', listener);
+    },
+    onQuickToChat(cb) {
+      const listener = (_e, t) => cb(t);
+      ipcRenderer.on('quick:toChat', listener);
+      return () => ipcRenderer.removeListener('quick:toChat', listener);
+    },
+    onTaskOpen(cb) {
+      const a = (_e, id) => cb(id);
+      const b = (_e, d) => cb(null, d);
+      ipcRenderer.on('tasks:open', a);
+      ipcRenderer.on('tasks:done', b);
+      return () => {
+        ipcRenderer.removeListener('tasks:open', a);
+        ipcRenderer.removeListener('tasks:done', b);
+      };
+    },
     getTheme: () => ipcRenderer.invoke('theme:get'),
     onThemeChanged(cb) {
       const listener = (_e, t) => cb(t);

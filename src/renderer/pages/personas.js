@@ -75,6 +75,38 @@ export function openPersonaEditor(onChange) {
   const prompt = el('textarea', { rows: '6', placeholder: P.promptPh, dir: 'auto' });
   const status = el('div', { class: 'muted small' });
   let editingId = null;
+  // 0.2.0: the assistant's own documents (folders of "مكتبتي") and strict mode.
+  const A = ui.v2.assistant;
+  let libFolders = [];
+  const docsBox = el('div', { class: 'persona-docs' });
+  const strictInput = el('input', { type: 'checkbox' });
+  const strictRow = el('label', { class: 'row persona-strict', title: A.strictDesc }, strictInput, el('span', null, A.strict));
+  const drawDocs = (chosen = []) => {
+    docsBox.replaceChildren(
+      el('div', { class: 'muted small' }, libFolders.length ? A.docsDesc : A.docsNone),
+      ...libFolders.map((f) => el('label', { class: 'row persona-folder', dir: 'ltr' }, el('input', { type: 'checkbox', value: f, checked: chosen.includes(f) }), el('span', null, f))),
+    );
+    strictRow.hidden = !libFolders.length;
+  };
+  window.blazma.kbStatus().then((kb) => {
+    libFolders = (kb && kb.folders) || [];
+    const p = custom.find((x) => x.id === editingId);
+    drawDocs(p && p.folders ? p.folders : []);
+  });
+  const templates = el(
+    'div',
+    { class: 'row persona-templates' },
+    el('span', { class: 'muted small' }, `${A.templates}:`),
+    ...Object.values(A.tpl).map(([emoji, tname, tprompt]) => {
+      const b = el('button', { type: 'button', class: 'chip' }, `${emoji} ${tname}`);
+      b.addEventListener('click', () => {
+        if (!name.value) name.value = tname;
+        if (!icon.value) icon.value = emoji;
+        prompt.value = tprompt;
+      });
+      return b;
+    }),
+  );
   const listBox = el('div', { class: 'persona-list' });
 
   const fill = (p) => {
@@ -82,6 +114,8 @@ export function openPersonaEditor(onChange) {
     name.value = p ? p.name : '';
     icon.value = p ? p.icon : '';
     prompt.value = p ? p.prompt : '';
+    drawDocs(p && p.folders ? p.folders : []);
+    strictInput.checked = Boolean(p && p.strict);
     saveBtn.textContent = p ? P.update : P.add;
     name.focus();
   };
@@ -108,7 +142,8 @@ export function openPersonaEditor(onChange) {
 
   const saveBtn = el('button', { type: 'button', class: 'btn primary' }, P.add);
   saveBtn.addEventListener('click', async () => {
-    const res = await window.blazma.personasSave({ id: editingId, name: name.value, icon: icon.value, prompt: prompt.value });
+    const folders = [...docsBox.querySelectorAll('input:checked')].map((i) => i.value);
+    const res = await window.blazma.personasSave({ id: editingId, name: name.value, icon: icon.value, prompt: prompt.value, folders, strict: strictInput.checked });
     if (!res.ok) {
       status.textContent = P.invalid;
       return;
@@ -129,7 +164,7 @@ export function openPersonaEditor(onChange) {
     el('h2', null, P.manage),
     el('p', { class: 'muted small' }, P.intro),
     listBox,
-    el('div', { class: 'persona-form' }, el('div', { class: 'row' }, icon, name), prompt, el('div', { class: 'row' }, saveBtn, newBtn, el('span', { class: 'spacer' }), closeBtn), status),
+    el('div', { class: 'persona-form' }, templates, el('div', { class: 'row' }, icon, name), prompt, el('details', { class: 'persona-docs-wrap' }, el('summary', null, A.docs), docsBox, strictRow), el('div', { class: 'row' }, saveBtn, newBtn, el('span', { class: 'spacer' }), closeBtn), status),
   );
   overlay.append(modal);
   overlay.addEventListener('mousedown', (e) => e.target === overlay && close());

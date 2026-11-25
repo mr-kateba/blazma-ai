@@ -12,6 +12,7 @@ import { startRecording } from '../lib/recorder.js';
 import { loadPersonas, personaById, openPersonaMenu } from './personas.js';
 import { confirmDialog, promptDialog } from '../lib/dialog.js';
 import { attachSlashMenu, parseCommand, withCommand, commandById } from '../lib/slash.js';
+import { initPreview, runPreview, canRun, closePreview } from '../lib/preview.js';
 
 // Today's date and time in Arabic (Gregorian and Umm al-Qura Hijri), with
 // Western digits to match the rest of the app.
@@ -35,6 +36,9 @@ const mdLabels = {
   save: (code, lang) => window.blazma.saveTextFile(code, lang),
   openInStudio: ui.studio.openInStudio,
   studio: (code, lang) => window.dispatchEvent(new CustomEvent('blazma:open-in-studio', { detail: { code, lang } })),
+  runLabel: ui.v2.run,
+  canRun,
+  run: (code, lang) => runPreview(code, lang),
 };
 
 const $ = (id) => document.getElementById(id);
@@ -429,7 +433,18 @@ function messageNode(msg, index) {
       ),
     );
   }
-  if (!isUser && msg.content) body.append(renderMarkdown(msg.streaming ? visibleText(msg.content) : msg.content, mdLabels));
+  if (!isUser && msg.compare) {
+    // Side by side: this reply and the same question answered by another model.
+    const close = el('button', { type: 'button', class: 'icon-btn', title: ui.v2.compare.close, 'aria-label': ui.v2.compare.close }, '✕');
+    close.addEventListener('click', () => {
+      delete msg.compare;
+      renderMessages();
+      persist();
+    });
+    const mine = compareColumn(msg, { model: msg.model, content: msg.content, streaming: msg.streaming }, index);
+    mine.querySelector('.cmp-head').append(close);
+    body.append(el('div', { class: 'compare-grid' }, mine, compareColumn(msg, msg.compare, index)));
+  } else if (!isUser && msg.content) body.append(renderMarkdown(msg.streaming ? visibleText(msg.content) : msg.content, mdLabels));
   if (!isUser && !msg.streaming && msg.sources && msg.sources.length) {
     const seen = new Set();
     const unique = msg.sources.filter((src) => !seen.has(src.url) && seen.add(src.url)).slice(0, 6);
@@ -467,7 +482,10 @@ function messageNode(msg, index) {
     if (!isUser && msg.content) footer.append(listenButton(msg));
     if (!abortController && !imageBusy) {
       if (isUser) footer.append(el('button', { type: 'button', class: 'icon-btn', onclick: () => startEdit(index) }, ui.chat.edit));
-      else if (index === messages.length - 1 && !msg.imagePrompt) footer.append(el('button', { type: 'button', class: 'icon-btn', onclick: regenerate }, ui.chat.regenerate));
+      else if (index === messages.length - 1 && !msg.imagePrompt) {
+        footer.append(el('button', { type: 'button', class: 'icon-btn', onclick: regenerate }, ui.chat.regenerate));
+        if (msg.content && !msg.compare) footer.append(el('button', { type: 'button', class: 'icon-btn', onclick: (e) => openCompareMenu(e.currentTarget) }, ui.v2.compare.btn));
+      }
     }
     if (msg.alts && msg.alts.length > 1) footer.append(branchNav(msg, index));
     if (msg.timings && msg.timings.predicted_per_second) {
@@ -476,6 +494,131 @@ function messageNode(msg, index) {
   }
 
   return el('div', { class: `msg ${isUser ? 'msg-user' : 'msg-ai'}`, 'data-index': index }, body, footer);
+}
+
+// ---------- compare with another model (0.2.0) ----------
+
+// The name of the model that is loaded now (for the comparison labels).
+function currentModelName() {
+  const m = setupState && setupState.models && setupState.models.find((x) => x.id === setupState.modelId);
+  return m ? m.name : undefined;
+}
+
+function closeCompareMenu() {
+  document.querySelectorAll('.compare-menu').forEach((m) => m.remove());
+  document.removeEventListener('mousedown', outsideCompareMenu);
+}
+function outsideCompareMenu(e) {
+  if (!e.target.closest('.compare-menu')) closeCompareMenu();
+}
+
+function openCompareMenu(anchor) {
+  closeCompareMenu();
+  const C = ui.v2.compare;
+  const others = setupState ? setupState.models.filter((m) => m.downloaded && m.id !== setupState.modelId) : [];
+  const menu = el(
+    'div',
+    { class: 'model-menu compare-menu', role: 'menu' },
+    el('div', { class: 'model-menu-head' }, others.length ? C.pick : C.none),
+    ...others.map((m) => {
+      const row = el('button', { type: 'button', class: 'model-menu-item', role: 'menuitem' }, el('span', { dir: 'ltr' }, m.name), m.fits ? null : el('span', { class: 'tag tag-warn' }, fitLabel(m, setupState.hardware)));
+      row.addEventListener('click', () => {
+        closeCompareMenu();
+        compareWith(m);
+      });
+      return row;
+    }),
+  );
+  const r = anchor.getBoundingClientRect();
+  menu.style.top = `${Math.max(8, r.top - 8 - 44 * (others.length + 1))}px`;
+  menu.style.left = `${r.left}px`;
+  document.body.append(menu);
+  setTimeout(() => document.addEventListener('mousedown', outsideCompareMenu), 0);
+}
+
+function waitReady(modelId) {
+  return new Promise((resolve) => {
+    const check = (s) => {
+      if (s && s.modelId === modelId && s.phase === 'ready') {
+        off();
+        resolve(true);
+      } else if (s && s.phase === 'error') {
+        off();
+        resolve(false);
+      }
+    };
+    const off = window.blazma.onSetupState(check);
+    window.blazma.getSetupState().then(check);
+  });
+}
+
+async function compareWith(model) {
+  const target = messages[messages.length - 1];
+  if (!target || target.role !== 'assistant' || abortController) return;
+  const C = ui.v2.compare;
+  const cmp = { role: 'assistant', model: model.name, content: '', reasoning: '', streaming: true, steps: [], sources: [], status: C.switching(model.name) };
+  target.compare = cmp;
+  if (!target.model) target.model = currentModelName();
+  // While the other model loads, the chat hides and onState would abort a
+  // running reply, so the stop controller is made only once it is ready;
+  // "sending" blocks new messages meanwhile.
+  sending = true;
+  let signal = null;
+  setBusy(true);
+  renderLast();
+  try {
+    if (!(await (window.blazma.modelsUse(model.id), waitReady(model.id)))) throw new Error('not ready');
+    abortController = new AbortController();
+    signal = abortController.signal;
+    cmp.status = C.writing(model.name);
+    renderLast();
+    const conn = await window.blazma.getConnection();
+    // No "thinking" here: both answers are compared as answers, and a small
+    // model can spend its whole reply thinking.
+    const chatSettings = { ...(await window.blazma.getChatSettings()), thinking: false };
+    const persona = personaById(currentPersonaId);
+    let system = `${persona.prompt || chatSettings.systemPrompt}\n\n${dateContext(false)}`;
+    const memory = chatSettings.memoryEnabled ? chatSettings.memory || [] : [];
+    if (memory.length) system += `\n\n${ui.v2.memory.context(memory.map((m) => `- ${m.text}`).join('\n'))}`;
+    cmp.thinkStart = Date.now();
+    await streamReply({ reply: cmp, system, conn, chatSettings, webOn: false, signal });
+    if (!cmp.content.trim() && !cmp.error) cmp.error = C.failed;
+  } catch (err) {
+    if (err.name === 'AbortError') cmp.stopped = true;
+    else cmp.error = C.failed;
+  } finally {
+    cmp.streaming = false;
+    delete cmp.status;
+    abortController = null;
+    sending = false;
+    setBusy(false);
+    renderMessages();
+    persist();
+  }
+}
+
+function compareColumn(msg, cmpMsg, index) {
+  const C = ui.v2.compare;
+  const head = el('div', { class: 'cmp-head' }, el('span', { class: 'pill', dir: 'ltr' }, cmpMsg.model || '?'));
+  const col = el('div', { class: 'cmp-col' }, head);
+  if (cmpMsg.status) col.append(el('p', { class: 'muted pulse' }, cmpMsg.status));
+  if (cmpMsg.content) col.append(renderMarkdown(cmpMsg.streaming ? visibleText(cmpMsg.content) : cmpMsg.content, mdLabels));
+  if (cmpMsg.error) col.append(el('div', { class: 'msg-error' }, cmpMsg.error));
+  if (cmpMsg.stopped) col.append(el('p', { class: 'muted small' }, ui.chat.stopped));
+  if (cmpMsg === msg.compare && !cmpMsg.streaming && cmpMsg.content) {
+    const keep = el('button', { type: 'button', class: 'btn ghost small' }, C.useThis);
+    keep.addEventListener('click', () => {
+      const old = { content: msg.content, model: msg.model };
+      msg.content = cmpMsg.content;
+      msg.reasoning = cmpMsg.reasoning;
+      msg.model = cmpMsg.model;
+      msg.compare = { ...cmpMsg, content: old.content, model: old.model, reasoning: '' };
+      renderMessages();
+      persist();
+    });
+    head.append(keep);
+  }
+  return col;
 }
 
 // Downloads Blazma's Arabic voice after the user agrees. True when it is ready.
@@ -850,7 +993,7 @@ async function generate() {
   if (abortController) return;
   abortController = new AbortController();
   const signal = abortController.signal;
-  const reply = { role: 'assistant', content: '', reasoning: '', streaming: true, thinkStart: Date.now(), steps: [], sources: [] };
+  const reply = { role: 'assistant', content: '', reasoning: '', streaming: true, thinkStart: Date.now(), steps: [], sources: [], model: currentModelName() };
   // A regenerated reply becomes a new branch next to the earlier ones.
   if (pendingBranch && pendingBranch.index === messages.length) {
     reply.alts = pendingBranch.alts;
@@ -872,16 +1015,27 @@ async function generate() {
     const webOn = Boolean(chatSettings.webSearch);
     const persona = personaById(currentPersonaId);
     let system = `${persona.prompt || chatSettings.systemPrompt}\n\n${dateContext(webOn)}`;
+    const memory = chatSettings.memoryEnabled ? (chatSettings.memory || []) : [];
+    if (memory.length) system += `\n\n${ui.v2.memory.context(memory.map((m) => `- ${m.text}`).join('\n'))}`;
     // "مكتبتي": the passages of the user's documents closest to the question.
     const lastUser = [...messages].reverse().find((m) => m.role === 'user');
-    if (chatSettings.kbInChat && lastUser && lastUser.content.trim()) {
+    // An assistant with its own documents always searches them (0.2.0).
+    const ownDocs = persona.folders && persona.folders.length ? persona.folders : null;
+    if ((chatSettings.kbInChat || ownDocs) && lastUser && lastUser.content.trim()) {
       // A library problem is reported as such; the reply goes on without it.
-      const res = await window.blazma.kbSearch(lastUser.content).catch(() => ({ ok: false }));
+      const res = await window.blazma.kbSearch(lastUser.content, ownDocs).catch(() => ({ ok: false }));
       if (!res.ok) showComposerNote(ui.chat.kbFailed, 6000);
       const passages = res.ok ? res.result : [];
       if (passages.length) {
         system += `\n\n${ui.chat.kbContext(passages.map((p, i) => `[${i + 1}] (${p.name})\n${p.text}`).join('\n\n'))}`;
         reply.sources = passages.map((p) => ({ title: p.name, url: `file:${p.file}`, file: p.file }));
+      }
+      if (ownDocs && persona.strict) {
+        if (!passages.length) {
+          reply.content = ui.v2.assistant.notFound(persona.name);
+          return;
+        }
+        system += `\n\n${ui.v2.assistant.strictRule}`;
       }
     }
     if (chatSettings.shareDeviceInfo) {
@@ -1265,6 +1419,7 @@ async function persist() {
 }
 
 function newChat() {
+  closePreview();
   stopSpeaking();
   if (abortController) abortController.abort();
   if (imageBusy) window.blazma.imagesCancel();
@@ -1277,6 +1432,7 @@ function newChat() {
 }
 
 async function loadChat(id) {
+  closePreview();
   // Not while a reply or a picture is on its way: it belongs to this chat.
   if (abortController || imageBusy || sending) {
     showComposerNote(ui.chat.busySwitch, 4000);
@@ -1467,6 +1623,24 @@ function autoGrow(textarea) {
 
 export function initChat() {
   const input = $('chat-input');
+  initPreview(document.querySelector('.page-chat'), (text) => {
+    if (abortController || imageBusy || sending) return;
+    send(text);
+  });
+  // From the quick assistant: the same question, continued in a new chat.
+  window.blazma.onQuickToChat((text) => {
+    window.dispatchEvent(new CustomEvent('blazma:show-page', { detail: 'chat' }));
+    if (abortController || imageBusy || sending || !text) return;
+    newChat();
+    send(text);
+  });
+  // Scheduled tasks: a finished task appears in the list; its notification opens it.
+  window.blazma.onTaskOpen((id) => {
+    refreshList();
+    if (!id) return;
+    window.dispatchEvent(new CustomEvent('blazma:show-page', { detail: 'chat' }));
+    if (!abortController) loadChat(id);
+  });
   $('model-pill').addEventListener('click', () => (document.querySelector('.model-switch') ? closeModelMenu() : openModelMenu()));
   $('persona-pill').addEventListener('click', (e) => openPersonaMenu(e.currentTarget, currentPersonaId, (id) => setPersona(id)));
   $('btn-export-chat').title = ui.chat.exportTitle;
@@ -1485,6 +1659,21 @@ export function initChat() {
     e.preventDefault();
     const text = input.value.trim();
     if ((!text && !pendingImages.length && !pendingFiles.length) || abortController || imageBusy || sending) return;
+    // "/تذكر …": saved to the memory (settings), not sent to the model.
+    const remember = text.match(/^\/(?:تذكر|تذكّر|remember)(?:\s+([\s\S]*))?$/i);
+    if (remember) {
+      const fact = (remember[1] || '').trim().slice(0, 500);
+      if (!fact) return showComposerNote(ui.v2.memory.empty, 5000);
+      window.blazma.getSettings().then((s) => {
+        const memory = [...(s.memory || []), { id: `m${Date.now().toString(36)}`, text: fact }].slice(-200);
+        return window.blazma.updateSettings({ memory, memoryEnabled: true });
+      }).then(() => {
+        input.value = '';
+        autoGrow(input);
+        showComposerNote(ui.v2.memory.saved, 3000);
+      });
+      return;
+    }
     if (setupState && setupState.phase !== 'ready') {
       showComposerNote(ui.chat.waitModel, 5000);
       return;

@@ -7,6 +7,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const { protocol } = require('electron');
+const preview = require('./preview');
 
 const SCHEME = 'app';
 const HOST = 'blazma';
@@ -37,7 +38,7 @@ function buildCsp() {
     "font-src 'self'",
     "img-src 'self' data:",
     `connect-src ${connect}`,
-    "frame-src 'none'",
+    "frame-src app://preview",
     "worker-src 'none'",
     "base-uri 'none'",
     "form-action 'none'",
@@ -59,6 +60,7 @@ function notFound() {
 function handleAppProtocol() {
   protocol.handle(SCHEME, async (request) => {
     const url = new URL(request.url);
+    if (url.host === preview.HOST) return preview.response(url);
     if (url.host !== HOST) return notFound();
 
     let rel;

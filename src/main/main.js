@@ -12,6 +12,10 @@ const { Monitor } = require('./monitor');
 
 // Must run before `ready` so userData resolves to "%APPDATA%\Blazma AI".
 app.setName('Blazma AI');
+// Development and tests: a separate data folder, so the installed app's
+// chats and settings are never touched.
+if (process.env.BLAZMA_USER_DATA) app.setPath('userData', path.resolve(process.env.BLAZMA_USER_DATA));
+const crashLog = require('./crashlog');
 // Windows only shows notifications for apps with an AppUserModelID.
 if (process.platform === 'win32') app.setAppUserModelId('com.blazma.ai');
 registerScheme();
@@ -62,8 +66,12 @@ function createWindow() {
   });
 
   mainWindow.once('ready-to-show', () => mainWindow.show());
+  mainWindow.webContents.on('render-process-gone', (_e, d) => crashLog.write('page stopped', `${d.reason} (exit ${d.exitCode})`));
+  mainWindow.webContents.on('render-process-gone', (_e, d) => crashLog.write('page stopped', `${d.reason} (exit ${d.exitCode})`));
   mainWindow.on('closed', () => {
     mainWindow = null;
+    // The hidden quick-assistant window must not keep the app alive.
+    app.quit();
   });
   // A reloaded page starts without the programming page shown.
   mainWindow.webContents.on('did-start-loading', () => vscode.hideView());
@@ -79,7 +87,8 @@ function hardenWebContents() {
     });
     contents.on('will-attach-webview', (event) => event.preventDefault());
     contents.on('will-frame-navigate', (details) => {
-      if (!details.isMainFrame && !vscode.ownsContents(contents)) details.preventDefault();
+      // Sub-frames: VS Code's own, and the live preview (app://preview).
+      if (!details.isMainFrame && !vscode.ownsContents(contents) && !String(details.url).startsWith('app://preview/')) details.preventDefault();
     });
     contents.setWindowOpenHandler(() => ({ action: 'deny' }));
   });
@@ -123,6 +132,13 @@ if (!app.requestSingleInstanceLock()) {
     nativeTheme.themeSource = settings.get().theme;
     createWindow();
     setup.init();
+    // Quick assistant shortcut and scheduled tasks (0.2.0).
+    try {
+      require('./quick').apply();
+    } catch (err) {
+      crashLog.write('quick assistant', err);
+    }
+    require('./tasks').start({ setup, getWindow: () => mainWindow });
   });
 
   app.on('window-all-closed', () => app.quit());
@@ -131,7 +147,7 @@ if (!app.requestSingleInstanceLock()) {
   // Every helper program started by the app ends with it: the embedding
   // server (مكتبتي), whisper-server (voice), sd-server (drawing) and llama-server.
   const stopHelpers = () => {
-    for (const mod of ['./knowledge', './voice', './images', './vscode', './coder']) {
+    for (const mod of ['./knowledge', './voice', './images', './vscode', './coder', './quick', './tasks']) {
       try {
         require(mod).stop();
       } catch {
@@ -148,8 +164,13 @@ if (!app.requestSingleInstanceLock()) {
     stopHelpers();
     setup.shutdownSync();
   });
+  app.on('child-process-gone', (_e, d) => {
+    if (d.reason !== 'clean-exit' && d.reason !== 'killed') crashLog.write(`${d.type} stopped`, `${d.reason} (exit ${d.exitCode})${d.name ? ` ${d.name}` : ''}`);
+  });
+  process.on('unhandledRejection', (err) => crashLog.write('unhandled rejection', err));
   process.on('uncaughtException', (err) => {
     console.error(err);
+    crashLog.write('crash', err);
     stopHelpers();
     setup.shutdownSync();
     app.exit(1);

@@ -27,6 +27,8 @@ const images = require('./images');
 const personas = require('./personas');
 const { exportChat } = require('./exporter');
 const paths = require('./paths');
+const preview = require('./preview');
+const crashLog = require('./crashlog');
 
 // Settings the renderer may change (more are added with the settings page).
 const EDITABLE_SETTINGS = [
@@ -53,6 +55,11 @@ const EDITABLE_SETTINGS = [
   'idleUnloadMin',
   'speculative',
   'port',
+  'memoryEnabled',
+  'memory',
+  'quickEnabled',
+  'quickKey',
+  'tasks',
 ];
 
 // Starting with Windows uses the OS login items; elsewhere it is not offered.
@@ -189,7 +196,7 @@ function registerIpc({ setup, monitor, getWindow }) {
       }),
     ),
   );
-  handle('kb:search', (question) => wrap(() => knowledge.search(String(question || ''))));
+  handle('kb:search', (question, folders) => wrap(() => knowledge.search(String(question || ''), 5, Array.isArray(folders) && folders.length ? folders.map(String).slice(0, 20) : null)));
   // Shows a source file in Explorer; only files that are in the index.
   handle('kb:reveal', (file) => {
     // Only a file that is in the index (a source shown under a reply).
@@ -254,6 +261,8 @@ function registerIpc({ setup, monitor, getWindow }) {
       kbInChat: s.kbInChat,
       shareDeviceInfo: s.shareDeviceInfo,
       contextSize: s.contextSize,
+      memoryEnabled: s.memoryEnabled,
+      memory: s.memory,
     };
   });
 
@@ -316,6 +325,27 @@ function registerIpc({ setup, monitor, getWindow }) {
     setup.refreshModels();
     return settingsView();
   });
+  handle('preview:set', (code, lang) => wrap(() => preview.set(String(code || '').slice(0, 2e6), String(lang || ''))));
+  handle('crash:status', () => crashLog.exists());
+  handle('quick:setKey', (key) => {
+    const k = String(key || '');
+    if (!/^((Ctrl|Alt|Shift|Super)\+){1,3}([A-Z0-9]|Space|F([1-9]|1[0-2]))$/.test(k)) return { ok: false };
+    return { ok: require('./quick').setKey(k) };
+  });
+  handle('quick:setEnabled', (on) => ({ ok: require('./quick').setEnabled(Boolean(on)) }));
+  handle('quick:context', () => require('./quick').getContext());
+  handle('quick:hide', () => require('./quick').hide());
+  handle('quick:toChat', (text) => {
+    require('./quick').hide();
+    const w = getWindow();
+    if (!w) return;
+    if (w.isMinimized()) w.restore();
+    w.show();
+    w.focus();
+    w.webContents.send('quick:toChat', String(text || '').slice(0, 40000));
+  });
+  handle('tasks:run', (id) => wrap(() => require('./tasks').run(String(id))));
+  handle('crash:open', () => (crashLog.exists() ? shell.openPath(crashLog.file()) : ''));
   handle('settings:openFolder', (kind) => {
     const dir = kind === 'models' ? settings.modelsDir() : paths.userData();
     fs.mkdirSync(dir, { recursive: true });

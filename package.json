@@ -1,7 +1,7 @@
 {
   "name": "blazma-ai",
   "productName": "Blazma AI",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "تطبيق ويندوز عربي لمحادثة ذكاء اصطناعي محلي ومراقبة الجهاز",
   "main": "src/main/main.js",
   "author": "mr-kateba",

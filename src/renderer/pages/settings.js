@@ -575,12 +575,201 @@ function aboutSection(appInfo) {
     item('Blazma AI', S.about.version(appInfo.version), repo),
     item(S.about.privacy, S.about.privacyDesc, null),
     item(S.about.credits, S.about.creditsDesc, null),
+    crashItem(),
   );
+}
+
+// ---------- 0.2.0: memory, quick assistant, scheduled tasks ----------
+
+const V = ui.v2;
+const newId = (p) => `${p}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+
+function memorySection() {
+  const M = V.memory;
+  const list = el('div', { class: 'set-stack mem-list' });
+  const draw = () => {
+    const items = values.memory || [];
+    list.replaceChildren(
+      ...(items.length
+        ? items.map((m) => {
+            const del = el('button', { type: 'button', class: 'icon-btn', title: M.remove, 'aria-label': M.remove }, '✕');
+            del.addEventListener('click', async () => {
+              await save({ memory: (values.memory || []).filter((x) => x.id !== m.id) });
+              draw();
+            });
+            return el('div', { class: 'mem-item' }, el('span', { dir: 'auto' }, m.text), del);
+          })
+        : [el('div', { class: 'set-desc' }, M.none)]),
+    );
+  };
+  const input = el('input', { type: 'text', class: 'input', maxlength: '500', placeholder: M.placeholder, dir: 'auto' });
+  const add = el('button', { type: 'button', class: 'btn' }, M.add);
+  const doAdd = async () => {
+    const text = input.value.trim();
+    if (!text) return;
+    await save({ memory: [...(values.memory || []), { id: newId('m'), text }].slice(-200) });
+    input.value = '';
+    draw();
+  };
+  add.addEventListener('click', doAdd);
+  input.addEventListener('keydown', (e) => e.key === 'Enter' && doAdd());
+  draw();
+  return section(
+    'memory',
+    M.title,
+    M.desc,
+    item(M.enable, M.enableDesc, toggle(values.memoryEnabled, (on) => save({ memoryEnabled: on }))),
+    el('div', { class: 'set-item set-item-col' }, el('div', { class: 'row mem-add' }, input, add), list),
+  );
+}
+
+// Electron accelerator from a key event ("Alt+Space", "Ctrl+Shift+K").
+function accelerator(e) {
+  const key = e.code === 'Space' ? 'Space' : /^Key[A-Z]$/.test(e.code) ? e.code.slice(3) : /^Digit\d$/.test(e.code) ? e.code.slice(5) : /^F([1-9]|1[0-2])$/.test(e.code) ? e.code : null;
+  if (!key) return null;
+  const mods = [e.ctrlKey && 'Ctrl', e.altKey && 'Alt', e.shiftKey && 'Shift', e.metaKey && 'Super'].filter(Boolean);
+  if (!mods.length && !/^F/.test(key)) return null;
+  return [...mods, key].join('+');
+}
+
+function quickSection() {
+  const Q = V.quick;
+  const box = el('input', { type: 'text', class: 'input key-box', readonly: true, value: values.quickKey, dir: 'ltr' });
+  box.addEventListener('focus', () => (box.value = Q.keyPress));
+  box.addEventListener('blur', () => (box.value = values.quickKey));
+  box.addEventListener('keydown', async (e) => {
+    e.preventDefault();
+    const acc = accelerator(e);
+    if (!acc) return;
+    const res = await window.blazma.quickSetKey(acc);
+    if (!res.ok) return toast(Q.keyTaken, 'error');
+    values = await window.blazma.getSettings();
+    box.value = acc;
+    toast(S.saved);
+    box.blur();
+  });
+  return section(
+    'quick',
+    Q.title,
+    Q.desc,
+    item(Q.enable, Q.enableDesc, toggle(values.quickEnabled, async (on) => {
+      await window.blazma.quickSetEnabled(on);
+      values = await window.blazma.getSettings();
+      toast(S.saved);
+    })),
+    item(Q.key, Q.keyDesc, box),
+  );
+}
+
+function tasksSection() {
+  const K = V.tasks;
+  const list = el('div', { class: 'set-stack' });
+  let editing = null;
+  const saveTasks = (tasks) => save({ tasks });
+  const form = (t) => {
+    const name = el('input', { type: 'text', class: 'input', maxlength: '80', value: t.title, dir: 'auto' });
+    const prompt = el('textarea', { class: 'input', rows: '3', maxlength: '4000', placeholder: K.promptPh, dir: 'auto' });
+    prompt.value = t.prompt;
+    const time = el('input', { type: 'time', class: 'input', value: t.time, dir: 'ltr' });
+    const days = K.dayNames.map((d, i) => {
+      const cb = el('input', { type: 'checkbox', checked: t.days.includes(i) });
+      return { i, cb, node: el('label', { class: 'day-chip' }, cb, d) };
+    });
+    const web = el('input', { type: 'checkbox', checked: Boolean(t.web) });
+    const ok = el('button', { type: 'button', class: 'btn primary' }, K.save);
+    const cancel = el('button', { type: 'button', class: 'btn ghost' }, K.cancel);
+    ok.addEventListener('click', async () => {
+      const next = { ...t, title: name.value.trim() || K.title, prompt: prompt.value.trim(), time: time.value || '08:00', days: days.filter((d) => d.cb.checked).map((d) => d.i), web: web.checked };
+      if (!next.prompt || !next.days.length) return;
+      const all = (values.tasks || []).filter((x) => x.id !== t.id);
+      await saveTasks([...all, next]);
+      editing = null;
+      draw();
+    });
+    cancel.addEventListener('click', () => ((editing = null), draw()));
+    return el(
+      'div',
+      { class: 'task-form' },
+      el('label', null, K.name, name),
+      el('label', null, K.prompt, prompt),
+      el('div', { class: 'row' }, el('label', null, K.time, time), el('label', { class: 'row web-chip' }, web, K.web)),
+      el('div', null, el('div', { class: 'set-desc' }, K.days), el('div', { class: 'row days' }, ...days.map((d) => d.node))),
+      el('div', { class: 'row' }, ok, cancel),
+    );
+  };
+  const draw = () => {
+    const tasks = values.tasks || [];
+    const rows = tasks.map((t) => {
+      if (editing === t.id) return form(t);
+      const run = el('button', { type: 'button', class: 'btn small' }, K.runNow);
+      run.addEventListener('click', async () => {
+        run.disabled = true;
+        run.textContent = K.running;
+        const res = await window.blazma.tasksRun(t.id);
+        run.disabled = false;
+        run.textContent = K.runNow;
+        toast(res.ok ? K.done : K.failed, res.ok ? 'ok' : 'error');
+        values = await window.blazma.getSettings();
+        draw();
+      });
+      const edit = el('button', { type: 'button', class: 'btn ghost small' }, K.edit);
+      edit.addEventListener('click', () => ((editing = t.id), draw()));
+      const del = el('button', { type: 'button', class: 'btn ghost small' }, K.remove);
+      del.addEventListener('click', async () => {
+        await saveTasks((values.tasks || []).filter((x) => x.id !== t.id));
+        draw();
+      });
+      const days = t.days.length === 7 ? '' : ` · ${t.days.map((d) => K.dayNames[d]).join(ui.common.listSep)}`;
+      return el(
+        'div',
+        { class: 'task-row' },
+        el(
+          'div',
+          { class: 'task-text' },
+          el('div', { class: 'row' }, toggle(t.enabled, async (on) => saveTasks((values.tasks || []).map((x) => (x.id === t.id ? { ...x, enabled: on } : x)))), el('strong', { dir: 'auto' }, t.title)),
+          el('div', { class: 'set-desc' }, el('bdi', { dir: 'ltr' }, t.time), days, t.web ? ` · ${K.web}` : ''),
+          el('div', { class: 'set-desc task-prompt', dir: 'auto' }, t.prompt),
+          t.lastRun ? el('div', { class: 'set-desc' }, K.last(new Date(t.lastRun).toLocaleString())) : null,
+        ),
+        el('div', { class: 'row' }, run, edit, del),
+      );
+    });
+    if (editing === 'new') rows.push(form({ id: newId('t'), title: '', prompt: '', time: '08:00', days: [0, 1, 2, 3, 4, 5, 6], web: false, enabled: true }));
+    list.replaceChildren(...(rows.length ? rows : [el('div', { class: 'set-desc' }, K.none)]));
+  };
+  const add = el('button', { type: 'button', class: 'btn' }, `+ ${K.add}`);
+  add.addEventListener('click', () => ((editing = 'new'), draw()));
+  const examples = el(
+    'div',
+    { class: 'row task-examples' },
+    ...K.examples.map(([title, prompt, web]) => {
+      const b = el('button', { type: 'button', class: 'chip' }, `+ ${title}`);
+      b.addEventListener('click', async () => {
+        await saveTasks([...(values.tasks || []), { id: newId('t'), title, prompt, time: '08:00', days: [0, 1, 2, 3, 4, 5, 6], web, enabled: true }]);
+        draw();
+      });
+      return b;
+    }),
+  );
+  draw();
+  return section('tasks', K.title, K.desc, el('div', { class: 'set-item set-item-col' }, el('div', { class: 'row' }, add, examples), list));
+}
+
+function crashItem() {
+  const C = V.crash;
+  const btn = el('button', { type: 'button', class: 'btn ghost' }, C.open);
+  const note = el('span', { class: 'set-desc' });
+  window.blazma.crashStatus().then((has) => {
+    btn.hidden = !has;
+    note.textContent = has ? '' : C.none;
+  });
+  btn.addEventListener('click', () => window.blazma.crashOpen());
+  return item(C.title, C.desc, el('div', { class: 'row' }, btn, note));
 }
 
 // ---------- page ----------
 
-const SECTIONS = ['general', 'chat', 'kb', 'engine', 'monitor', 'api', 'updates', 'about'];
+const SECTIONS = ['general', 'chat', 'memory', 'quick', 'tasks', 'kb', 'engine', 'monitor', 'api', 'updates', 'about'];
 let currentTab = (() => {
   try {
     return SECTIONS.includes(localStorage.getItem('blazma.settingsTab')) ? localStorage.getItem('blazma.settingsTab') : 'general';
@@ -617,12 +806,12 @@ async function render() {
     'nav',
     { class: 'set-toc', 'aria-label': S.tocLabel },
     ...SECTIONS.map((id) => {
-      const b = el('button', { type: 'button', 'data-target': id }, el('span', { class: 'set-toc-icon', 'aria-hidden': 'true' }, S.tocIcons[id]), S.toc[id]);
+      const b = el('button', { type: 'button', 'data-target': id }, el('span', { class: 'set-toc-icon', 'aria-hidden': 'true' }, S.tocIcons[id] || { memory: '🧠', quick: '⌨', tasks: '⏰' }[id]), S.toc[id] || V[id].title);
       b.addEventListener('click', () => showTab(id));
       return b;
     }),
   );
-  const body = el('div', { class: 'set-body' }, generalSection(), chatSection(), kbSection(kb), engineSection(state), monitorSection(info), apiSection(conn), updatesSection(), aboutSection(appInfo));
+  const body = el('div', { class: 'set-body' }, generalSection(), chatSection(), memorySection(), quickSection(), tasksSection(), kbSection(kb), engineSection(state), monitorSection(info), apiSection(conn), updatesSection(), aboutSection(appInfo));
   $('settings-root').replaceChildren(el('div', { class: 'set-layout' }, toc, body));
   renderEngineBanner();
   renderUpdates();

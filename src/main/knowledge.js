@@ -268,10 +268,12 @@ async function update(onProgress = () => {}) {
 }
 
 // The passages closest in meaning to the question, best first.
-async function search(question, limit = 5) {
+// folders: only files inside these library folders (an assistant's own documents).
+async function search(question, limit = 5, folders = null) {
   const idx = load();
   const all = [];
-  for (const [file, f] of Object.entries(idx.files)) for (const c of f.chunks) all.push({ file, c });
+  const inside = (file) => !folders || folders.some((d) => file.toLowerCase().startsWith(`${String(d).replace(/[\\/]+$/, '').toLowerCase()}${path.sep}`));
+  for (const [file, f] of Object.entries(idx.files)) if (inside(file)) for (const c of f.chunks) all.push({ file, c });
   if (!all.length) return [];
   const [q] = await embed([`Instruct: ${QUERY_TASK}\nQuery:${String(question).slice(0, 4000)}`]);
   const scored = all.map(({ file, c }) => {

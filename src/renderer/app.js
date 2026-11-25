@@ -5,11 +5,12 @@ import { setSettingsVisible } from './pages/settings.js';
 import { setStudioVisible, openCodeInStudio } from './pages/studio.js';
 import { initModels, setModelsVisible } from './pages/models.js';
 import { initOverlay, setOverlayChatVisible } from './pages/overlay.js';
+import { setToolsVisible } from './pages/tools.js';
 import { el } from './lib/dom.js';
 import { initTooltips } from './lib/tooltip.js';
 import { startTour } from './lib/tour.js';
 
-const PAGES = ['chat', 'studio', 'device', 'models', 'settings'];
+const PAGES = ['chat', 'studio', 'device', 'models', 'tools', 'settings'];
 
 // Interface language (Settings > General): writing direction and the fixed
 // labels of index.html.
@@ -55,6 +56,7 @@ function showPage(name) {
   setStudioVisible(name === 'studio');
   setModelsVisible(name === 'models');
   setSettingsVisible(name === 'settings');
+  setToolsVisible(name === 'tools');
   setOverlayChatVisible(name === 'chat');
 }
 
@@ -90,7 +92,7 @@ window.blazma.onAlerts(showAlerts);
 // Ctrl+1 … Ctrl+5 switch pages (by key position, so any keyboard layout works).
 document.addEventListener('keydown', (e) => {
   if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
-  const m = /^Digit([1-5])$/.exec(e.code);
+  const m = /^Digit([1-6])$/.exec(e.code);
   if (!m) return;
   e.preventDefault();
   showPage(PAGES[Number(m[1]) - 1]);
