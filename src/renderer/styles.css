@@ -1291,3 +1291,28 @@ body.previewing .chat-list { display: none; }
 .persona-folder { gap: 8px; font-size: 13px; justify-content: flex-start; }
 .persona-strict { gap: 8px; font-size: 14px; justify-content: flex-start; }
 .persona-strict[hidden] { display: none; }
+
+/* ---------- 0.2.0: math and diagrams ---------- */
+.md-math { unicode-bidi: isolate; }
+.md-math-block { margin: 10px 0; overflow-x: auto; text-align: center; font-size: 1.12em; }
+math { font-family: 'Cambria Math', 'Segoe UI', serif; }
+.md-diagram { margin: 10px 0; }
+.md-diagram-frame { display: block; width: 100%; border: 1px solid var(--border); border-radius: 12px; background: transparent; }
+.md-diagram details.md-code summary { cursor: pointer; padding: 6px 10px; color: var(--muted); font-size: 12px; }
+
+/* ---------- 0.2.0: library extras ---------- */
+.kb-web { gap: 8px; margin-top: 8px; }
+.kb-web .input { flex: 1; min-width: 260px; }
+.kb-files { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; max-height: 420px; overflow: auto; }
+.kb-file { padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); }
+.kb-file-row { display: flex; align-items: center; gap: 10px; }
+.kb-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.kb-summary { margin-top: 8px; font-size: 13px; color: var(--muted); white-space: pre-wrap; }
+.kb-summary[hidden] { display: none; }
+.kb-text-modal { width: min(820px, 92vw); }
+.kb-text { max-height: 60vh; overflow: auto; white-space: pre-wrap; font-family: inherit; font-size: 13.5px; line-height: 1.7; padding: 12px; border-radius: 10px; background: var(--bg); }
+.ok-text { color: var(--ok) !important; }
+
+/* the chat header stays on one line next to the preview */
+.pill-btn { white-space: nowrap; }
+body.previewing .chat-title h1, body.previewing #btn-export-chat, body.previewing #btn-stop-server, body.previewing #btn-overlay { display: none; }

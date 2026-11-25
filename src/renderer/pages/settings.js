@@ -382,6 +382,7 @@ function kbSection(kb) {
     item(K.folders, null, null, el('div', { class: 'kb-folders' }, ...folders)),
     item(K.index, statusLine, el('div', { class: 'row' }, add, update)),
     item(K.use, K.useDesc, toggle(values.kbInChat, (on) => save({ kbInChat: on }))),
+    ...kbExtras(kb),
   );
 }
 
@@ -755,6 +756,135 @@ function tasksSection() {
   return section('tasks', K.title, K.desc, el('div', { class: 'set-item set-item-col' }, el('div', { class: 'row' }, add, examples), list));
 }
 
+// 0.2.0: web pages, the files read (and what was read), summaries.
+function kbExtras(kb) {
+  const K2 = V.kb2;
+  const url = el('input', { type: 'url', class: 'input', placeholder: K2.webPh, dir: 'ltr' });
+  const addUrl = el('button', { type: 'button', class: 'btn' }, K2.webAdd);
+  addUrl.addEventListener('click', async () => {
+    if (!/^https?:\/\//i.test(url.value.trim())) return;
+    addUrl.disabled = true;
+    addUrl.textContent = K2.webAdding;
+    const res = await window.blazma.kbAddUrl(url.value.trim());
+    addUrl.disabled = false;
+    addUrl.textContent = K2.webAdd;
+    if (!res.ok) return toast((ui.errors[res.error.code] || ui.errors.unknown).title, 'error');
+    url.value = '';
+    toast(K2.webAdded);
+    render();
+  });
+  const list = el('div', { class: 'kb-files' }, el('p', { class: 'muted small' }, '…'));
+  window.blazma.kbFiles().then((files) => {
+    if (!files.length) return list.replaceChildren(el('p', { class: 'muted small' }, K2.noFiles));
+    list.replaceChildren(
+      ...files.map((f) => {
+        const read = el('button', { type: 'button', class: 'btn ghost small', disabled: !f.chunks }, K2.read);
+        read.addEventListener('click', async () => showFileText(f.name, await window.blazma.kbFileText(f.file)));
+        const sum = el('button', { type: 'button', class: 'btn ghost small', disabled: !f.chunks }, K2.summarize);
+        const sumBox = el('div', { class: 'kb-summary', dir: 'auto', hidden: !f.summary }, f.summary);
+        sum.addEventListener('click', async () => {
+          sum.disabled = true;
+          sum.textContent = K2.summarizing;
+          const res = await window.blazma.kbSummarize(f.file);
+          sum.disabled = false;
+          sum.textContent = K2.summarize;
+          if (!res.ok) return toast((ui.errors[res.error.code] || ui.errors.unknown).title, 'error');
+          sumBox.textContent = res.result;
+          sumBox.hidden = false;
+        });
+        return el(
+          'div',
+          { class: 'kb-file' },
+          el('div', { class: 'kb-file-row' }, el('span', { class: 'kb-file-name', dir: 'auto', title: f.file }, f.name), f.error ? el('span', { class: 'tag tag-warn' }, K2.failed) : null, el('span', { class: 'row' }, read, sum)),
+          sumBox,
+        );
+      }),
+    );
+  });
+  return [
+    item(K2.web, K2.webDesc, null, el('div', { class: 'row kb-web' }, url, addUrl)),
+    item(K2.files, `${K2.filesDesc} ${K2.types}`, null, list),
+  ];
+}
+
+function showFileText(name, text) {
+  const K2 = V.kb2;
+  const close = el('button', { type: 'button', class: 'btn' }, K2.close);
+  const overlay = el('div', { class: 'modal-overlay' });
+  close.addEventListener('click', () => overlay.remove());
+  overlay.addEventListener('mousedown', (e) => e.target === overlay && overlay.remove());
+  overlay.append(el('div', { class: 'modal kb-text-modal', role: 'dialog' }, el('h2', null, K2.textTitle(name)), el('pre', { class: 'kb-text', dir: 'auto' }, text || ''), el('div', { class: 'row' }, close)));
+  document.body.append(overlay);
+}
+
+function mcpSection() {
+  const M = V.mcp;
+  const list = el('div', { class: 'set-stack' });
+  let editing = false;
+  const states = new Map();
+  const saveServers = (mcpServers) => save({ mcpServers });
+  const form = () => {
+    const name = el('input', { type: 'text', class: 'input', maxlength: '60', dir: 'auto' });
+    const command = el('input', { type: 'text', class: 'input', placeholder: M.commandPh, dir: 'ltr' });
+    const args = el('textarea', { class: 'input', rows: '4', placeholder: M.argsPh, dir: 'ltr' });
+    const ok = el('button', { type: 'button', class: 'btn primary' }, M.save);
+    const cancel = el('button', { type: 'button', class: 'btn ghost' }, M.cancel);
+    ok.addEventListener('click', async () => {
+      if (!name.value.trim() || !command.value.trim()) return;
+      const entry = { id: newId('s'), name: name.value.trim(), command: command.value.trim(), args: args.value.split('\n').map((a) => a.trim()).filter(Boolean), enabled: true };
+      await saveServers([...(values.mcpServers || []), entry]);
+      editing = false;
+      draw();
+      test(entry.id);
+    });
+    cancel.addEventListener('click', () => ((editing = false), draw()));
+    return el('div', { class: 'task-form' }, el('p', { class: 'set-desc' }, M.warn), el('label', null, M.name, name), el('label', null, M.command, command), el('label', null, M.args, args), el('div', { class: 'row' }, ok, cancel));
+  };
+  const test = async () => {
+    for (const s of values.mcpServers || []) states.set(s.id, M.testing);
+    draw();
+    const res = await window.blazma.mcpEnsure();
+    if (res.ok) for (const s of res.result) states.set(s.id, s.ready ? M.ok(s.tools.length) : M.failed(s.error || '?'));
+    draw();
+  };
+  const draw = () => {
+    const rows = (values.mcpServers || []).map((s) => {
+      const run = el('button', { type: 'button', class: 'btn small' }, M.test);
+      run.addEventListener('click', () => test(s.id));
+      const del = el('button', { type: 'button', class: 'btn ghost small' }, M.remove);
+      del.addEventListener('click', async () => {
+        await saveServers((values.mcpServers || []).filter((x) => x.id !== s.id));
+        states.delete(s.id);
+        draw();
+        window.blazma.mcpEnsure();
+      });
+      const st = states.get(s.id);
+      return el(
+        'div',
+        { class: 'task-row' },
+        el(
+          'div',
+          { class: 'task-text' },
+          el('div', { class: 'row' }, toggle(s.enabled, async (on) => {
+            await saveServers((values.mcpServers || []).map((x) => (x.id === s.id ? { ...x, enabled: on } : x)));
+            test();
+          }), el('strong', { dir: 'auto' }, s.name)),
+          el('div', { class: 'set-desc task-prompt', dir: 'ltr' }, [s.command, ...s.args].join(' ')),
+          st ? el('div', { class: `set-desc ${/^(يعمل|Running)/.test(st) ? 'ok-text' : ''}` }, st) : null,
+        ),
+        el('div', { class: 'row' }, run, del),
+      );
+    });
+    if (editing) rows.push(form());
+    list.replaceChildren(...(rows.length ? rows : [el('div', { class: 'set-desc' }, M.none)]));
+  };
+  const add = el('button', { type: 'button', class: 'btn' }, `+ ${M.add}`);
+  add.addEventListener('click', () => ((editing = true), draw()));
+  draw();
+  if ((values.mcpServers || []).some((s) => s.enabled)) test();
+  return section('mcp', M.title, M.desc, el('div', { class: 'set-item set-item-col' }, el('div', { class: 'row' }, add), list));
+}
+
 function crashItem() {
   const C = V.crash;
   const btn = el('button', { type: 'button', class: 'btn ghost' }, C.open);
@@ -769,7 +899,7 @@ function crashItem() {
 
 // ---------- page ----------
 
-const SECTIONS = ['general', 'chat', 'memory', 'quick', 'tasks', 'kb', 'engine', 'monitor', 'api', 'updates', 'about'];
+const SECTIONS = ['general', 'chat', 'memory', 'quick', 'tasks', 'mcp', 'kb', 'engine', 'monitor', 'api', 'updates', 'about'];
 let currentTab = (() => {
   try {
     return SECTIONS.includes(localStorage.getItem('blazma.settingsTab')) ? localStorage.getItem('blazma.settingsTab') : 'general';
@@ -806,12 +936,12 @@ async function render() {
     'nav',
     { class: 'set-toc', 'aria-label': S.tocLabel },
     ...SECTIONS.map((id) => {
-      const b = el('button', { type: 'button', 'data-target': id }, el('span', { class: 'set-toc-icon', 'aria-hidden': 'true' }, S.tocIcons[id] || { memory: '🧠', quick: '⌨', tasks: '⏰' }[id]), S.toc[id] || V[id].title);
+      const b = el('button', { type: 'button', 'data-target': id }, el('span', { class: 'set-toc-icon', 'aria-hidden': 'true' }, S.tocIcons[id] || { memory: '🧠', quick: '⌨', tasks: '⏰', mcp: '🧩' }[id]), S.toc[id] || V[id].title);
       b.addEventListener('click', () => showTab(id));
       return b;
     }),
   );
-  const body = el('div', { class: 'set-body' }, generalSection(), chatSection(), memorySection(), quickSection(), tasksSection(), kbSection(kb), engineSection(state), monitorSection(info), apiSection(conn), updatesSection(), aboutSection(appInfo));
+  const body = el('div', { class: 'set-body' }, generalSection(), chatSection(), memorySection(), quickSection(), tasksSection(), mcpSection(), kbSection(kb), engineSection(state), monitorSection(info), apiSection(conn), updatesSection(), aboutSection(appInfo));
   $('settings-root').replaceChildren(el('div', { class: 'set-layout' }, toc, body));
   renderEngineBanner();
   renderUpdates();

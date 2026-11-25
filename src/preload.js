@@ -62,6 +62,10 @@ contextBridge.exposeInMainWorld(
     kbUpdate: () => ipcRenderer.invoke('kb:update'),
     kbSearch: (question, folders) => ipcRenderer.invoke('kb:search', String(question), Array.isArray(folders) ? folders.map(String) : null),
     kbReveal: (file) => ipcRenderer.invoke('kb:reveal', String(file)),
+    kbFiles: () => ipcRenderer.invoke('kb:files'),
+    kbFileText: (file) => ipcRenderer.invoke('kb:fileText', String(file)),
+    kbAddUrl: (url) => ipcRenderer.invoke('kb:addUrl', String(url)),
+    kbSummarize: (file) => ipcRenderer.invoke('kb:summarize', String(file)),
     onKbProgress(cb) {
       const listener = (_e, p) => cb(p);
       ipcRenderer.on('kb:progress', listener);
@@ -103,6 +107,7 @@ contextBridge.exposeInMainWorld(
     saveTextFile: (content, lang) => ipcRenderer.invoke('file:saveText', String(content), String(lang || '')),
     getSettings: () => ipcRenderer.invoke('settings:get'),
     previewSet: (code, lang) => ipcRenderer.invoke('preview:set', String(code), String(lang || '')),
+    previewDiagram: (code, dark) => ipcRenderer.invoke('preview:diagram', String(code), Boolean(dark)),
     crashStatus: () => ipcRenderer.invoke('crash:status'),
     crashOpen: () => ipcRenderer.invoke('crash:open'),
     quickSetKey: (key) => ipcRenderer.invoke('quick:setKey', String(key)),
@@ -111,6 +116,9 @@ contextBridge.exposeInMainWorld(
     quickHide: () => ipcRenderer.invoke('quick:hide'),
     quickToChat: (text) => ipcRenderer.invoke('quick:toChat', String(text)),
     tasksRun: (id) => ipcRenderer.invoke('tasks:run', String(id)),
+    mcpEnsure: () => ipcRenderer.invoke('mcp:ensure'),
+    mcpTools: () => ipcRenderer.invoke('mcp:tools'),
+    mcpCall: (server, tool, args) => ipcRenderer.invoke('mcp:call', String(server), String(tool), args),
     onQuickContext(cb) {
       const listener = (_e, c) => cb(c);
       ipcRenderer.on('quick:context', listener);

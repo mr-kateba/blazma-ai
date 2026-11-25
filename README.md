@@ -20,15 +20,19 @@
 
 **المتطلبات:** ويندوز 10 أو 11 (64 بت)، ومساحة فاضية بقدر الموديل (من 1 إلى 8 جيجابايت للموديلات المقترحة). كرت NVIDIA يعطي أفضل سرعة، وبدونه يعمل على المعالج بموديل صغير.
 
-| المحادثة | VS Code |
+| المحادثة والمعاينة المباشرة | VS Code |
 |---|---|
 | ![المحادثة](docs/screenshots/chat.png) | ![VS Code](docs/screenshots/vscode.png) |
 | **جهازي** | **الموديلات** |
 | ![جهازي](docs/screenshots/device.png) | ![الموديلات](docs/screenshots/models.png) |
+| **قارن بين موديلين** | **المساعد السريع (Alt+Space)** |
+| ![قارن](docs/screenshots/compare.png) | ![المساعد السريع](docs/screenshots/quick.png) |
+| **المعادلات والمخططات** | |
+| ![المعادلات والمخططات](docs/screenshots/diagram.png) | |
 
 ## المميزات
 
-**الجديد في 0.2.0:** المعاينة المباشرة للكود مع «اطلب الإصلاح»، والذاكرة، والمساعد السريع من أي برنامج (Alt+Space)، ومقارنة موديلين، ومساعدون بمستنداتهم الخاصة ووضع «من مستنداته فقط»، والمهام المجدولة، وصفحة أدوات بلازما، وسجل الأعطال. التفاصيل في [CHANGELOG.md](CHANGELOG.md).
+**الجديد في 0.2.0:** المعاينة المباشرة للكود مع «اطلب الإصلاح»، والذاكرة، والمساعد السريع من أي برنامج (Alt+Space)، ومقارنة موديلين، ومساعدون بمستنداتهم الخاصة ووضع «من مستنداته فقط»، والمهام المجدولة، وأدوات MCP، وصفحات الويب والصور والملفات الممسوحة في «مكتبتي»، والمعادلات والمخططات، والتحديث الموقّع، وصفحة أدوات بلازما، وسجل الأعطال. التفاصيل في [CHANGELOG.md](CHANGELOG.md).
 
 - هيكل التطبيق والأمان والواجهة العربية
 - فحص الجهاز واقتراح الموديل المناسب
@@ -263,6 +267,7 @@ xvfb-run -a npm test                                                 # كل ال
 - الموديلات: Qwen3.5 من Alibaba Cloud، وGemma 4 من Google، وكلاهما برخصة Apache-2.0. ملفات GGUF من [Unsloth](https://huggingface.co/unsloth).
 - الخط: IBM Plex Sans Arabic، رخصة SIL Open Font License 1.1 ([src/renderer/fonts/OFL.txt](src/renderer/fonts/OFL.txt)).
 - قراءة PDF: [pdf.js](https://github.com/mozilla/pdf.js) (Apache-2.0). قراءة Word: [mammoth](https://github.com/mwilliamson/mammoth.js) (BSD-2-Clause).
+- المعادلات: [KaTeX](https://github.com/KaTeX/KaTeX) (MIT). المخططات: [Mermaid](https://github.com/mermaid-js/mermaid) (MIT). نص الرخصتين في `src/renderer/vendor/`.
 - حرارة المعالج وطاقته (اختياري، يثبّته المستخدم بنفسه): [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) (MPL-2.0).
 - البحث بالمعنى في "مكتبتي": [Qwen3-Embedding-0.6B](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B-GGUF) (Apache-2.0)، يشغّله llama.cpp.
 - الصوت إلى نص: [whisper.cpp](https://github.com/ggml-org/whisper.cpp) (MIT) وموديلات Whisper من OpenAI (MIT).
@@ -292,4 +297,4 @@ xvfb-run -a npm test                                                 # كل ال
 
 **Privacy:** no telemetry (VS Code's and Continue's are turned off too). The network is used to download the engine (GitHub), models (Hugging Face) and, on first use and after consent, whisper.cpp, stable-diffusion.cpp, VSCodium and their models or extensions (Open VSX); for optional web search by the model (only the search query goes to DuckDuckGo; pages are fetched only from search results or links the user typed; local/private addresses are blocked), and to check for / download updates only when asked. Documents, recordings and image prompts never leave the machine. All local servers bind to 127.0.0.1, requires a per-session random API key, and only accepts the app's own origin.
 
-**License:** MIT. llama.cpp, whisper.cpp, stable-diffusion.cpp, VSCodium and electron-updater are MIT. Continue, Qwen3.5, Gemma 4, Qwen3-Embedding and Z-Image Turbo are Apache-2.0. IBM Plex Sans Arabic is OFL-1.1.
+**License:** MIT. llama.cpp, whisper.cpp, stable-diffusion.cpp, VSCodium and electron-updater are MIT. Continue, Qwen3.5, Gemma 4, Qwen3-Embedding and Z-Image Turbo are Apache-2.0. IBM Plex Sans Arabic is OFL-1.1. KaTeX and Mermaid are MIT.

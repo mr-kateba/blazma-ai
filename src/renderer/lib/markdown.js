@@ -1,7 +1,9 @@
 // Minimal Markdown renderer that builds DOM nodes directly. Model output is
 // only ever inserted as text nodes, so no HTML in it can execute or render.
 // Supports: paragraphs, headings, fenced code, inline code, bold, italic,
-// strikethrough, links (shown as text), lists, blockquotes, tables, rules.
+// strikethrough, links (shown as text), lists, blockquotes, tables, rules,
+// math ($…$, $$…$$, \(…\), \[…\]) drawn by KaTeX as MathML (no HTML from the
+// model), and Mermaid diagrams (```mermaid) drawn in the sandboxed preview.
 
 import { el, detectDir } from './dom.js';
 
@@ -11,6 +13,28 @@ const RULE = /^\s{0,3}([-*_])(\s*\1){2,}\s*$/;
 const QUOTE = /^\s{0,3}>\s?/;
 const LIST_ITEM = /^(\s*)([-*+]|\d{1,9}[.)])\s+(.*)$/;
 const TABLE_SEP = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
+
+// ---------- math ----------
+
+// KaTeX (vendor/katex.min.js, loaded by the page) builds MathML nodes itself;
+// without it, or on a TeX error, the source is shown as code.
+function mathNode(tex, display) {
+  const box = el(display ? 'div' : 'span', { class: display ? 'md-math-block' : 'md-math', dir: 'ltr' });
+  if (globalThis.katex) {
+    try {
+      globalThis.katex.render(tex, box, { displayMode: display, output: 'mathml', throwOnError: true, trust: false, strict: 'ignore' });
+      return box;
+    } catch {
+      /* shown as code below */
+    }
+  }
+  box.replaceChildren(el('code', null, display ? `$$${tex}$$` : `$${tex}$`));
+  return box;
+}
+
+// $…$ only when it looks like math: no space inside the dollars and no digit
+// right after the closing one, so prices like "5$ و 10$" stay text.
+const INLINE_MATH = [/\$\$([^$\n]+?)\$\$/y, /\$(?=[^\s$])([^$\n]*?[^\s$\\])\$(?!\d)/y, /\\\(([\s\S]+?)\\\)/y];
 
 // ---------- inline ----------
 
@@ -34,6 +58,24 @@ function inline(text) {
   let i = 0;
   while (i < text.length) {
     const ch = text[i];
+    if (ch === '$' || (ch === '\\' && text[i + 1] === '(')) {
+      let hit = null;
+      for (const re of INLINE_MATH) {
+        re.lastIndex = i;
+        const m = re.exec(text);
+        if (m && /[\\^_{}=+\-a-zA-Z]/.test(m[1])) {
+          hit = { m, end: re.lastIndex };
+          break;
+        }
+      }
+      if (hit) {
+        if (buf) out.push(buf);
+        buf = '';
+        out.push(mathNode(hit.m[1], false));
+        i = hit.end;
+        continue;
+      }
+    }
     if (ch === '\\' && i + 1 < text.length && /[\\`*_~[\]()#>|-]/.test(text[i + 1])) {
       buf += text[i + 1];
       i += 2;
@@ -97,6 +139,11 @@ function codeBlock(lang, code, labels) {
     run = el('button', { type: 'button', class: 'md-copy md-run' }, labels.runLabel);
     run.addEventListener('click', () => labels.run(code, lang));
   }
+  // A Mermaid diagram: the picture, with its code folded under it.
+  if (/^mermaid$/i.test(lang || '') && labels.diagram) {
+    const head = el('div', { class: 'md-code-head' }, el('span', null, 'mermaid'), el('span', { class: 'row' }, save, copy));
+    return el('div', { class: 'md-diagram' }, labels.diagram(code), el('details', { class: 'md-code', dir: 'ltr' }, el('summary', null, labels.code), head, el('pre', null, el('code', null, code))));
+  }
   const head = el('div', { class: 'md-code-head' }, el('span', null, lang || labels.code), el('span', { class: 'row' }, run, studio, save, copy));
   return el('div', { class: 'md-code', dir: 'ltr' }, head, el('pre', null, el('code', null, code)));
 }
@@ -138,6 +185,31 @@ function blocks(lines, labels) {
     if (!line.trim()) {
       i += 1;
       continue;
+    }
+
+    // Display math: $$ … $$ or \[ … \] (on one line or several).
+    const t = line.trim();
+    if (t.startsWith('$$') || t.startsWith('\\[')) {
+      const close = t.startsWith('$$') ? '$$' : '\\]';
+      const rest = t.slice(2);
+      let tex = null;
+      if (rest.includes(close)) {
+        tex = rest.slice(0, rest.indexOf(close));
+        i += 1;
+      } else {
+        const body = [rest];
+        let j = i + 1;
+        while (j < lines.length && !lines[j].includes(close)) body.push(lines[j++]);
+        if (j < lines.length) {
+          body.push(lines[j].slice(0, lines[j].indexOf(close)));
+          tex = body.join('\n');
+          i = j + 1;
+        }
+      }
+      if (tex !== null && tex.trim()) {
+        out.push(mathNode(tex.trim(), true));
+        continue;
+      }
     }
 
     const fence = FENCE.exec(line);

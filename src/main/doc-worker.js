@@ -124,8 +124,80 @@ async function pdfText(buf) {
     out.push(layoutPage(content.items));
     page.cleanup();
   }
+  let images = [];
+  // A scanned PDF (pictures of pages, no text): its page pictures go back to
+  // the main process, which reads them with Windows OCR (ocr.js).
+  if (!out.join('').trim()) {
+    try {
+      images = await pageImages(doc, pdfjs.OPS, Math.min(pages, MAX_SCAN_PAGES));
+    } catch {
+      images = [];
+    }
+  }
   await task.destroy();
-  return { text: out.join('\n\n'), pages: doc.numPages, pagesRead: pages };
+  return { text: out.join('\n\n'), pages: doc.numPages, pagesRead: pages, images };
+}
+
+const MAX_SCAN_PAGES = 40;
+
+// The biggest picture on each page, as a 24-bit BMP (no canvas needed).
+async function pageImages(doc, OPS, pages) {
+  const out = [];
+  for (let i = 1; i <= pages; i++) {
+    const page = await doc.getPage(i);
+    const ops = await page.getOperatorList();
+    let best = null;
+    for (let k = 0; k < ops.fnArray.length; k++) {
+      if (ops.fnArray[k] !== OPS.paintImageXObject) continue;
+      const name = ops.argsArray[k][0];
+      const img = await new Promise((resolve) => {
+        try {
+          page.objs.get(name, resolve);
+        } catch {
+          resolve(null);
+        }
+      });
+      if (img && img.data && img.width * img.height > (best ? best.width * best.height : 0)) best = img;
+    }
+    if (best) out.push(toBmp(best));
+    page.cleanup();
+  }
+  return out;
+}
+
+function toBmp({ width, height, data, kind }) {
+  // kind: 1 = 1 bit gray, 2 = RGB 24, 3 = RGBA 32 (pdf.js ImageKind).
+  const row = Math.ceil((width * 3) / 4) * 4;
+  const buf = Buffer.alloc(54 + row * height);
+  buf.write('BM', 0);
+  buf.writeUInt32LE(buf.length, 2);
+  buf.writeUInt32LE(54, 10);
+  buf.writeUInt32LE(40, 14);
+  buf.writeInt32LE(width, 18);
+  buf.writeInt32LE(-height, 22); // top-down
+  buf.writeUInt16LE(1, 26);
+  buf.writeUInt16LE(24, 28);
+  buf.writeUInt32LE(row * height, 34);
+  const bpp = kind === 3 ? 4 : kind === 2 ? 3 : 0;
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let r;
+      let g;
+      let b;
+      if (bpp) {
+        const o = (y * width + x) * bpp;
+        [r, g, b] = [data[o], data[o + 1], data[o + 2]];
+      } else {
+        const bit = (data[y * Math.ceil(width / 8) + (x >> 3)] >> (7 - (x & 7))) & 1;
+        r = g = b = bit ? 255 : 0;
+      }
+      const p = 54 + y * row + x * 3;
+      buf[p] = b;
+      buf[p + 1] = g;
+      buf[p + 2] = r;
+    }
+  }
+  return buf;
 }
 
 async function docxText(buf) {

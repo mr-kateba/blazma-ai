@@ -39,7 +39,39 @@ const mdLabels = {
   runLabel: ui.v2.run,
   canRun,
   run: (code, lang) => runPreview(code, lang),
+  diagram: (code) => diagramNode(code),
 };
+// While a reply is still being written, a half-written diagram is not drawn.
+const mdLabelsLive = { ...mdLabels, diagram: null };
+
+// Mermaid diagrams in replies (lib/markdown.js): drawn once per code in the
+// sandboxed preview origin, and kept while the chat re-renders.
+const diagramUrls = new Map();
+const diagramHeights = new Map();
+function diagramNode(code) {
+  const frame = el('iframe', { class: 'md-diagram-frame', sandbox: 'allow-scripts', title: 'diagram' });
+  frame.style.height = `${diagramHeights.get(code) || 120}px`;
+  frame.dataset.code = code;
+  const dark = document.documentElement.dataset.theme !== 'light';
+  const key = `${dark}:${code}`;
+  if (diagramUrls.has(key)) frame.src = diagramUrls.get(key);
+  else
+    window.blazma.previewDiagram(code, dark).then((res) => {
+      if (!res.ok) return;
+      diagramUrls.set(key, res.result.url);
+      frame.src = res.result.url;
+    });
+  return frame;
+}
+window.addEventListener('message', (e) => {
+  if (!e.data || !e.data.blazmaDiagram) return;
+  for (const f of document.querySelectorAll('.md-diagram-frame')) {
+    if (f.contentWindow !== e.source) continue;
+    const h = Math.min(Math.max(Number(e.data.h) || 60, 40), 1400);
+    diagramHeights.set(f.dataset.code, h);
+    f.style.height = `${h}px`;
+  }
+});
 
 const $ = (id) => document.getElementById(id);
 
@@ -425,8 +457,8 @@ function messageNode(msg, index) {
           el(
             'div',
             { class: `tool-step${st.failed ? ' failed' : ''}`, dir: DIR },
-            el('span', { class: 'tool-icon', 'aria-hidden': 'true' }, st.kind === 'search' ? '⌕' : '↗'),
-            el('bdi', null, st.kind === 'search' ? ui.chat.stepSearch(st.label) : ui.chat.stepOpen(st.label)),
+            el('span', { class: 'tool-icon', 'aria-hidden': 'true' }, st.kind === 'search' ? '⌕' : st.kind === 'tool' ? '⚙' : '↗'),
+            el('bdi', null, st.kind === 'search' ? ui.chat.stepSearch(st.label) : st.kind === 'tool' ? st.label : ui.chat.stepOpen(st.label)),
             st.failed ? el('span', { class: 'muted' }, ` · ${ui.chat.stepFailed}`) : null,
           ),
         ),
@@ -444,7 +476,7 @@ function messageNode(msg, index) {
     const mine = compareColumn(msg, { model: msg.model, content: msg.content, streaming: msg.streaming }, index);
     mine.querySelector('.cmp-head').append(close);
     body.append(el('div', { class: 'compare-grid' }, mine, compareColumn(msg, msg.compare, index)));
-  } else if (!isUser && msg.content) body.append(renderMarkdown(msg.streaming ? visibleText(msg.content) : msg.content, mdLabels));
+  } else if (!isUser && msg.content) body.append(renderMarkdown(msg.streaming ? visibleText(msg.content) : msg.content, msg.streaming ? mdLabelsLive : mdLabels));
   if (!isUser && !msg.streaming && msg.sources && msg.sources.length) {
     const seen = new Set();
     const unique = msg.sources.filter((src) => !seen.has(src.url) && seen.add(src.url)).slice(0, 6);
@@ -913,12 +945,36 @@ const TOOLS = [
 ];
 const MAX_TOOL_ROUNDS = 3;
 
+// MCP tools (Settings > MCP tools): offered next to the web tools; each use is
+// confirmed by the user once per chat and tool.
+let mcpByName = new Map();
+let mcpAllowed = new Set();
+
 // Runs one tool call and returns the text given back to the model.
 async function runTool(call, reply) {
   let args = {};
   try {
     args = JSON.parse(call.function.arguments || '{}');
   } catch {}
+  const mcpTool = mcpByName.get(call.function.name);
+  if (mcpTool) {
+    const M = ui.v2.mcp;
+    const key = `${mcpTool.server}/${mcpTool.tool}`;
+    const step = { kind: 'tool', label: M.step(mcpTool.serverName, mcpTool.tool) };
+    reply.steps.push(step);
+    renderLast();
+    if (!mcpAllowed.has(key)) {
+      const ok = await confirmDialog({ title: M.askTitle, text: `${M.ask(mcpTool.serverName, mcpTool.tool)}\n\n\u2066${JSON.stringify(args).slice(0, 600)}\u2069`, ok: M.allow, cancel: M.deny });
+      if (!ok) {
+        step.failed = true;
+        return M.denied;
+      }
+      mcpAllowed.add(key);
+    }
+    const res = await window.blazma.mcpCall(mcpTool.server, mcpTool.tool, args);
+    if (!res.ok || res.result.isError) step.failed = true;
+    return res.ok ? res.result.text || '(empty)' : `The tool failed (${res.error.detail || res.error.code}).`;
+  }
   if (call.function.name === 'web_search') {
     const step = { kind: 'search', label: String(args.query || '') };
     reply.steps.push(step);
@@ -1027,7 +1083,10 @@ async function generate() {
       if (!res.ok) showComposerNote(ui.chat.kbFailed, 6000);
       const passages = res.ok ? res.result : [];
       if (passages.length) {
-        system += `\n\n${ui.chat.kbContext(passages.map((p, i) => `[${i + 1}] (${p.name})\n${p.text}`).join('\n\n'))}`;
+        // A file's summary (written from the library settings) goes once, before its passages.
+        const sums = [...new Map(passages.filter((p) => p.summary).map((p) => [p.name, p.summary])).entries()];
+        const head = sums.map(([n, t]) => `(${n}) ${ui.v2.kb2.summary}:\n${t}`).join('\n\n');
+        system += `\n\n${ui.chat.kbContext((head ? `${head}\n\n` : '') + passages.map((p, i) => `[${i + 1}] (${p.name})\n${p.text}`).join('\n\n'))}`;
         reply.sources = passages.map((p) => ({ title: p.name, url: `file:${p.file}`, file: p.file }));
       }
       if (ownDocs && persona.strict) {
@@ -1043,6 +1102,7 @@ async function generate() {
       if (summary) system += `\n\n${ui.chat.deviceContext(summary)}`;
     }
     if (signal.aborted) throw new DOMException('aborted', 'AbortError');
+    if ((await window.blazma.getSettings()).mcpServers.some((x) => x.enabled)) await window.blazma.mcpEnsure();
     reply.thinkStart = Date.now(); // the model starts now (after the search above)
     await streamReply({ reply, system, conn, chatSettings, webOn, signal });
   } catch (err) {
@@ -1069,6 +1129,10 @@ async function streamReply({ reply, system, conn, chatSettings, webOn, signal })
     .filter((m) => !m.error || m.content)
     .map((m) => ({ role: m.role, content: apiContent(m, chatSettings.contextSize * CHARS_PER_TOKEN * FILE_SHARE) }));
   const apiMessages = [{ role: 'system', content: system }, ...history];
+  // Web tools when search is on, plus the MCP tools of running servers.
+  const mcpList = await window.blazma.mcpTools().catch(() => []);
+  mcpByName = new Map(mcpList.map((m) => [m.spec.function.name, m]));
+  const tools = [...(webOn ? TOOLS : []), ...mcpList.map((m) => m.spec)];
 
   for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
     const payload = {
@@ -1080,10 +1144,10 @@ async function streamReply({ reply, system, conn, chatSettings, webOn, signal })
       // Gemma 4's template defaults thinking to off, Qwen3.5's to on; always say which.
       chat_template_kwargs: { enable_thinking: chatSettings.thinking },
       // Several searches in one reply are read as calls, not left as text.
-      ...(webOn ? { parallel_tool_calls: true } : {}),
+      ...(tools.length ? { parallel_tool_calls: true } : {}),
     };
     // The last round has no tools, so the model must answer with what it found.
-    if (webOn && round < MAX_TOOL_ROUNDS) payload.tools = TOOLS;
+    if (tools.length && round < MAX_TOOL_ROUNDS) payload.tools = tools;
 
     const res = await fetch(`http://127.0.0.1:${conn.port}/v1/chat/completions`, {
       method: 'POST',
@@ -1420,6 +1484,7 @@ async function persist() {
 
 function newChat() {
   closePreview();
+  mcpAllowed = new Set();
   stopSpeaking();
   if (abortController) abortController.abort();
   if (imageBusy) window.blazma.imagesCancel();
@@ -1433,6 +1498,7 @@ function newChat() {
 
 async function loadChat(id) {
   closePreview();
+  mcpAllowed = new Set();
   // Not while a reply or a picture is on its way: it belongs to this chat.
   if (abortController || imageBusy || sending) {
     showComposerNote(ui.chat.busySwitch, 4000);

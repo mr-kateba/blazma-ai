@@ -6,10 +6,16 @@
 // no network at all. Errors reach the chat through postMessage only.
 
 const crypto = require('node:crypto');
+const fs = require('node:fs');
+const path = require('node:path');
+
+// Libraries the preview pages may load (diagrams): app://preview/vendor/<file>.
+const VENDOR_DIR = path.join(__dirname, '..', 'renderer', 'vendor');
+const VENDOR = new Set(['mermaid.min.js']);
 
 const HOST = 'preview';
 const MAX_BYTES = 2 * 1024 * 1024;
-const KEEP = 20;
+const KEEP = 80;
 const pages = new Map();
 
 // Sent before the user's code: reports errors and console.error to the chat.
@@ -20,7 +26,7 @@ var ce=console.error;console.error=function(){send([].map.call(arguments,String)
 
 const CSP = [
   "default-src 'none'",
-  "script-src 'unsafe-inline' 'unsafe-eval' data: blob:",
+  "script-src 'unsafe-inline' 'unsafe-eval' data: blob: app://preview",
   "style-src 'unsafe-inline' data:",
   'img-src data: blob:',
   'font-src data:',
@@ -43,6 +49,24 @@ function toPage(code, lang) {
   return REPORTER + html;
 }
 
+// A Mermaid diagram: drawn by mermaid.js inside the sandbox, which reports
+// its height so the frame in the reply fits it.
+function diagramPage(code, dark) {
+  const src = String(code).replace(/</g, '&lt;');
+  return `<!doctype html><html><head><meta charset="utf-8">${REPORTER}<meta name="color-scheme" content="${dark ? 'dark' : 'light'}"><style>html,body{margin:0;overflow:hidden;background:${dark ? '#14171e' : '#ffffff'}}body{display:flex;justify-content:center;padding:12px}</style></head><body><pre class="mermaid">${src}</pre>
+<script src="app://preview/vendor/mermaid.min.js"></script><script>
+mermaid.initialize({startOnLoad:false,securityLevel:'strict',theme:${dark ? "'dark'" : "'default'"},fontFamily:'Segoe UI, Tahoma, sans-serif'});
+mermaid.run().then(function(){var s=document.querySelector('svg');parent.postMessage({blazmaDiagram:1,h:Math.ceil((s?s.getBoundingClientRect().height:document.body.scrollHeight)+28)},'*')}).catch(function(e){parent.postMessage({blazmaDiagram:1,h:60,error:String(e&&e.message||e)},'*')});
+</script></body></html>`;
+}
+
+function setDiagram(code, dark) {
+  const id = crypto.randomBytes(12).toString('hex');
+  pages.set(id, diagramPage(String(code).slice(0, 50000), Boolean(dark)));
+  while (pages.size > KEEP) pages.delete(pages.keys().next().value);
+  return { id, url: `app://${HOST}/${id}` };
+}
+
 function set(code, lang) {
   const page = toPage(String(code), lang);
   if (Buffer.byteLength(page) > MAX_BYTES) throw new Error('too-large');
@@ -53,6 +77,10 @@ function set(code, lang) {
 }
 
 function response(url) {
+  const vendor = /^\/vendor\/([\w.-]+)$/.exec(url.pathname);
+  if (vendor && VENDOR.has(vendor[1])) {
+    return new Response(fs.readFileSync(path.join(VENDOR_DIR, vendor[1])), { headers: { 'content-type': 'text/javascript; charset=utf-8', 'x-content-type-options': 'nosniff' } });
+  }
   const page = pages.get(url.pathname.replace(/^\//, ''));
   if (!page) return new Response('Not found', { status: 404 });
   return new Response(page, {
@@ -60,4 +88,4 @@ function response(url) {
   });
 }
 
-module.exports = { HOST, set, response, toPage };
+module.exports = { HOST, set, setDiagram, response, toPage };

@@ -60,6 +60,7 @@ const EDITABLE_SETTINGS = [
   'quickEnabled',
   'quickKey',
   'tasks',
+  'mcpServers',
 ];
 
 // Starting with Windows uses the OS login items; elsewhere it is not offered.
@@ -196,6 +197,32 @@ function registerIpc({ setup, monitor, getWindow }) {
       }),
     ),
   );
+  handle('kb:files', () => knowledge.files());
+  handle('kb:fileText', (file) => knowledge.fileText(String(file)));
+  handle('kb:addUrl', (url) =>
+    wrap(async () => {
+      const page = await web.openPage(String(url || '').slice(0, 2000));
+      if (!page.text || page.text.trim().length < 50) throw new AppError('file-empty');
+      return knowledge.addPage(page);
+    }),
+  );
+  // A short summary of one file, written by the running model and kept in
+  // the index; it is sent with that file's passages so answers see the whole.
+  handle('kb:summarize', (file) =>
+    wrap(async () => {
+      const text = knowledge.fileText(String(file));
+      if (!text) throw new AppError('file-empty');
+      const conn = setup.connection();
+      if (!conn) throw new AppError('server-not-ready');
+      const ar = settings.get().language !== 'en';
+      const prompt = ar
+        ? `اكتب ملخصاً منظماً لهذا المستند في 8 نقاط أو أقل: موضوعه، وأقسامه، وأهم الأرقام والتواريخ والشروط. بالعربية.\n\n${text.slice(0, 24000)}`
+        : `Write a structured summary of this document in at most 8 bullet points: its subject, sections, and key numbers, dates and conditions.\n\n${text.slice(0, 24000)}`;
+      const out = await require('./llm').complete(conn, { system: settings.get().systemPrompt, prompt, useWeb: false });
+      knowledge.setSummary(String(file), out.content);
+      return out.content;
+    }),
+  );
   handle('kb:search', (question, folders) => wrap(() => knowledge.search(String(question || ''), 5, Array.isArray(folders) && folders.length ? folders.map(String).slice(0, 20) : null)));
   // Shows a source file in Explorer; only files that are in the index.
   handle('kb:reveal', (file) => {
@@ -326,6 +353,7 @@ function registerIpc({ setup, monitor, getWindow }) {
     return settingsView();
   });
   handle('preview:set', (code, lang) => wrap(() => preview.set(String(code || '').slice(0, 2e6), String(lang || ''))));
+  handle('preview:diagram', (code, dark) => wrap(() => preview.setDiagram(String(code || ''), Boolean(dark))));
   handle('crash:status', () => crashLog.exists());
   handle('quick:setKey', (key) => {
     const k = String(key || '');
@@ -344,6 +372,9 @@ function registerIpc({ setup, monitor, getWindow }) {
     w.focus();
     w.webContents.send('quick:toChat', String(text || '').slice(0, 40000));
   });
+  handle('mcp:ensure', () => wrap(() => require('./mcp').ensure()));
+  handle('mcp:tools', () => require('./mcp').chatTools());
+  handle('mcp:call', (server, tool, args) => wrap(() => require('./mcp').call(String(server), String(tool), args && typeof args === 'object' ? args : {})));
   handle('tasks:run', (id) => wrap(() => require('./tasks').run(String(id))));
   handle('crash:open', () => (crashLog.exists() ? shell.openPath(crashLog.file()) : ''));
   handle('settings:openFolder', (kind) => {

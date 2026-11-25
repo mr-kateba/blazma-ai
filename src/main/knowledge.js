@@ -280,7 +280,7 @@ async function search(question, limit = 5, folders = null) {
     const v = fromB64(c.vec);
     let s = 0;
     for (let i = 0; i < v.length; i++) s += v[i] * q[i];
-    return { file, name: path.basename(file), text: c.text, score: s };
+    return { file, name: path.basename(file), text: c.text, score: s, summary: idx.files[file].summary || '' };
   });
   scored.sort((a, b) => b.score - a.score);
   // Passages far below the best match are about something else, so they are
@@ -290,4 +290,56 @@ async function search(question, limit = 5, folders = null) {
   return scored.filter((p) => p.score >= MIN_SCORE && p.score >= best - SCORE_GAP).slice(0, limit);
 }
 
-module.exports = { status, addFolder, removeFolder, update, search, stop, chunk, isIndexed };
+// ---------- 0.2.0: what was read, summaries, web pages ----------
+
+// Every indexed file: name, passages, error, summary.
+function files() {
+  const idx = load();
+  return Object.entries(idx.files)
+    .map(([file, f]) => ({ file, name: path.basename(file), chunks: f.chunks.length, error: f.error || null, summary: f.summary || '', ocr: Boolean(f.ocr) }))
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+// The text the library read from a file (its passages put back together).
+function fileText(file) {
+  const f = load().files[file];
+  if (!f) return null;
+  let text = '';
+  for (const c of f.chunks) {
+    if (!text) text = c.text;
+    else {
+      // Passages overlap by up to CHUNK_OVERLAP characters.
+      const head = c.text.slice(0, CHUNK_OVERLAP);
+      let k = Math.min(head.length, text.length);
+      while (k > 20 && !text.endsWith(c.text.slice(0, k))) k--;
+      text += k > 20 ? c.text.slice(k) : `\n${c.text}`;
+    }
+  }
+  return text;
+}
+
+function setSummary(file, summary) {
+  const idx = load();
+  if (!idx.files[file]) return false;
+  idx.files[file].summary = String(summary || '').slice(0, 4000);
+  save(idx);
+  return true;
+}
+
+// A web page saved as a Markdown file in <userData>/library-web, a library
+// folder like any other (updated with "تحديث الفهرس").
+function webFolder() {
+  return path.join(require('./paths').userData(), 'library-web');
+}
+
+function addPage(page) {
+  const dir = webFolder();
+  fs.mkdirSync(dir, { recursive: true });
+  const host = new URL(page.url).hostname.replace(/^www\./, '').replace(/[^\w.-]/g, '_');
+  const name = `${host}-${require('node:crypto').createHash('sha1').update(page.url).digest('hex').slice(0, 8)}.md`;
+  fs.writeFileSync(path.join(dir, name), `# ${page.title || page.url}\n\n${page.url}\n\n${page.text}\n`);
+  addFolder(dir);
+  return { name };
+}
+
+module.exports = { status, addFolder, removeFolder, update, search, stop, chunk, isIndexed, files, fileText, setSummary, addPage, webFolder };

@@ -25,10 +25,8 @@ export function canRun(code, lang) {
 function renderStatus() {
   if (!status) return;
   status.className = `preview-status ${errors.length ? 'bad' : 'good'}`;
-  status.replaceChildren(
-    el('span', null, errors.length ? P.errors(errors.length) : P.noErrors),
-    errors.length ? el('pre', { class: 'preview-errors', dir: 'ltr' }, errors.slice(0, 8).join('\n')) : null,
-  );
+  status.replaceChildren(el('span', null, errors.length ? P.errors(errors.length) : P.noErrors));
+  if (errors.length) status.append(el('pre', { class: 'preview-errors', dir: 'ltr' }, errors.slice(0, 8).join('\n')));
   fixBtn.hidden = !errors.length || !fixHandler;
 }
 

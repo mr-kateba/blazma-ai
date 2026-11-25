@@ -7,6 +7,7 @@
 const path = require('node:path');
 const { utilityProcess } = require('electron');
 const { AppError } = require('./errors');
+const ocr = require('./ocr');
 
 const MAX_BYTES = 25 * 1024 * 1024;
 const MAX_CHARS = 400_000;
@@ -16,6 +17,7 @@ const TEXT_EXT =
 
 function kindOf(name) {
   if (/\.pdf$/i.test(name)) return 'pdf';
+  if (ocr.isImage(name)) return 'image';
   if (/\.docx$/i.test(name)) return 'docx';
   if (TEXT_EXT.test(name)) return 'text';
   return null;
@@ -46,7 +48,16 @@ async function extractFile(name, bytes) {
   const data = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes || []);
   if (!data.byteLength) throw new AppError('file-empty');
   if (data.byteLength > MAX_BYTES) throw new AppError('file-too-big', String(data.byteLength));
-  const result = await runWorker(kind, data);
+  let result;
+  if (kind === 'image') result = { text: await ocr.recognize(Buffer.from(data), path.extname(fileName).toLowerCase() || '.png') };
+  else result = await runWorker(kind, data);
+  // A scanned PDF: its page pictures are read with Windows OCR.
+  if (kind === 'pdf' && !String(result.text || '').trim() && Array.isArray(result.images) && result.images.length) {
+    const pages = [];
+    for (const img of result.images) pages.push(await ocr.recognize(Buffer.from(img), '.bmp').catch(() => ''));
+    result.text = pages.join('\n\n');
+    result.ocr = true;
+  }
   const text = String(result.text || '');
   if (!text.trim()) throw new AppError(kind === 'pdf' ? 'file-no-text' : 'file-empty');
   return {

@@ -36,7 +36,24 @@ jobs:
           cache: npm
       - run: npm ci
       - name: Build installer
-        run: npx electron-builder --win nsis --x64 --publish ${{ startsWith(github.ref, 'refs/tags/v') && 'always' || 'never' }}
+        run: npx electron-builder --win nsis --x64 --publish never
+      # The app runs a downloaded update only with a valid signature from this
+      # key (src/main/updates.js has the public half).
+      - name: Sign installer
+        shell: bash
+        run: |
+          printf '%s' "$BLAZMA_UPDATE_KEY" > key.pem
+          for f in dist/*.exe; do node -e "const c=require('crypto'),fs=require('fs');fs.writeFileSync(process.argv[1]+'.sig',c.sign(null,fs.readFileSync(process.argv[1]),c.createPrivateKey(fs.readFileSync('key.pem'))).toString('base64'))" "$f"; done
+          rm key.pem
+          ls dist
+        env:
+          BLAZMA_UPDATE_KEY: ${{ secrets.BLAZMA_UPDATE_KEY }}
+      - name: Release from tag
+        if: ${{ startsWith(github.ref, 'refs/tags/v') }}
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          gh release create "v$VERSION" dist/*.exe dist/*.exe.sig dist/*.exe.blockmap dist/latest.yml --draft --title "Blazma AI $VERSION" --notes-file "docs/releases/v$VERSION.md"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Draft release
@@ -44,7 +61,7 @@ jobs:
         shell: bash
         run: |
           VERSION=$(node -p "require('./package.json').version")
-          FILES="dist/*.exe dist/*.exe.blockmap dist/latest.yml"
+          FILES="dist/*.exe dist/*.exe.sig dist/*.exe.blockmap dist/latest.yml"
           # latest.yml and the blockmap let the app update itself (electron-updater).
           DRAFT=$(gh release view "v$VERSION" --json isDraft -q .isDraft 2>/dev/null || echo none)
           if [ "$DRAFT" = none ]; then
@@ -71,5 +88,6 @@ jobs:
           name: Blazma-AI-Setup
           path: |
             dist/*.exe
+            dist/*.exe.sig
             dist/latest.yml
           if-no-files-found: error
