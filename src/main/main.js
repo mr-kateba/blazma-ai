@@ -51,6 +51,7 @@ function createWindow() {
     minWidth: 960,
     minHeight: 620,
     title: 'Blazma AI',
+    icon: path.join(__dirname, '..', 'renderer', 'icon.png'),
     backgroundColor: nativeTheme.shouldUseDarkColors ? '#0e1014' : '#f5f6f8',
     show: false,
     autoHideMenuBar: true,
