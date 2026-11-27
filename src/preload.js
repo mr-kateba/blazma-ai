@@ -51,6 +51,7 @@ contextBridge.exposeInMainWorld(
     voiceStatus: () => ipcRenderer.invoke('voice:status'),
     voiceInstall: () => ipcRenderer.invoke('voice:install'),
     voiceTranscribe: (wav) => ipcRenderer.invoke('voice:transcribe', wav),
+    voiceSegments: (wav) => ipcRenderer.invoke('voice:segments', wav),
     onVoiceProgress(cb) {
       const listener = (_e, p) => cb(p);
       ipcRenderer.on('voice:progress', listener);
@@ -82,6 +83,9 @@ contextBridge.exposeInMainWorld(
     chatsRename: (id, title) => ipcRenderer.invoke('chats:rename', String(id), String(title)),
     chatsDelete: (id) => ipcRenderer.invoke('chats:delete', String(id)),
     chatsSearch: (q) => ipcRenderer.invoke('chats:search', String(q)),
+    translateParse: (name, bytes) => ipcRenderer.invoke('translate:parse', String(name), bytes),
+    translateBuild: (id, list, lang, suffix) => ipcRenderer.invoke('translate:build', String(id), list, String(lang), String(suffix)),
+    translateReveal: (file) => ipcRenderer.invoke('translate:reveal', String(file)),
     deviceSummary: () => ipcRenderer.invoke('device:summary'),
     vscodeStatus: () => ipcRenderer.invoke('vscode:status'),
     vscodePlan: () => ipcRenderer.invoke('vscode:plan'),
@@ -110,7 +114,8 @@ contextBridge.exposeInMainWorld(
     previewDiagram: (code, dark) => ipcRenderer.invoke('preview:diagram', String(code), Boolean(dark)),
     crashStatus: () => ipcRenderer.invoke('crash:status'),
     crashOpen: () => ipcRenderer.invoke('crash:open'),
-    quickSetKey: (key) => ipcRenderer.invoke('quick:setKey', String(key)),
+    quickSetKey: (key, kind) => ipcRenderer.invoke('quick:setKey', String(key), kind === 'screen' ? 'screen' : 'text'),
+    quickReplace: (text) => ipcRenderer.invoke('quick:replace', String(text)),
     quickSetEnabled: (on) => ipcRenderer.invoke('quick:setEnabled', Boolean(on)),
     quickContext: () => ipcRenderer.invoke('quick:context'),
     quickHide: () => ipcRenderer.invoke('quick:hide'),

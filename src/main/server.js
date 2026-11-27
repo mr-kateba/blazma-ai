@@ -114,6 +114,11 @@ class LlamaServer extends EventEmitter {
       if (!options.vision) args.push('--no-mmproj');
       if (options.offline) args.push('--offline');
     }
+    // A picture is read in one pass with non-causal attention, so the batch
+    // must hold all its tokens: a 1536 px screenshot is about 700 tokens on
+    // Gemma 4, more than the default 512, and llama-server aborts
+    // (GGML_ASSERT n_ubatch >= n_tokens, llama-context.cpp).
+    if (options.mmprojPath || (!options.modelPath && options.vision)) args.push('-b', '2048', '-ub', '2048');
     // Quantized KV cache: about half (q8_0) or a quarter (q4_0) of the memory
     // for the same context. A quantized V cache switches Flash Attention on
     // automatically when it is 'auto' (the default; llama-context.cpp).

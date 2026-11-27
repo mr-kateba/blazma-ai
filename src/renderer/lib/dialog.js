@@ -10,7 +10,7 @@ let open = null;
 
 // field: null for a yes/no question, or { value, placeholder, maxLength } for
 // a short text. Resolves with true/false, or with the text / null.
-function showDialog({ title, text = '', ok = ui.common.ok, cancel = ui.common.cancel, danger = false, field = null }) {
+function showDialog({ title, text = '', ok = ui.common.ok, cancel = ui.common.cancel, danger = false, field = null, choices = null, value = '' }) {
   if (open) open.finish(null);
   const back = document.activeElement;
   return new Promise((resolve) => {
@@ -18,12 +18,15 @@ function showDialog({ title, text = '', ok = ui.common.ok, cancel = ui.common.ca
     const cancelBtn = el('button', { type: 'button', class: 'btn ghost dlg-cancel' }, cancel);
     const input = field ? el('input', { type: 'text', class: 'dlg-input', dir: 'auto', maxlength: String(field.maxLength || 60), placeholder: field.placeholder || '', 'aria-label': title || text }) : null;
     if (input) input.value = field.value || '';
+    const select = choices ? el('select', { class: 'input dlg-input', 'aria-label': title || text }, ...choices.map((c) => el('option', { value: c.value }, c.label))) : null;
+    if (select) select.value = value || choices[0].value;
     const box = el(
       'div',
       { class: 'dlg', role: field ? 'dialog' : 'alertdialog', 'aria-modal': 'true', 'aria-label': title || text },
       title ? el('h3', { class: 'dlg-title' }, title) : null,
       text ? el('p', { class: 'dlg-text' }, text) : null,
       input,
+      select,
       el('div', { class: 'dlg-actions' }, okBtn, cancelBtn),
     );
     const layer = el('div', { class: 'dlg-layer' }, box);
@@ -33,9 +36,10 @@ function showDialog({ title, text = '', ok = ui.common.ok, cancel = ui.common.ca
       document.removeEventListener('keydown', onKey, true);
       layer.remove();
       if (back && back.isConnected && typeof back.focus === 'function') back.focus();
-      resolve(field ? (value === true ? input.value.trim() : null) : value === true);
+      if (select) resolve(value === true ? select.value : null);
+      else resolve(field ? (value === true ? input.value.trim() : null) : value === true);
     };
-    const order = [input, okBtn, cancelBtn].filter(Boolean);
+    const order = [input, select, okBtn, cancelBtn].filter(Boolean);
     // While it is open no other shortcut runs (page switches, studio keys).
     const onKey = (e) => {
       e.stopPropagation();
@@ -53,6 +57,11 @@ function showDialog({ title, text = '', ok = ui.common.ok, cancel = ui.common.ca
           finish(true);
         }
         // Other keys type into the field.
+      } else if (select && document.activeElement === select) {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          finish(true);
+        }
       } else if (!['Enter', ' '].includes(e.key) || !box.contains(document.activeElement)) {
         e.preventDefault();
       }
@@ -63,7 +72,8 @@ function showDialog({ title, text = '', ok = ui.common.ok, cancel = ui.common.ca
     document.addEventListener('keydown', onKey, true);
     open = { layer, finish };
     document.body.append(layer);
-    if (input) {
+    if (select) select.focus();
+    else if (input) {
       input.focus();
       input.select();
     } else {
@@ -81,4 +91,9 @@ export function confirmDialog(opts) {
 // promptDialog({ title, text, value, placeholder, maxLength, ok, cancel }) -> Promise<string|null>
 export function promptDialog({ value = '', placeholder = '', maxLength = 60, ...opts }) {
   return showDialog({ ...opts, field: { value, placeholder, maxLength } });
+}
+
+// choiceDialog({ title, text, choices: [{ value, label }], value, ok, cancel }) -> Promise<string|null>
+export function choiceDialog({ choices, value = '', ...opts }) {
+  return showDialog({ ...opts, choices, value });
 }

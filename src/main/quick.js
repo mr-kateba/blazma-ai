@@ -7,25 +7,25 @@
 
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const { BrowserWindow, clipboard, ClipboardItem, globalShortcut, screen, nativeTheme } = require('electron');
+const { BrowserWindow, clipboard, ClipboardItem, desktopCapturer, globalShortcut, screen, nativeTheme } = require('electron');
 const settings = require('./settings');
 const { APP_ORIGIN } = require('./protocol');
 
 let win = null;
 let helper = null;
 let helperWaiters = [];
-let registered = null;
+let registered = {}; // shortcut kind (text | screen) -> accelerator
 let context = { text: '' };
 
 // One PowerShell process, started once: waits until the shortcut's keys are
-// released, then sends Ctrl+C to the app in front.
+// released, then sends Ctrl+C ("copy") or Ctrl+V ("paste") to the app in front.
 const HELPER = `
 Add-Type -Name K -Namespace W -MemberDefinition '[DllImport("user32.dll")] public static extern short GetAsyncKeyState(int k);'
 Add-Type -AssemblyName System.Windows.Forms
 while (($l = [Console]::In.ReadLine()) -ne $null) {
   $t = 0
   while ($t -lt 60 -and ((([W.K]::GetAsyncKeyState(0x12) -band 0x8000) -ne 0) -or (([W.K]::GetAsyncKeyState(0x11) -band 0x8000) -ne 0) -or (([W.K]::GetAsyncKeyState(0x10) -band 0x8000) -ne 0) -or (([W.K]::GetAsyncKeyState(0x5B) -band 0x8000) -ne 0))) { Start-Sleep -Milliseconds 15; $t++ }
-  [System.Windows.Forms.SendKeys]::SendWait('^c')
+  if ($l -eq 'paste') { [System.Windows.Forms.SendKeys]::SendWait('^v') } else { [System.Windows.Forms.SendKeys]::SendWait('^c') }
   [Console]::Out.WriteLine('ok'); [Console]::Out.Flush()
 }`;
 
@@ -45,7 +45,7 @@ function startHelper() {
   });
 }
 
-function sendCopy() {
+function sendKeys(what = 'copy') {
   return new Promise((resolve) => {
     if (!helper) return resolve();
     const t = setTimeout(resolve, 1500);
@@ -53,7 +53,7 @@ function sendCopy() {
       clearTimeout(t);
       resolve();
     });
-    helper.stdin.write('copy\n');
+    helper.stdin.write(`${what}\n`);
   });
 }
 
@@ -86,7 +86,7 @@ async function grabSelection() {
   const saved = await snapshot();
   const marker = `\u2063blazma-${Date.now()}`;
   await clipboard.writeText(marker);
-  await sendCopy();
+  await sendKeys('copy');
   let text = '';
   for (let i = 0; i < 10; i++) {
     text = await clipboard.readText();
@@ -101,7 +101,7 @@ async function grabSelection() {
 function createWindow() {
   win = new BrowserWindow({
     width: 560,
-    height: 460,
+    height: 520,
     minWidth: 420,
     minHeight: 300,
     show: false,
@@ -135,9 +135,54 @@ async function open() {
   return openWith(text);
 }
 
+// The screen under the mouse as a JPEG data URL, at most 1600 px wide (the
+// model sees pictures smaller than that anyway).
+async function captureScreen() {
+  const point = screen.getCursorScreenPoint();
+  const display = screen.getDisplayNearestPoint(point);
+  const scale = display.scaleFactor || 1;
+  const size = { width: Math.round(display.size.width * scale), height: Math.round(display.size.height * scale) };
+  const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: size });
+  const src = sources.find((x) => x.display_id === String(display.id)) || sources[0];
+  if (!src || src.thumbnail.isEmpty()) throw new Error('no screen picture');
+  let img = src.thumbnail;
+  if (img.getSize().width > 1600) img = img.resize({ width: 1600, quality: 'best' });
+  return `data:image/jpeg;base64,${img.toJPEG(85).toString('base64')}`;
+}
+
+async function openScreen() {
+  if (win && win.isVisible()) {
+    win.hide();
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  let image = '';
+  try {
+    image = await captureScreen();
+  } catch (err) {
+    require('./crashlog').write('quick assistant: screen', err);
+  }
+  return openWith('', image);
+}
+
+// Puts the answer in place of the selected text in the app it came from:
+// the window hides (Windows gives the focus back to that app), the answer
+// goes on the clipboard, Ctrl+V is sent, and the clipboard is put back.
+async function replaceSelection(text) {
+  const value = String(text || '');
+  if (!value || !context.text || !helper) return false;
+  hide();
+  await new Promise((r) => setTimeout(r, 200));
+  const saved = await snapshot();
+  await clipboard.writeText(value);
+  await sendKeys('paste');
+  await new Promise((r) => setTimeout(r, 400));
+  await restore(saved);
+  return true;
+}
+
 // Shows the window with this text (open() passes the selection; tests pass text).
-function openWith(text) {
-  context = { text: String(text || ''), at: Date.now() };
+function openWith(text, image = '') {
+  context = { text: String(text || ''), image: /^data:image\/(png|jpeg);base64,/.test(image) ? image : '', at: Date.now() };
   if (!win) createWindow();
   const p = screen.getCursorScreenPoint();
   const area = screen.getDisplayNearestPoint(p).workArea;
@@ -150,12 +195,15 @@ function openWith(text) {
   win.focus();
 }
 
-function register(key) {
-  if (registered) globalShortcut.unregister(registered);
-  registered = null;
+const ACTIONS = { text: () => open(), screen: () => openScreen() };
+const SETTING = { text: 'quickKey', screen: 'quickScreenKey' };
+
+function register(key, kind = 'text') {
+  if (registered[kind]) globalShortcut.unregister(registered[kind]);
+  delete registered[kind];
   if (!key) return true;
-  const ok = globalShortcut.register(key, () => open().catch((err) => require('./crashlog').write('quick assistant', err)));
-  if (ok) registered = key;
+  const ok = globalShortcut.register(key, () => ACTIONS[kind]().catch((err) => require('./crashlog').write('quick assistant', err)));
+  if (ok) registered[kind] = key;
   return ok;
 }
 
@@ -163,20 +211,28 @@ function apply() {
   const s = settings.get();
   if (s.quickEnabled) {
     startHelper();
-    return register(s.quickKey);
+    const a = register(s.quickKey, 'text');
+    const b = register(s.quickScreenKey, 'screen');
+    return a && b;
   }
-  register(null);
+  register(null, 'text');
+  register(null, 'screen');
   return true;
 }
 
-function setKey(key) {
-  const old = settings.get().quickKey;
-  if (!register(key)) {
-    register(settings.get().quickEnabled ? old : null);
+// kind: text (the selection) or screen (a picture of the screen).
+function setKey(key, kind = 'text') {
+  const name = SETTING[kind];
+  if (!name) return false;
+  const other = kind === 'text' ? settings.get().quickScreenKey : settings.get().quickKey;
+  if (key && key === other) return false;
+  const old = settings.get()[name];
+  if (!register(key, kind)) {
+    register(settings.get().quickEnabled ? old : null, kind);
     return false;
   }
-  settings.update({ quickKey: key });
-  if (!settings.get().quickEnabled) register(null);
+  settings.update({ [name]: key });
+  if (!settings.get().quickEnabled) register(null, kind);
   return true;
 }
 
@@ -190,9 +246,10 @@ function hide() {
 }
 
 function stop() {
-  register(null);
+  register(null, 'text');
+  register(null, 'screen');
   if (helper) helper.kill();
   helper = null;
 }
 
-module.exports = { apply, setKey, setEnabled, hide, stop, open, openWith, getContext: () => context };
+module.exports = { apply, setKey, setEnabled, hide, stop, open, openWith, openScreen, captureScreen, replaceSelection, getContext: () => context };

@@ -59,6 +59,7 @@ const EDITABLE_SETTINGS = [
   'memory',
   'quickEnabled',
   'quickKey',
+  'quickScreenKey',
   'tasks',
   'mcpServers',
 ];
@@ -181,6 +182,7 @@ function registerIpc({ setup, monitor, getWindow }) {
   );
   handle('tts:synth', (text) => wrap(async () => new Uint8Array(await tts.synth(String(text || '')))));
   handle('voice:transcribe', (wav) => wrap(() => voice.transcribe(wav instanceof Uint8Array ? wav : new Uint8Array(wav || []))));
+  handle('voice:segments', (wav) => wrap(() => voice.transcribe(wav instanceof Uint8Array ? wav : new Uint8Array(wav || []), { segments: true })));
   // "مكتبتي": the user's document folders, indexed for answers (knowledge.js).
   handle('kb:status', () => knowledge.status());
   handle('kb:addFolder', async () => {
@@ -355,11 +357,13 @@ function registerIpc({ setup, monitor, getWindow }) {
   handle('preview:set', (code, lang) => wrap(() => preview.set(String(code || '').slice(0, 2e6), String(lang || ''))));
   handle('preview:diagram', (code, dark) => wrap(() => preview.setDiagram(String(code || ''), Boolean(dark))));
   handle('crash:status', () => crashLog.exists());
-  handle('quick:setKey', (key) => {
+  handle('quick:setKey', (key, kind) => {
     const k = String(key || '');
-    if (!/^((Ctrl|Alt|Shift|Super)\+){1,3}([A-Z0-9]|Space|F([1-9]|1[0-2]))$/.test(k)) return { ok: false };
-    return { ok: require('./quick').setKey(k) };
+    const which = kind === 'screen' ? 'screen' : 'text';
+    if (!(which === 'screen' && k === '') && !/^((Ctrl|Alt|Shift|Super)\+){1,3}([A-Z0-9]|Space|F([1-9]|1[0-2]))$/.test(k)) return { ok: false };
+    return { ok: require('./quick').setKey(k, which) };
   });
+  handle('quick:replace', (text) => require('./quick').replaceSelection(String(text || '').slice(0, 40000)));
   handle('quick:setEnabled', (on) => ({ ok: require('./quick').setEnabled(Boolean(on)) }));
   handle('quick:context', () => require('./quick').getContext());
   handle('quick:hide', () => require('./quick').hide());
@@ -475,6 +479,10 @@ function registerIpc({ setup, monitor, getWindow }) {
     }),
   );
   handle('chats:search', (q) => chats.search(String(q || '').slice(0, 200)));
+  // A Word or PDF file translated whole (translate.js).
+  handle('translate:parse', (name, bytes) => wrap(() => require('./translate').parse(name, bytes)));
+  handle('translate:build', (id, list, lang, suffix) => wrap(() => require('./translate').build(getWindow(), id, list, String(lang || ''), String(suffix || ''))));
+  handle('translate:reveal', (file) => require('./translate').reveal(file));
 
   handle('device:summary', () => monitor.modelSummary());
 

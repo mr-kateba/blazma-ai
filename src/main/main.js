@@ -68,7 +68,6 @@ function createWindow() {
 
   mainWindow.once('ready-to-show', () => mainWindow.show());
   mainWindow.webContents.on('render-process-gone', (_e, d) => crashLog.write('page stopped', `${d.reason} (exit ${d.exitCode})`));
-  mainWindow.webContents.on('render-process-gone', (_e, d) => crashLog.write('page stopped', `${d.reason} (exit ${d.exitCode})`));
   mainWindow.on('closed', () => {
     mainWindow = null;
     // The hidden quick-assistant window must not keep the app alive.

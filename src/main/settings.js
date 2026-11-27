@@ -43,6 +43,7 @@ const DEFAULTS = Object.freeze({
   memory: [], // [{ id, text }]
   quickEnabled: true, // the quick assistant on a global shortcut (quick.js)
   quickKey: 'Alt+Space',
+  quickScreenKey: 'Alt+Shift+Space', // a picture of the screen for the quick assistant
   mcpServers: [], // MCP tool servers (mcp.js): [{ id, name, command, args: [], enabled }]
   tasks: [], // scheduled prompts (tasks.js): [{ id, title, prompt, time: 'HH:MM', days: [0-6], web, enabled, lastRun }]
 });
@@ -87,6 +88,7 @@ const VALIDATORS = {
     v.length <= 20 &&
     v.every((s) => s && typeof s.id === 'string' && typeof s.name === 'string' && s.name.length <= 60 && typeof s.command === 'string' && s.command.length > 0 && s.command.length <= 500 && Array.isArray(s.args) && s.args.length <= 40 && s.args.every((a) => typeof a === 'string' && a.length <= 1000) && typeof s.enabled === 'boolean'),
   quickKey: (v) => typeof v === 'string' && /^((Ctrl|Alt|Shift|Super)\+){1,3}([A-Z0-9]|Space|F([1-9]|1[0-2]))$/.test(v),
+  quickScreenKey: (v) => v === '' || (typeof v === 'string' && /^((Ctrl|Alt|Shift|Super)\+){1,3}([A-Z0-9]|Space|F([1-9]|1[0-2]))$/.test(v)),
   tasks: (v) =>
     Array.isArray(v) &&
     v.length <= 30 &&

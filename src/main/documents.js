@@ -70,4 +70,4 @@ async function extractFile(name, bytes) {
   };
 }
 
-module.exports = { extractFile, kindOf };
+module.exports = { extractFile, kindOf, runWorker };

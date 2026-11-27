@@ -187,28 +187,56 @@ function remove(id) {
   return true;
 }
 
-// Case-insensitive search in titles and message text; returns matching chats
-// with a short snippet around the first hit.
+// Arabic-aware matching: no diacritics or tatweel, one form of alef, yeh and
+// teh marbuta, Arabic-Indic digits as 0-9, lower case. Each character maps to
+// one, so positions in the folded text are positions in the original.
+function fold(text) {
+  return String(text || '')
+    .replace(/[\u064B-\u065F\u0670\u0640]/g, '\u200B')
+    .replace(/[\u0622\u0623\u0625\u0671]/g, '\u0627')
+    .replace(/\u0649/g, '\u064A')
+    .replace(/\u0629/g, '\u0647')
+    .replace(/[\u0660-\u0669]/g, (d) => String(d.charCodeAt(0) - 0x0660))
+    .toLowerCase();
+}
+
+// Every word of the query must appear in the chat (title or messages).
+// Results: best first (most hits), with a snippet around the first hit and
+// the index of that message so the chat can scroll to it.
 function search(query) {
-  const q = String(query || '').trim().toLowerCase();
-  if (!q) return list();
+  // "ال" is dropped from the words so الأطفال also finds للأطفال and أطفال.
+  const words = fold(query).replace(/\u200B/g, '').split(/\s+/).filter(Boolean).slice(0, 8).map((w) => (w.length > 4 && w.startsWith('\u0627\u0644') ? w.slice(2) : w));
+  if (!words.length) return list();
   const out = [];
   for (const meta of list()) {
     const chat = get(meta.id);
     if (!chat) continue;
-    if (chat.title.toLowerCase().includes(q)) {
-      out.push({ ...meta, snippet: '' });
-      continue;
-    }
-    for (const m of chat.messages) {
-      const i = m.content.toLowerCase().indexOf(q);
-      if (i !== -1) {
-        out.push({ ...meta, snippet: m.content.slice(Math.max(0, i - 30), i + q.length + 50).replace(/\s+/g, ' ') });
-        break;
+    const title = fold(chat.title).replace(/\u200B/g, '');
+    const texts = chat.messages.map((m) => fold(m.content || '').replace(/\u200B/g, ''));
+    const all = `${title}\n${texts.join('\n')}`;
+    if (!words.every((w) => all.includes(w))) continue;
+    let hits = 0;
+    for (const w of words) hits += all.split(w).length - 1;
+    // The message holding the most of the words (the first such one).
+    let snippet = '';
+    let messageIndex = -1;
+    let best = 0;
+    texts.forEach((t, k) => {
+      const n = words.filter((w) => t.includes(w)).length;
+      if (n > best) {
+        best = n;
+        messageIndex = k;
       }
+    });
+    if (messageIndex >= 0) {
+      const plain = String(chat.messages[messageIndex].content || '').replace(/[\u064B-\u065F\u0670\u0640]/g, '');
+      const w = words.find((x) => texts[messageIndex].includes(x));
+      const i = texts[messageIndex].indexOf(w);
+      snippet = `${i > 30 ? '…' : ''}${plain.slice(Math.max(0, i - 30), i + w.length + 60).replace(/\s+/g, ' ')}`;
     }
+    out.push({ ...meta, snippet, messageIndex, hits });
   }
-  return out;
+  return out.sort((a, b) => b.hits - a.hits);
 }
 
 module.exports = { list, get, save, rename, remove, search, setMeta, exportAll, importAll };

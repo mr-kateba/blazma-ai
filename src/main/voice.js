@@ -165,18 +165,18 @@ async function startServer(model) {
   throw new AppError('voice-failed', 'timeout');
 }
 
-function post(port, wav) {
+function post(port, wav, format = 'json') {
   const boundary = `----blazma${crypto.randomBytes(12).toString('hex')}`;
   const field = (name, value) => `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`;
   const body = Buffer.concat([
-    Buffer.from(field('response_format', 'json') + field('temperature', '0.0') + field('language', 'auto')),
+    Buffer.from(field('response_format', format) + field('temperature', '0.0') + field('language', 'auto')),
     Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="speech.wav"\r\nContent-Type: audio/wav\r\n\r\n`),
     wav,
     Buffer.from(`\r\n--${boundary}--\r\n`),
   ]);
   return new Promise((resolve, reject) => {
     const req = http.request(
-      { host: '127.0.0.1', port, path: '/inference', method: 'POST', timeout: 5 * 60 * 1000, headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}`, 'Content-Length': body.length } },
+      { host: '127.0.0.1', port, path: '/inference', method: 'POST', timeout: (format === 'json' ? 5 : 30) * 60 * 1000, headers: { 'Content-Type': `multipart/form-data; boundary=${boundary}`, 'Content-Length': body.length } },
       (res) => {
         const chunks = [];
         res.on('data', (c) => chunks.push(c));
@@ -195,16 +195,27 @@ function post(port, wav) {
   });
 }
 
-// wav: 16 kHz mono PCM WAV bytes from the page. Returns the text.
-async function transcribe(wav) {
+// wav: 16 kHz mono PCM WAV bytes from the page. Returns the text, or with
+// { segments: true } the timed pieces: [{ start, end, text }] in seconds
+// (whisper-server's verbose_json).
+async function transcribe(wav, { segments = false } = {}) {
   const buf = Buffer.from(wav);
   if (buf.length < 44 || buf.toString('latin1', 0, 4) !== 'RIFF' || buf.toString('latin1', 8, 12) !== 'WAVE') throw new AppError('voice-bad-audio');
   if (buf.length > MAX_WAV_BYTES) throw new AppError('voice-bad-audio', 'too long');
   const s = await ensureServer();
   clearTimeout(idleTimer);
   try {
-    const res = await post(s.port, buf);
+    const res = await post(s.port, buf, segments ? 'verbose_json' : 'json');
     if (res && res.error) throw new AppError('voice-failed', String(res.error));
+    if (segments) {
+      const list = Array.isArray(res && res.segments) ? res.segments : [];
+      const num = (v, ms) => (typeof v === 'number' ? v : typeof ms === 'number' ? ms / 1000 : 0);
+      const out = list
+        .map((x) => ({ start: num(x.start, x.t0 != null ? x.t0 * 10 : undefined), end: num(x.end, x.t1 != null ? x.t1 * 10 : undefined), text: String(x.text || '').replace(/\s+/g, ' ').trim() }))
+        .filter((x) => x.text && !/^\[.*\]$|^\(.*\)$/.test(x.text));
+      if (!out.length && res && res.text) out.push({ start: 0, end: 0, text: String(res.text).replace(/\s+/g, ' ').trim() });
+      return out;
+    }
     return String((res && res.text) || '').replace(/\s+/g, ' ').trim();
   } finally {
     idleTimer = setTimeout(stop, IDLE_MS);

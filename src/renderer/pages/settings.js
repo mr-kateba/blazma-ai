@@ -635,20 +635,27 @@ function accelerator(e) {
 
 function quickSection() {
   const Q = V.quick;
-  const box = el('input', { type: 'text', class: 'input key-box', readonly: true, value: values.quickKey, dir: 'ltr' });
-  box.addEventListener('focus', () => (box.value = Q.keyPress));
-  box.addEventListener('blur', () => (box.value = values.quickKey));
-  box.addEventListener('keydown', async (e) => {
-    e.preventDefault();
-    const acc = accelerator(e);
-    if (!acc) return;
-    const res = await window.blazma.quickSetKey(acc);
-    if (!res.ok) return toast(Q.keyTaken, 'error');
-    values = await window.blazma.getSettings();
-    box.value = acc;
-    toast(S.saved);
-    box.blur();
-  });
+  // kind: text (the selection) or screen (a screen picture; Backspace turns it off).
+  const keyBox = (kind) => {
+    const name = kind === 'screen' ? 'quickScreenKey' : 'quickKey';
+    const shown = () => values[name] || Q.screenOff;
+    const box = el('input', { type: 'text', class: 'input key-box', readonly: true, value: shown(), dir: 'ltr' });
+    box.addEventListener('focus', () => (box.value = Q.keyPress));
+    box.addEventListener('blur', () => (box.value = shown()));
+    box.addEventListener('keydown', async (e) => {
+      e.preventDefault();
+      const off = kind === 'screen' && (e.key === 'Backspace' || e.key === 'Delete');
+      const acc = off ? '' : accelerator(e);
+      if (!acc && !off) return;
+      const res = await window.blazma.quickSetKey(acc, kind);
+      if (!res.ok) return toast(Q.keyTaken, 'error');
+      values = await window.blazma.getSettings();
+      toast(S.saved);
+      box.blur();
+    });
+    return box;
+  };
+  const box = keyBox('text');
   return section(
     'quick',
     Q.title,
@@ -659,6 +666,7 @@ function quickSection() {
       toast(S.saved);
     })),
     item(Q.key, Q.keyDesc, box),
+    item(Q.screenKey, Q.screenKeyDesc, keyBox('screen')),
   );
 }
 

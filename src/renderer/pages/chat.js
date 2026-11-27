@@ -9,8 +9,10 @@ import { extractTextToolCalls, visibleText } from '../lib/toolcalls.js';
 import { store } from '../lib/store.js';
 import { speak, stopSpeaking, isSpeaking } from '../lib/speech.js';
 import { startRecording } from '../lib/recorder.js';
+import { isMedia, decodeMedia, pieces, stamp, MAX_MEDIA_BYTES, MAX_MEDIA_SECONDS } from '../lib/media.js';
+import { translateUnits, defaultTarget, LANGS } from '../lib/translator.js';
 import { loadPersonas, personaById, openPersonaMenu } from './personas.js';
-import { confirmDialog, promptDialog } from '../lib/dialog.js';
+import { confirmDialog, promptDialog, choiceDialog } from '../lib/dialog.js';
 import { attachSlashMenu, parseCommand, withCommand, commandById } from '../lib/slash.js';
 import { initPreview, runPreview, canRun, closePreview } from '../lib/preview.js';
 
@@ -786,21 +788,80 @@ async function prepareImage(file) {
 }
 
 function fileChip(f, onRemove) {
-  const meta = f.reading ? ui.chat.fileReading : [f.pages ? ui.chat.filePages(f.pages) : null, ui.chat.fileChars(f.chars)].filter(Boolean).join(' · ');
+  const job = translating.get(f);
+  const busy = f.reading || Boolean(job);
+  const meta = job ? job.note : f.reading ? f.note || ui.chat.fileReading : [f.pages ? ui.chat.filePages(f.pages) : null, ui.chat.fileChars(f.chars)].filter(Boolean).join(' · ');
+  const L = ui.v2.translateFile;
+  const canTranslate = onRemove && !busy && sourceFiles.has(f);
   return el(
     'div',
-    { class: `file-chip${f.reading ? ' reading' : ''}`, title: f.name },
-    el('span', { class: 'file-chip-icon', 'aria-hidden': 'true' }, f.kind === 'pdf' ? 'PDF' : f.kind === 'docx' ? 'DOC' : 'TXT'),
+    { class: `file-chip${busy ? ' reading' : ''}`, title: f.name },
+    el('span', { class: 'file-chip-icon', 'aria-hidden': 'true' }, f.kind === 'pdf' ? 'PDF' : f.kind === 'docx' ? 'DOC' : f.kind === 'transcript' ? '🎙' : 'TXT'),
     el('span', { class: 'file-chip-text' }, el('bdi', { class: 'file-chip-name' }, f.name), el('span', { class: 'file-chip-meta' }, meta)),
-    onRemove ? el('button', { type: 'button', class: 'file-chip-x', title: ui.chat.removeFile, 'aria-label': ui.chat.removeFile, onclick: onRemove }, '×') : null,
+    canTranslate ? el('button', { type: 'button', class: 'file-chip-tr', title: L.button, 'aria-label': L.button, onclick: () => translateWhole(f) }, L.short) : null,
+    job ? el('button', { type: 'button', class: 'file-chip-x', title: L.stop, 'aria-label': L.stop, onclick: () => job.controller.abort() }, '■') : null,
+    onRemove && !job ? el('button', { type: 'button', class: 'file-chip-x', title: ui.chat.removeFile, 'aria-label': ui.chat.removeFile, onclick: onRemove }, '×') : null,
   );
+}
+
+// "ترجم الملف": the attached Word/PDF file, translated whole into a new file.
+const sourceFiles = new WeakMap(); // attached file -> { name, bytes } (never saved in the chat)
+const translating = new Map(); // attached file -> { note, controller }
+
+async function translateWhole(f) {
+  const L = ui.v2.translateFile;
+  const src = sourceFiles.get(f);
+  if (!src || translating.size) return;
+  const job = { note: L.reading, controller: new AbortController() };
+  translating.set(f, job);
+  renderPreview();
+  const setNote = (text) => {
+    job.note = text;
+    renderPreview();
+  };
+  try {
+    const parsed = await window.blazma.translateParse(src.name, src.bytes);
+    if (!parsed.ok) throw Object.assign(new Error('parse'), { note: ui.chat.fileErrors[parsed.error.code] ? ui.chat.fileErrors[parsed.error.code](src.name) : L.failed });
+    const { id, units, kind } = parsed.result;
+    translating.delete(f);
+    renderPreview();
+    const target = await choiceDialog({
+      title: L.title,
+      text: kind === 'docx' ? L.docxNote(units.length) : L.pdfNote(units.length),
+      choices: LANGS.map(([value, label]) => ({ value, label })),
+      value: defaultTarget(units),
+      ok: L.start,
+    });
+    if (!target) return;
+    translating.set(f, job);
+    const lang = LANGS.find((x) => x[0] === target);
+    setNote(L.progress(0));
+    const list = await translateUnits(units, lang[2], { signal: job.controller.signal, onProgress: (d, t) => setNote(L.progress(Math.floor((d / t) * 100))) });
+    setNote(L.saving);
+    const res = await window.blazma.translateBuild(id, list, target, lang[1]);
+    translating.delete(f);
+    renderPreview();
+    if (!res.ok) return showComposerNote(L.failed, 6000);
+    if (res.result.saved) {
+      showComposerNote(L.saved, 6000);
+      window.blazma.translateReveal(res.result.path);
+    }
+  } catch (err) {
+    translating.delete(f);
+    renderPreview();
+    if (err.name === 'AbortError') return showComposerNote(L.stopped, 4000);
+    showComposerNote(err.code === 'not-ready' ? ui.v2.quick.notReady : err.note || L.failed, 6000);
+  }
 }
 
 // Images go to the model as pictures (vision models); other files are turned
 // into text in the main process (documents.js) and sent with the message.
 async function addAttachments(files) {
+  const media = files.filter((f) => isMedia(f));
+  files = files.filter((f) => !isMedia(f));
   const images = files.filter((f) => f.type.startsWith('image/'));
   const docs = files.filter((f) => !f.type.startsWith('image/'));
+  for (const file of media) await addMedia(file);
   if (images.length) {
     if (visionEnabled) await addImages(images);
     else showComposerNote(ui.chat.noVision);
@@ -813,17 +874,70 @@ async function addAttachments(files) {
     const slot = { name: file.name, reading: true };
     pendingFiles.push(slot);
     renderPreview();
-    const res = await window.blazma.extractFile(file.name, new Uint8Array(await file.arrayBuffer()));
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    const res = await window.blazma.extractFile(file.name, bytes);
     const i = pendingFiles.indexOf(slot);
     if (i < 0) continue; // removed while reading
     if (res.ok) {
       pendingFiles[i] = res.result;
+      if (/\.(pdf|docx)$/i.test(file.name)) sourceFiles.set(res.result, { name: file.name, bytes });
       renderPreview();
     } else {
       pendingFiles.splice(i, 1);
       renderPreview();
       showComposerNote(ui.chat.fileErrors[res.error.code] ? ui.chat.fileErrors[res.error.code](file.name) : ui.chat.fileErrors['file-unreadable'](file.name), 6000);
     }
+  }
+}
+
+// Audio or video: whisper.cpp writes what is said, with times, and the text
+// is attached like a file (its default question is a summary).
+async function addMedia(file) {
+  const T = ui.v2.transcribe;
+  if (pendingFiles.length >= MAX_FILES) return showComposerNote(ui.chat.maxFiles);
+  if (file.size > MAX_MEDIA_BYTES) return showComposerNote(T.tooBig(file.name), 6000);
+  const st = await window.blazma.voiceStatus();
+  if (!st.program || !st.model) {
+    if (!(await confirmDialog({ text: ui.chat.micInstall(st.modelKind), ok: ui.chat.download }))) return;
+    const off = window.blazma.onVoiceProgress((p) => setSlotNote(ui.chat.micDownloading(p.stage, p.total ? Math.floor((p.done / p.total) * 100) : 0)));
+    const res = await window.blazma.voiceInstall();
+    off();
+    if (!res.ok) return showComposerNote((ui.errors[res.error.code] || ui.errors.unknown).title, 6000);
+  }
+  const slot = { name: file.name, kind: 'transcript', reading: true, note: T.decoding };
+  pendingFiles.push(slot);
+  renderPreview();
+  function setSlotNote(text) {
+    slot.note = text;
+    renderPreview();
+  }
+  try {
+    const { pcm, seconds } = await decodeMedia(file);
+    if (seconds > MAX_MEDIA_SECONDS) throw Object.assign(new Error('long'), { note: T.tooLong(file.name) });
+    const parts = pieces(pcm);
+    const lines = [];
+    for (let k = 0; k < parts.length; k++) {
+      if (pendingFiles.indexOf(slot) < 0) return; // removed while working
+      setSlotNote(T.progress(Math.floor((parts[k].start / seconds) * 100), formatDuration(seconds)));
+      const res = await window.blazma.voiceSegments(parts[k].wav);
+      if (!res.ok) throw Object.assign(new Error(res.error.code), { note: (ui.errors[res.error.code] || ui.errors.unknown).title });
+      for (const seg of res.result) lines.push(`[${stamp(parts[k].start + seg.start)}] ${seg.text}`);
+    }
+    const i = pendingFiles.indexOf(slot);
+    if (i < 0) return;
+    if (!lines.length) {
+      pendingFiles.splice(i, 1);
+      renderPreview();
+      return showComposerNote(T.nothing(file.name), 6000);
+    }
+    const text = `${T.header(file.name, stamp(seconds))}\n\n${lines.join('\n')}`;
+    pendingFiles[i] = { name: T.fileName(file.name), kind: 'transcript', text, chars: text.length, truncated: false, pages: null };
+    renderPreview();
+  } catch (err) {
+    const i = pendingFiles.indexOf(slot);
+    if (i >= 0) pendingFiles.splice(i, 1);
+    renderPreview();
+    showComposerNote(err.note || T.failed(file.name), 6000);
   }
 }
 
@@ -1515,6 +1629,38 @@ async function loadChat(id) {
   highlightCurrent();
 }
 
+// From a search result: scroll to the message with the first hit and mark
+// the words found in it for a few seconds.
+function jumpToMessage(index, query) {
+  const node = index >= 0 ? $('chat-log').querySelector(`.msg[data-index="${index}"]`) : null;
+  if (!node) return;
+  node.scrollIntoView({ block: 'center' });
+  node.classList.add('search-hit');
+  setTimeout(() => node.classList.remove('search-hit'), 4000);
+  const fold = (s) => s.replace(/[\u064B-\u065F\u0670\u0640]/g, '').replace(/[\u0622\u0623\u0625\u0671]/g, '\u0627').replace(/\u0649/g, '\u064A').replace(/\u0629/g, '\u0647').toLowerCase();
+  const words = fold(query).split(/\s+/).filter((w) => w.length > 1).map((w) => (w.length > 4 && w.startsWith('\u0627\u0644') ? w.slice(2) : w));
+  if (!words.length || !window.CSS || !CSS.highlights) return;
+  const ranges = [];
+  const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+  for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+    const raw = t.nodeValue;
+    // positions in the folded text map back through the kept characters
+    const keep = [];
+    for (let i = 0; i < raw.length; i++) if (!/[\u064B-\u065F\u0670\u0640]/.test(raw[i])) keep.push(i);
+    const f = fold(raw);
+    for (const w of words) {
+      for (let at = f.indexOf(w); at !== -1; at = f.indexOf(w, at + w.length)) {
+        const r = new Range();
+        r.setStart(t, keep[at]);
+        r.setEnd(t, keep[at + w.length - 1] + 1);
+        ranges.push(r);
+      }
+    }
+  }
+  CSS.highlights.set('blazma-search', new Highlight(...ranges));
+  setTimeout(() => CSS.highlights.delete('blazma-search'), 6000);
+}
+
 function highlightCurrent() {
   for (const item of document.querySelectorAll('.chat-item')) item.setAttribute('aria-current', String(item.dataset.id === currentChatId));
 }
@@ -1669,8 +1815,9 @@ function renderList(allItems, query) {
         refreshList();
       });
       item.append(actions);
-      item.addEventListener('click', () => loadChat(chat.id));
-      item.addEventListener('keydown', (e) => e.target === item && e.key === 'Enter' && loadChat(chat.id));
+      const open = () => loadChat(chat.id).then(() => query && jumpToMessage(chat.messageIndex, query));
+      item.addEventListener('click', open);
+      item.addEventListener('keydown', (e) => e.target === item && e.key === 'Enter' && open());
       return header ? [header, item] : [item];
     }),
   );

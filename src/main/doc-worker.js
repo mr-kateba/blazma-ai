@@ -135,7 +135,7 @@ async function pdfText(buf) {
     }
   }
   await task.destroy();
-  return { text: out.join('\n\n'), pages: doc.numPages, pagesRead: pages, images };
+  return { text: out.join('\n\n'), pages: doc.numPages, pagesRead: pages, images, pageTexts: out };
 }
 
 const MAX_SCAN_PAGES = 40;

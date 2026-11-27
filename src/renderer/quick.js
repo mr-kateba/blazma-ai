@@ -16,8 +16,11 @@ $('q-title').textContent = Q.title;
 $('q-input').placeholder = Q.inputPh;
 $('q-copy').textContent = Q.copy;
 $('q-chat').textContent = Q.openChat;
+$('q-replace').textContent = Q.replace;
+$('q-replace').title = Q.replaceTitle;
 
 let selected = '';
+let image = ''; // a picture of the screen (data URL), from the screen shortcut
 let answer = '';
 let lastPrompt = '';
 let controller = null;
@@ -28,11 +31,22 @@ window.blazma.getTheme().then(({ dark }) => (document.documentElement.dataset.th
 function showContext(ctx) {
   if (controller) controller.abort();
   selected = (ctx && ctx.text) || '';
+  image = (ctx && ctx.image) || '';
   answer = '';
   $('q-answer').replaceChildren();
-  $('q-copy').hidden = $('q-chat').hidden = true;
+  $('q-copy').hidden = $('q-chat').hidden = $('q-replace').hidden = true;
   const box = $('q-selected');
-  if (selected) {
+  $('q-input').placeholder = image ? Q.screenPh : Q.inputPh;
+  if (image) {
+    const label = document.createElement('span');
+    label.className = 'muted small';
+    label.textContent = Q.screen;
+    const pic = document.createElement('img');
+    pic.className = 'q-shot';
+    pic.src = image;
+    pic.alt = Q.screen;
+    box.replaceChildren(label, pic);
+  } else if (selected) {
     const t = document.createElement('div');
     t.className = 'q-sel-text';
     t.dir = 'auto';
@@ -48,6 +62,7 @@ function showContext(ctx) {
     box.replaceChildren(p);
   }
   $('q-actions').hidden = !selected;
+  $('q-screen-actions').hidden = !image;
   $('q-input').value = '';
   setTimeout(() => $('q-input').focus(), 30);
 }
@@ -60,6 +75,15 @@ for (const [id, [label, instruction]] of Object.entries(Q.actions)) {
   b.dataset.action = id;
   b.addEventListener('click', () => ask(`${instruction}\n\n${selected}`));
   $('q-actions').append(b);
+}
+for (const [id, [label, instruction]] of Object.entries(Q.screenActions)) {
+  const b = document.createElement('button');
+  b.type = 'button';
+  b.className = 'chip';
+  b.textContent = label;
+  b.dataset.screenAction = id;
+  b.addEventListener('click', () => ask(instruction));
+  $('q-screen-actions').append(b);
 }
 
 async function ask(prompt) {
@@ -75,15 +99,24 @@ async function ask(prompt) {
     out.textContent = Q.notReady;
     return;
   }
+  // A screen picture needs a model that sees pictures.
+  if (image) {
+    const st = await window.blazma.getSetupState();
+    if (!st || !st.vision) {
+      out.textContent = Q.noVision;
+      return;
+    }
+  }
   out.classList.add('pulse');
   const cs = await window.blazma.getChatSettings();
+  const user = image ? [{ type: 'text', text: prompt }, { type: 'image_url', image_url: { url: image } }] : prompt;
   let system = cs.systemPrompt;
   if (cs.memoryEnabled && cs.memory && cs.memory.length) system += `\n\n${ui.v2.memory.context(cs.memory.map((m) => `- ${m.text}`).join('\n'))}`;
   try {
     const res = await fetch(`http://127.0.0.1:${conn.port}/v1/chat/completions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${conn.apiKey}` },
-      body: JSON.stringify({ messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }], stream: true, ...cs.sampling, chat_template_kwargs: { enable_thinking: false } }),
+      body: JSON.stringify({ messages: [{ role: 'system', content: system }, { role: 'user', content: user }], stream: true, ...cs.sampling, chat_template_kwargs: { enable_thinking: false } }),
       signal,
     });
     for await (const chunk of readSse(res)) {
@@ -100,7 +133,10 @@ async function ask(prompt) {
     if (err.name !== 'AbortError') out.textContent = ui.chat.errors.generic;
   } finally {
     out.classList.remove('pulse');
-    $('q-copy').hidden = $('q-chat').hidden = !answer;
+    $('q-copy').hidden = !answer;
+    // A screen picture cannot go to the chat as text, and only a selection can be replaced.
+    $('q-chat').hidden = !answer || Boolean(image);
+    $('q-replace').hidden = !answer || !selected;
   }
 }
 
@@ -117,6 +153,10 @@ $('q-copy').addEventListener('click', () =>
   }),
 );
 $('q-chat').addEventListener('click', () => window.blazma.quickToChat(lastPrompt));
+$('q-replace').addEventListener('click', () => {
+  const text = visibleText(answer).trim();
+  if (text) window.blazma.quickReplace(text);
+});
 $('q-close').addEventListener('click', () => window.blazma.quickHide());
 document.addEventListener('keydown', (e) => e.key === 'Escape' && window.blazma.quickHide());
 window.blazma.onQuickContext(showContext);
