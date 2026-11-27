@@ -7,7 +7,7 @@
 
 const path = require('node:path');
 const { spawn } = require('node:child_process');
-const { BrowserWindow, clipboard, globalShortcut, screen, nativeTheme } = require('electron');
+const { BrowserWindow, clipboard, ClipboardItem, globalShortcut, screen, nativeTheme } = require('electron');
 const settings = require('./settings');
 const { APP_ORIGIN } = require('./protocol');
 
@@ -57,23 +57,45 @@ function sendCopy() {
   });
 }
 
-// The selected text, without leaving it on the clipboard.
+// The selected text, without leaving it on the clipboard. Electron 44's
+// clipboard is async (read/write ClipboardItem, readText/writeText promises).
+async function snapshot() {
+  try {
+    const items = await clipboard.read();
+    return await Promise.all(items.map(async (item) => {
+      const data = {};
+      for (const type of item.types) {
+        try { data[type] = await item.getType(type); } catch { /* format gone */ }
+      }
+      return data;
+    }));
+  } catch {
+    return null;
+  }
+}
+
+async function restore(saved) {
+  try {
+    const items = (saved || []).filter((d) => Object.keys(d).length).map((d) => new ClipboardItem(d));
+    if (items.length) await clipboard.write(items);
+    else clipboard.clear();
+  } catch { /* leave the clipboard as it is */ }
+}
+
 async function grabSelection() {
-  const oldText = clipboard.readText();
-  const oldImage = clipboard.readImage();
+  const saved = await snapshot();
   const marker = `\u2063blazma-${Date.now()}`;
-  clipboard.writeText(marker);
+  await clipboard.writeText(marker);
   await sendCopy();
   let text = '';
   for (let i = 0; i < 10; i++) {
-    text = clipboard.readText();
+    text = await clipboard.readText();
     if (text !== marker) break;
     await new Promise((r) => setTimeout(r, 40));
   }
   if (text === marker) text = '';
-  if (!oldImage.isEmpty()) clipboard.writeImage(oldImage);
-  else clipboard.writeText(oldText);
-  return text.trim().slice(0, 20000);
+  await restore(saved);
+  return String(text || '').trim().slice(0, 20000);
 }
 
 function createWindow() {
@@ -102,8 +124,15 @@ function createWindow() {
   win.loadURL(`${APP_ORIGIN}/quick.html`);
 }
 
+// The window opens even when copying the selection fails (empty text).
 async function open() {
-  return openWith(await grabSelection());
+  let text = '';
+  try {
+    text = await grabSelection();
+  } catch (err) {
+    require('./crashlog').write('quick assistant: selection', err);
+  }
+  return openWith(text);
 }
 
 // Shows the window with this text (open() passes the selection; tests pass text).
