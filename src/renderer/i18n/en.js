@@ -1080,7 +1080,7 @@ export const en = Object.freeze({
       undoText: (n) => `This undoes the ${n} changes of this request. Deleted files are in the Recycle Bin.`,
       undone: (n, bin, failed) => `Undid ${n} changes.${bin ? ` Deleted items (${bin}) are in the Recycle Bin.` : ''}${failed ? ` Could not undo ${failed}.` : ''}`,
       undoFailed: 'Could not undo.',
-      op: { move: 'Move', copy: 'Copy', mkdir: 'New folder', trash: 'Delete', write: 'New file', overwrite: 'Replace', pdf: 'New PDF' },
+      op: { to: 'to', move: 'Move', copy: 'Copy', mkdir: 'New folder', trash: 'Delete', write: 'New file', overwrite: 'Replace', pdf: 'New PDF' },
       count: {
         moves: (n) => `move ${n} ${n === 1 ? 'file' : 'files'}`,
         copies: (n) => `copy ${n} ${n === 1 ? 'file' : 'files'}`,

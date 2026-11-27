@@ -15,7 +15,9 @@ fs.mkdirSync(outDir, { recursive: true });
 
 (async () => {
   const exe = path.join(root, 'node_modules', 'electron', 'dist', process.platform === 'win32' ? 'electron.exe' : 'electron');
-  const app = await _electron.launch({ executablePath: exe, args: [root], cwd: root, env: { ...process.env, BLAZMA_USER_DATA: dataDir } });
+  // FAKE_MIC=<wav>: Chromium plays that file as the microphone (wake word test).
+  const mic = process.env.FAKE_MIC ? ['--use-fake-ui-for-media-stream', '--use-fake-device-for-media-stream', `--use-file-for-fake-audio-capture=${process.env.FAKE_MIC}`] : [];
+  const app = await _electron.launch({ executablePath: exe, args: [...mic, root], cwd: root, env: { ...process.env, BLAZMA_USER_DATA: dataDir } });
   const win = await app.firstWindow();
   await win.waitForLoadState('load');
   await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0].setContentSize(1400, 880));

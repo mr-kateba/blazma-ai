@@ -1092,7 +1092,7 @@ export const ar = Object.freeze({
       undoText: (n) => `يرجع الـ${n} تغيير اللي سواها في هذا الطلب. الملفات المحذوفة تلقاها في سلة المحذوفات.`,
       undone: (n, bin, failed) => `رجّعت ${n} تغيير.${bin ? ` المحذوفات (${bin}) في سلة المحذوفات.` : ''}${failed ? ` ما قدرت أرجّع ${failed}.` : ''}`,
       undoFailed: 'ما قدرت أتراجع.',
-      op: { move: 'نقل', copy: 'نسخ', mkdir: 'مجلد جديد', trash: 'حذف', write: 'ملف جديد', overwrite: 'استبدال', pdf: 'PDF جديد' },
+      op: { to: 'إلى', move: 'نقل', copy: 'نسخ', mkdir: 'مجلد جديد', trash: 'حذف', write: 'ملف جديد', overwrite: 'استبدال', pdf: 'PDF جديد' },
       count: {
         moves: (n) => `نقل ${n} ${n === 1 ? 'ملف' : 'ملفات'}`,
         copies: (n) => `نسخ ${n} ${n === 1 ? 'ملف' : 'ملفات'}`,

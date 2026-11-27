@@ -47,17 +47,22 @@ export function agentRules({ agent, brain, places, brainFolders }) {
 }
 
 const short = (p) => String(p || '').split(/[\\/]/).slice(-2).join('\\');
+const base = (p) => String(p || '').split(/[\\/]/).pop();
+const dir = (p) => String(p || '').split(/[\\/]/).slice(-2, -1)[0] || '';
+// Paths are isolated so Arabic and Latin names keep their order.
+const iso = (s) => `\u2068${s}\u2069`;
 const MAX_RESULT = 12000;
 
 function lines(plan) {
   const A = ui.v2.agent;
   return plan.steps.map((s) => {
-    if (s.op === 'move') return `${A.op.move} ${short(s.from)} ← ${short(s.to)}`;
-    if (s.op === 'copy') return `${A.op.copy} ${short(s.from)} ← ${short(s.to)}`;
-    if (s.op === 'mkdir') return `${A.op.mkdir} ${short(s.path)}`;
-    if (s.op === 'trash') return `${A.op.trash} ${short(s.path)}`;
-    if (s.op === 'write') return `${s.overwrite ? A.op.overwrite : A.op.write} ${short(s.path)}`;
-    return `${A.op.pdf} ${short(s.path)}`;
+    const to = (s) => (base(s.from) === base(s.to) ? iso(dir(s.to)) : iso(short(s.to)));
+    if (s.op === 'move') return `${A.op.move} ${iso(base(s.from))} ${A.op.to} ${to(s)}`;
+    if (s.op === 'copy') return `${A.op.copy} ${iso(base(s.from))} ${A.op.to} ${to(s)}`;
+    if (s.op === 'mkdir') return `${A.op.mkdir} ${iso(base(s.path))}`;
+    if (s.op === 'trash') return `${A.op.trash} ${iso(short(s.path))}`;
+    if (s.op === 'write') return `${s.overwrite ? A.op.overwrite : A.op.write} ${iso(short(s.path))}`;
+    return `${A.op.pdf} ${iso(short(s.path))}`;
   });
 }
 
@@ -96,6 +101,15 @@ export async function runAgentTool(name, args, reply, renderLast) {
   if (!changing) {
     const res = await window.blazma.agentRead(name, args);
     if (!res.ok) return fail(res);
+    // No file name matches: look inside the files too ("دليل الاستخدام" in guide.pdf).
+    if (name === 'find_files' && !res.result.found && args.query) {
+      const kb = await window.blazma.kbSearch(String(args.query), null).catch(() => ({ ok: false }));
+      if (kb.ok && kb.result.length) {
+        for (const p of kb.result) reply.sources.push({ title: p.name, url: `file:${p.file}`, file: p.file });
+        res.result.note = 'No file NAME matched, but these files have matching CONTENT:';
+        res.result.by_content = [...new Map(kb.result.map((p) => [p.file, { path: p.file, passage: p.text.slice(0, 300) }])).values()];
+      } else res.result.note = 'No file name matched. Try other words (names are often in English), an extension, or search_my_files.';
+    }
     if (name === 'read_file' && res.result.file) reply.sources.push({ title: res.result.file.split(/[\\/]/).pop(), url: `file:${res.result.file}`, file: res.result.file });
     return JSON.stringify(res.result).slice(0, MAX_RESULT);
   }
@@ -115,5 +129,5 @@ export async function runAgentTool(name, args, reply, renderLast) {
   if (!res.ok) return fail(res);
   reply.changed = (reply.changed || 0) + res.result.done;
   if (res.result.failed.length) step.failed = true;
-  return JSON.stringify({ done: res.result.done, failed: res.result.failed.slice(0, 20), created: res.result.created });
+  return JSON.stringify({ files_moved: plan.moves, files_copied: plan.copies, folders_created: plan.new_folders, moved_to_recycle_bin: plan.deletes, files_written: plan.writes, pdfs_made: plan.pdfs, failed: res.result.failed.slice(0, 20), created: res.result.created });
 }

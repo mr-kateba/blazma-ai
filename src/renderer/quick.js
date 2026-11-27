@@ -228,6 +228,7 @@ async function voiceAnswer(heard) {
     { role: 'system', content: system },
     { role: 'user', content: heard },
   ];
+  const said = []; // text written next to tool calls (the start of the answer)
   try {
     for (let round = 0; round < 5; round++) {
       const res = await fetch(`http://127.0.0.1:${conn.port}/v1/chat/completions`, {
@@ -246,9 +247,10 @@ async function voiceAnswer(heard) {
         calls = leaked.calls.map((c, i) => ({ id: `v${round}_${i}`, type: 'function', function: c }));
       }
       if (!calls.length) {
-        answer = visibleText(content).trim();
+        answer = [...said, visibleText(content).trim()].filter(Boolean).join(' ');
         break;
       }
+      if (visibleText(content).trim()) said.push(visibleText(content).trim());
       msgs.push({ role: 'assistant', content, tool_calls: calls });
       for (const c of calls) {
         let args = {};
@@ -301,3 +303,12 @@ async function finishVoice(text) {
   const res = await speak(text, tag).catch(() => ({ ok: false }));
   if (!res.ok) resume();
 }
+
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  stopSpeaking();
+  if (voiceMode) window.blazma.wakeSpoken();
+  window.blazma.quickHide();
+});
+window.blazma.onQuickContext(showContext);
+window.blazma.quickContext().then(showContext);

@@ -224,10 +224,11 @@ function removeFolder(folder) {
 }
 
 let indexing = null;
+let releaseTimer = null;
 
 // Reads new and changed files (by size and modification time), forgets
 // deleted ones, and embeds the passages. onProgress({ done, total, file }).
-async function update(onProgress = () => {}) {
+async function update(onProgress = () => {}, { stopWhen = null } = {}) {
   if (indexing) return indexing;
   indexing = (async () => {
     const idx = load();
@@ -239,7 +240,13 @@ async function update(onProgress = () => {}) {
       return st && st.size <= MAX_FILE_BYTES && (!known || known.mtime !== st.mtimeMs || known.size !== st.size);
     });
     let done = 0;
+    delete idx.paused;
     for (const file of todo) {
+      // "عقل جهازك" reads in the background and steps aside when the user is back.
+      if (stopWhen && stopWhen()) {
+        idx.paused = true;
+        break;
+      }
       onProgress({ done, total: todo.length, file: path.basename(file) });
       const st = fs.statSync(file);
       try {
@@ -283,6 +290,12 @@ async function search(question, limit = 5, folders = null) {
     return { file, name: path.basename(file), text: c.text, score: s, summary: idx.files[file].summary || '' };
   });
   scored.sort((a, b) => b.score - a.score);
+  // The chat model gets the whole graphics card back for the answer: the
+  // embedding server leaves memory right after a question (not while indexing).
+  clearTimeout(releaseTimer);
+  releaseTimer = setTimeout(() => {
+    if (!indexing) stop();
+  }, 1500);
   // Passages far below the best match are about something else, so they are
   // not sent or shown as sources. Measured on the test documents
   // (tests/e2e/kb.js): matches scored 0.53-0.70, unrelated passages 0.23-0.42.

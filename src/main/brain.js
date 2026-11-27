@@ -88,6 +88,7 @@ function watch() {
 }
 
 async function refresh(force = false) {
+  const background = !force;
   if (running) return running;
   running = (async () => {
     try {
@@ -98,11 +99,16 @@ async function refresh(force = false) {
       dirty = false;
       progress = { done: 0, total: 0, file: null };
       onChange(status());
-      await knowledge.update((p) => {
-        progress = p;
-        onChange(status());
-      });
-      lastFull = Date.now();
+      await knowledge.update(
+        (p) => {
+          progress = p;
+          onChange(status());
+        },
+        // In the background: stop as soon as the user is using the computer again.
+        { stopWhen: background ? () => powerMonitor.getSystemIdleTime() < 5 : null },
+      );
+      if (background && powerMonitor.getSystemIdleTime() < 5) dirty = true; // not finished: next idle time
+      else lastFull = Date.now();
       lastError = null;
     } catch (err) {
       lastError = err.code || err.message;
@@ -110,6 +116,7 @@ async function refresh(force = false) {
     } finally {
       progress = null;
       running = null;
+      knowledge.stop(); // the graphics card memory goes back to the chat model
       onChange(status());
     }
   })();

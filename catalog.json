@@ -2,14 +2,14 @@
   "version": 1,
   "models": [
     {
-      "id": "gemma-4-12b",
-      "name": "Gemma 4 12B",
-      "hf": "unsloth/gemma-4-12b-it-GGUF:UD-Q4_K_XL",
-      "sizeBytes": 7366423360,
-      "minVramMB": 10240,
+      "id": "gemma-4-12b-qat",
+      "name": "Gemma 4 12B QAT",
+      "hf": "unsloth/gemma-4-12B-it-qat-GGUF:UD-Q4_K_XL",
+      "sizeBytes": 6716356800,
+      "minVramMB": 8448,
       "license": "Apache-2.0",
-      "note": "الموديل المقترح لكروت 12 جيجابايت. الأفضل في سلامة اللغة العربية في اختبارنا.",
-      "noteEn": "Recommended for 12 GB cards. The best Arabic in our test.",
+      "note": "الموديل المقترح لكروت 10 و12 جيجابايت. نسخة مدرّبة على الضغط من Gemma 4 12B: أدق وأصغر (19 من 20 في اختبارنا العربي مع التفكير، مقابل 17 للنسخة العادية).",
+      "noteEn": "Recommended for 10 and 12 GB cards. The quantization-aware version of Gemma 4 12B: more accurate and smaller (19/20 on our Arabic test with thinking, against 17 for the regular one).",
       "thinking": true,
       "sampling": {
         "temperature": 1.0,
@@ -23,6 +23,29 @@
         "arabic"
       ],
       "featured": true
+    },
+    {
+      "id": "gemma-4-12b",
+      "name": "Gemma 4 12B",
+      "hf": "unsloth/gemma-4-12b-it-GGUF:UD-Q4_K_XL",
+      "sizeBytes": 7366423360,
+      "minVramMB": 10240,
+      "license": "Apache-2.0",
+      "note": "النسخة العادية من Gemma 4 12B. المقترح الحين نسخة QAT (أدق وأصغر).",
+      "noteEn": "The regular Gemma 4 12B. The QAT version (more accurate, smaller) is now recommended.",
+      "thinking": true,
+      "sampling": {
+        "temperature": 1.0,
+        "top_p": 0.95,
+        "top_k": 64
+      },
+      "vision": true,
+      "maker": "Google",
+      "origin": "us",
+      "tags": [
+        "arabic"
+      ],
+      "featured": false
     },
     {
       "id": "qwen3.5-9b",
