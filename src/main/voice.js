@@ -38,6 +38,16 @@ const MAX_WAV_BYTES = 40 * 1024 * 1024; // about 20 minutes of 16 kHz mono audio
 
 const root = () => path.join(paths.userData(), 'voice');
 
+// The spoken language: Arabic by default with the Arabic interface. Left to
+// detection, whisper often takes Libyan or Gulf speech for Persian or Urdu
+// and writes nonsense.
+function language() {
+  const env = process.env.BLAZMA_VOICE_LANG;
+  if (env) return env;
+  const s = settings.get();
+  return s.voiceLang && s.voiceLang !== 'ui' ? s.voiceLang : s.language === 'en' ? 'auto' : 'ar';
+}
+
 let server = null; // { child, port, model, ready }
 let idleTimer = null;
 let installing = null;
@@ -125,28 +135,63 @@ async function install(onProgress = () => {}) {
 
 async function ensureServer() {
   const model = modelFile(settings.get().voiceModel);
-  if (server && server.ready && server.child.exitCode === null && server.model === model) return server;
+  if (server && server.ready && server.child.exitCode === null && server.model === model && server.lang === language()) return server;
   if (!starting) starting = startServer(model).finally(() => (starting = null));
   return starting;
 }
 
-async function startServer(model) {
+// On NVIDIA cards whisper runs on the graphics card with the CUDA files the
+// chat engine already has (no second 700 MB download): whisper's own program
+// files are copied next to nothing else, and the engine folder supplies
+// ggml and CUDA. About 0.1 s per sentence instead of 5-20 s on the processor.
+function gpuLaunch(exe) {
+  if (process.env.BLAZMA_VOICE_CPU || gpuFailed) return null;
+  let engine = null;
+  try {
+    engine = require('./engine').installedEngine();
+  } catch {}
+  if (!engine || !fs.existsSync(path.join(engine.dir, 'ggml-cuda.dll'))) return null;
+  const from = path.dirname(exe);
+  const dir = path.join(root(), 'gpu');
+  fs.mkdirSync(dir, { recursive: true });
+  for (const f of fs.readdirSync(from)) {
+    if (!/\.(exe|dll)$/i.test(f) || /^ggml/i.test(f) || (/\.exe$/i.test(f) && f !== path.basename(exe))) continue;
+    const src = path.join(from, f);
+    const dst = path.join(dir, f);
+    const a = fs.statSync(src);
+    const b = fs.statSync(dst, { throwIfNoEntry: false });
+    if (!b || b.size !== a.size || b.mtimeMs < a.mtimeMs) fs.copyFileSync(src, dst);
+  }
+  return { exe: path.join(dir, path.basename(exe)), cwd: engine.dir, env: { ...process.env, PATH: `${engine.dir};${process.env.PATH || ''}` } };
+}
+let gpuFailed = false;
+
+async function startServer(model, cpu = false) {
   stop();
   const exe = installedExe();
   if (!exe || !fs.existsSync(model)) throw new AppError('voice-missing');
   const port = await pickPort(0);
-  // -l auto: the spoken language is detected (Arabic or any other).
-  const child = spawn(exe, ['-m', model, '--host', '127.0.0.1', '--port', String(port), '-l', 'auto'], {
-    cwd: path.dirname(exe),
+  const lang = language();
+  const gpu = cpu ? null : gpuLaunch(exe);
+  const child = spawn(gpu ? gpu.exe : exe, ['-m', model, '--host', '127.0.0.1', '--port', String(port), '-l', lang], {
+    cwd: gpu ? gpu.cwd : path.dirname(exe),
+    env: gpu ? gpu.env : process.env,
     windowsHide: true,
     stdio: ['ignore', 'ignore', 'pipe'],
   });
   let log = '';
   child.stderr.on('data', (d) => (log = (log + d).slice(-3000)));
-  server = { child, port, model };
+  server = { child, port, model, lang, gpu: Boolean(gpu) };
   const started = Date.now();
   while (Date.now() - started < 120000) {
-    if (child.exitCode !== null) throw new AppError('voice-failed', log.slice(-600));
+    if (child.exitCode !== null) {
+      // The graphics-card start failed (an older card, missing files): the processor, from now on.
+      if (gpu) {
+        gpuFailed = true;
+        return startServer(model, true);
+      }
+      throw new AppError('voice-failed', log.slice(-600));
+    }
     const up = await new Promise((resolve) => {
       const req = http.get({ host: '127.0.0.1', port, path: '/', timeout: 1000 }, (res) => {
         res.resume();
@@ -165,11 +210,11 @@ async function startServer(model) {
   throw new AppError('voice-failed', 'timeout');
 }
 
-function post(port, wav, format = 'json') {
+function post(port, wav, format = 'json', { lang = language(), prompt = '' } = {}) {
   const boundary = `----blazma${crypto.randomBytes(12).toString('hex')}`;
   const field = (name, value) => `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`;
   const body = Buffer.concat([
-    Buffer.from(field('response_format', format) + field('temperature', '0.0') + field('language', 'auto')),
+    Buffer.from(field('response_format', format) + field('temperature', '0.0') + field('language', lang) + (prompt ? field('prompt', prompt) : ''), 'utf8'),
     Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="speech.wav"\r\nContent-Type: audio/wav\r\n\r\n`),
     wav,
     Buffer.from(`\r\n--${boundary}--\r\n`),
@@ -198,14 +243,18 @@ function post(port, wav, format = 'json') {
 // wav: 16 kHz mono PCM WAV bytes from the page. Returns the text, or with
 // { segments: true } the timed pieces: [{ start, end, text }] in seconds
 // (whisper-server's verbose_json).
-async function transcribe(wav, { segments = false } = {}) {
+// lang / prompt: for one request (the wake word: the name as a hint, and a
+// second try with the language detected).
+async function transcribe(wav, { segments = false, lang, prompt } = {}) {
   const buf = Buffer.from(wav);
   if (buf.length < 44 || buf.toString('latin1', 0, 4) !== 'RIFF' || buf.toString('latin1', 8, 12) !== 'WAVE') throw new AppError('voice-bad-audio');
   if (buf.length > MAX_WAV_BYTES) throw new AppError('voice-bad-audio', 'too long');
   const s = await ensureServer();
   clearTimeout(idleTimer);
   try {
-    const res = await post(s.port, buf, segments ? 'verbose_json' : 'json');
+    // Files (segments): long enough for whisper to tell the language itself,
+    // and an English video must not come out translated into Arabic.
+    const res = await post(s.port, buf, segments ? 'verbose_json' : 'json', { lang: lang || (segments ? 'auto' : language()), prompt });
     if (res && res.error) throw new AppError('voice-failed', String(res.error));
     if (segments) {
       const list = Array.isArray(res && res.segments) ? res.segments : [];

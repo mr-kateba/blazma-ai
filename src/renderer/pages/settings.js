@@ -699,6 +699,16 @@ function wakeSection() {
   window.blazma.wakeStatus().then(draw);
   if (wakeOff) wakeOff();
   wakeOff = window.blazma.onWake((s) => document.getElementById('wake-status') && draw({ enabled: values.wakeEnabled, ...s }));
+  // The answers are spoken; Windows has no Arabic voice unless its speech pack is installed.
+  const voiceBtn = el('button', { type: 'button', class: 'btn', hidden: true }, W.ttsInstall);
+  window.blazma.ttsStatus().then((t) => (voiceBtn.hidden = Boolean(t.installed)));
+  voiceBtn.addEventListener('click', async () => {
+    voiceBtn.disabled = true;
+    voiceBtn.textContent = W.installing;
+    const res = await window.blazma.ttsInstall();
+    if (!res.ok) toast((ui.errors[res.error.code] || ui.errors.unknown).title, 'error');
+    render();
+  });
   return section(
     'wake',
     W.title,
@@ -712,7 +722,7 @@ function wakeSection() {
       }),
     ),
     item(W.examples, W.examplesDesc, null),
-    el('div', { class: 'set-item' }, el('p', { class: 'muted small' }, W.privacy), install),
+    el('div', { class: 'set-item' }, el('p', { class: 'muted small' }, W.privacy), el('div', { class: 'row' }, install, voiceBtn)),
   );
 }
 

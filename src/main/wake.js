@@ -86,7 +86,15 @@ async function heard(wav, mode) {
   const voice = require('./voice');
   let text = '';
   try {
+    // In the spoken language first; when the wake word is not there, once
+    // more with the language detected ("Hey Blazma" in English is otherwise
+    // translated into Arabic and the name is lost). No prompt with the name:
+    // whisper repeats a prompt on unclear sound, which would wake it by itself.
     text = await voice.transcribe(wav);
+    if (mode === 'wake' && !match(text).wake) {
+      const again = await voice.transcribe(wav, { lang: 'auto' });
+      if (match(again).wake) text = again;
+    }
   } catch {
     return { handled: false };
   }

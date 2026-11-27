@@ -24,7 +24,8 @@ const DEFAULTS = Object.freeze({
   webSearch: true, // the model may search the web (tool calls run in main/web.js)
   kbInChat: false, // answer from the user's documents (knowledge.js)
   tourDone: false, // the first-run guided tour was finished or skipped
-  voiceModel: 'small', // speech to text: 'small' (faster) or 'turbo' (more accurate)
+  voiceModel: 'turbo', // speech to text: 'small' (faster) or 'turbo' (more accurate; needed for Arabic)
+  voiceLang: 'ui', // the spoken language: 'ui' (Arabic with the Arabic interface), 'auto', 'ar', 'en'
   codeComplete: false, // code completion in VS Code with a small coding model (coder.js)
   coderKey: '', // that server's key, kept so Continue's settings stay valid
   ttsEngine: 'auto', // reading aloud: 'auto' (Blazma's Arabic voice when downloaded), 'blazma' or 'windows'
@@ -72,6 +73,7 @@ const VALIDATORS = {
   kbInChat: (v) => typeof v === 'boolean',
   tourDone: (v) => typeof v === 'boolean',
   voiceModel: (v) => ['small', 'turbo'].includes(v),
+  voiceLang: (v) => ['ui', 'auto', 'ar', 'en'].includes(v),
   ttsEngine: (v) => ['auto', 'blazma', 'windows'].includes(v),
   codeComplete: (v) => typeof v === 'boolean',
   coderKey: (v) => v === '' || /^[0-9a-f]{48}$/.test(v),
@@ -125,6 +127,9 @@ function load() {
   for (const [key, valid] of Object.entries(VALIDATORS)) {
     if (stored && key in stored && valid(stored[key])) current[key] = stored[key];
   }
+  // 0.2.0: the small speech model writes Arabic badly; everyone moves to
+  // turbo once (there was no setting to choose it before).
+  if (stored && stored.voiceModel === 'small' && !('voiceLang' in stored)) current.voiceModel = 'turbo';
   return current;
 }
 

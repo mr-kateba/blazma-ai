@@ -134,24 +134,30 @@ function synth(text) {
     .slice(0, MAX_CHARS);
   if (!line) return Promise.resolve(Buffer.alloc(0));
   return new Promise((resolve, reject) => {
-    const child = spawn(exe, ['--model', voiceFile(), '--output_file', '-', '--quiet'], {
+    // A file, not stdout: on Windows piper's stdout is in text mode and every
+    // 0x0A byte in the audio gets a 0x0D before it, which crackles.
+    const out = path.join(require('node:os').tmpdir(), `blazma-tts-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.wav`);
+    const child = spawn(exe, ['--model', voiceFile(), '--output_file', out, '--quiet'], {
       cwd: path.dirname(exe),
       windowsHide: true,
       stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, LD_LIBRARY_PATH: path.dirname(exe) },
     });
-    const out = [];
     let err = '';
     const timer = setTimeout(() => child.kill(), TIMEOUT_MS);
     child.on('error', (e) => {
       clearTimeout(timer);
       reject(new AppError('tts-failed', e.message));
     });
-    child.stdout.on('data', (d) => out.push(d));
+    child.stdout.resume();
     child.stderr.on('data', (d) => (err = (err + d).slice(-2000)));
     child.on('close', (code) => {
       clearTimeout(timer);
-      const wav = Buffer.concat(out);
+      let wav = Buffer.alloc(0);
+      try {
+        wav = fs.readFileSync(out);
+      } catch {}
+      fs.rmSync(out, { force: true });
       if (code !== 0 || wav.length < 44 || wav.toString('latin1', 0, 4) !== 'RIFF') return reject(new AppError('tts-failed', err || `exit ${code}`));
       resolve(wav);
     });
