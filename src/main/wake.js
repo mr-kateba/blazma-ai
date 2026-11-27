@@ -114,7 +114,19 @@ async function heard(wav, mode) {
   return { listen: true };
 }
 
+// The last requests (not other speech), for "what did it hear?" when
+// something goes wrong: <userData>/voice-log.txt, newest 100 lines.
+function note(line) {
+  try {
+    const fs = require('node:fs');
+    const file = path.join(require('./paths').userData(), 'voice-log.txt');
+    const old = fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).slice(-99) : [];
+    fs.writeFileSync(file, [...old, `${new Date().toISOString()} ${line}`].join('\n') + '\n');
+  } catch {}
+}
+
 function command(text) {
+  note(`heard: ${lastHeard} -> request: ${text}`);
   pause(true);
   setTimeout(() => pause(false), 45000); // in case the answer never says it ended
   require('./quick').openVoice(text);

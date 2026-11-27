@@ -2,7 +2,7 @@
 // local model: pieces are sent in batches, each marked ⟦n⟧, and any piece
 // missing from the answer is translated again on its own.
 
-import { visibleText } from './toolcalls.js';
+import { complete as llm } from './llm.js';
 
 export const LANGS = [
   ['ar', 'العربية', 'Arabic'],
@@ -21,17 +21,9 @@ export const LANGS = [
 const BATCH_CHARS = 1800;
 const BATCH_UNITS = 25;
 
-async function complete(conn, messages, signal, maxTokens) {
-  const res = await fetch(`http://127.0.0.1:${conn.port}/v1/chat/completions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${conn.apiKey}` },
-    body: JSON.stringify({ messages, temperature: 0.2, top_p: 0.9, max_tokens: maxTokens, chat_template_kwargs: { enable_thinking: false } }),
-    signal,
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  const j = await res.json();
-  return visibleText(String((j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '')).trim();
-}
+// The shared request (lib/llm.js): the model's own sampling, a low temperature
+// only for models without advice.
+const complete = (_conn, messages, signal, maxTokens) => llm(messages, { maxTokens, temperature: 0.2, signal });
 
 function batches(units) {
   const out = [];

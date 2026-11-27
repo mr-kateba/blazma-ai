@@ -146,6 +146,7 @@ export async function deepResearch({ question, reply, update, signal, labels: L 
       temperature: 0.3,
       max_tokens: 3000,
       chat_template_kwargs: { enable_thinking: false },
+      stop: ['<channel|><|channel>'],
       messages: [
         {
           role: 'system',

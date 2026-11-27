@@ -1346,6 +1346,8 @@ async function streamReply({ reply, system, conn, chatSettings, webOn, signal })
       ...chatSettings.sampling,
       // Gemma 4's template defaults thinking to off, Qwen3.5's to on; always say which.
       chat_template_kwargs: { enable_thinking: chatSettings.thinking },
+      // Two empty thought blocks in a row: Gemma 4 looping (never a real answer).
+      stop: ['<channel|><|channel>'],
       // Several searches in one reply are read as calls, not left as text.
       ...(tools.length ? { parallel_tool_calls: true } : {}),
     };

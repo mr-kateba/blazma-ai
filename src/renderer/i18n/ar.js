@@ -1161,7 +1161,9 @@ export const ar = Object.freeze({
       examplesDesc: '«يا بلازما، افتح ستيم» · «يا بلازما، وين ملف السيرة الذاتية؟» · «يا بلازما، وش الطقس بكرة؟» · أو قل «يا بلازما» بس، واستنى الصوت، وبعدها اطلب.',
       privacy: 'الكلام يُقرأ على جهازك ولا يُحفظ ولا يُرسل لأي مكان. يشتغل والبرنامج مفتوح (ولو مصغّر). أيقونة المايك تظهر في شريط المهام وهو يسمع.',
       heard: 'سمعتك:',
-      system: (now, places) => `You are a voice assistant on the user's Windows computer. Now: ${now}. Answer in one to three short sentences meant to be spoken: no markdown, no lists, no links. To open a program use open_app; to find or open a file use find_files then open. If you open something, just say it is open.\nThe user's folders:\n${places}`,
+      opened: (name) => `فتحت ${name}.`,
+      notInstalled: (name) => `ما لقيت ${name} في جهازك. يمكن ما هو مثبّت.`,
+      system: (now, places) => `You are a voice assistant on the user's Windows computer. Now: ${now}. Answer in one to three short sentences meant to be spoken: no markdown, no lists, no links. To open a program you MUST call open_app (never say it is open without calling it; if it is not found, the result lists the installed programs: pick the right one and call open_app again, or say it is not installed). To find or open a file use find_files then open.\nThe user's folders:\n${places}`,
     },
     translateFile: {
       button: 'ترجم الملف كامل إلى ملف جديد',

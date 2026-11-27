@@ -495,7 +495,7 @@ const BUILTIN_APPS = [
   [['camera', 'الكاميرا'], 'microsoft.windows.camera:'],
   [['store', 'microsoft store', 'المتجر'], 'ms-windows-store:'],
 ];
-const APP_ALIASES = { كروم: 'chrome', 'جوجل كروم': 'chrome', فايرفوكس: 'firefox', ايدج: 'edge', إيدج: 'edge', وورد: 'word', اكسل: 'excel', إكسل: 'excel', بوربوينت: 'powerpoint', ستيم: 'steam', ديسكورد: 'discord', سبوتيفاي: 'spotify', واتساب: 'whatsapp', تيليجرام: 'telegram', تلقرام: 'telegram', 'في اس كود': 'visual studio code', فوتوشوب: 'photoshop', 'أو بي إس': 'obs', زووم: 'zoom', تيمز: 'teams' };
+const APP_ALIASES = { بريف: 'brave', براف: 'brave', برايف: 'brave', 'بريف براوزر': 'brave', اوبرا: 'opera', أوبرا: 'opera', يوتيوب: 'youtube', 'ابيك': 'epic games', 'إيبك': 'epic games', فالورانت: 'valorant', 'ماين كرافت': 'minecraft', روبلوكس: 'roblox', فورتنايت: 'fortnite', بلازما: 'blazma', 'كاونتر سترايك': 'counter-strike', نفيديا: 'nvidia', انفيديا: 'nvidia', كروم: 'chrome', 'جوجل كروم': 'chrome', فايرفوكس: 'firefox', ايدج: 'edge', إيدج: 'edge', وورد: 'word', اكسل: 'excel', إكسل: 'excel', بوربوينت: 'powerpoint', ستيم: 'steam', ديسكورد: 'discord', سبوتيفاي: 'spotify', واتساب: 'whatsapp', تيليجرام: 'telegram', تلقرام: 'telegram', 'في اس كود': 'visual studio code', فوتوشوب: 'photoshop', 'أو بي إس': 'obs', زووم: 'zoom', تيمز: 'teams' };
 
 function startMenuShortcuts() {
   const dirs = [path.join(process.env.ProgramData || 'C:\\ProgramData', 'Microsoft', 'Windows', 'Start Menu', 'Programs'), path.join(process.env.APPDATA || '', 'Microsoft', 'Windows', 'Start Menu', 'Programs'), known().desktop].filter(Boolean);
@@ -504,8 +504,36 @@ function startMenuShortcuts() {
   return out;
 }
 
+// Arabic or Latin name -> a rough consonant skeleton, so "بريف" finds Brave
+// and "ديسكورد" finds Discord.
+const AR_SOUNDS = { ب: 'b', پ: 'b', ت: 't', ث: 't', ج: 'k', ح: 'h', خ: 'h', د: 't', ذ: 't', ر: 'r', ز: 's', س: 's', ش: 's', ص: 's', ض: 't', ط: 't', ظ: 't', غ: 'k', ف: 'f', ڤ: 'f', ق: 'k', ك: 'k', گ: 'k', ل: 'l', م: 'm', ن: 'n', ه: 'h', ة: '' };
+const DIGITS = ['صفر', 'واحد', 'اثنين', 'ثلاث', 'اربع', 'خمس', 'ست', 'سبع', 'ثمان', 'تسع'];
+function skeleton(s) {
+  // whisper sometimes writes a syllable as a digit ("ستيم" -> "6 من").
+  const t = String(s).toLowerCase().replace(/[0-9]/g, (d) => DIGITS[d]);
+  let out = '';
+  for (const ch of t) {
+    if (AR_SOUNDS[ch] !== undefined) out += AR_SOUNDS[ch];
+    else if (/[bp]/.test(ch)) out += 'b';
+    else if (/[fv]/.test(ch)) out += 'f';
+    else if (/[kcqgj]/.test(ch)) out += 'k';
+    else if (/[szx]/.test(ch)) out += 's';
+    else if (/[td]/.test(ch)) out += 't';
+    else if (/[rlmnh]/.test(ch)) out += ch;
+    else if (ch === ' ') out += ' ';
+  }
+  return out.replace(/\s+/g, '').replace(/(.)\1+/g, '$1');
+}
+// Words around the name in a spoken request ("متصفح بريف", "برنامج ستيم").
+const FILLER = /^(?:ال)?(?:متصفح|متصفخ|برنامج|تطبيق|لعبة|لعبه|موقع|app|browser|program|the)\s+/i;
+
+function appNames() {
+  return [...new Set(startMenuShortcuts().map((f) => path.basename(f).replace(/\.(lnk|url)$/i, '')))].sort();
+}
+
 async function openApp({ name }) {
-  const raw = String(name || '').trim().toLowerCase();
+  let raw = String(name || '').trim().toLowerCase().replace(/[.؟?!،,]+$/, '');
+  for (let i = 0; i < 2; i++) raw = raw.replace(FILLER, '');
   if (!raw) throw new AppError('agent-bad-path', 'name');
   const builtin = BUILTIN_APPS.find(([names]) => names.includes(raw));
   if (builtin) {
@@ -516,8 +544,24 @@ async function openApp({ name }) {
   }
   const want = (APP_ALIASES[raw] || raw).toLowerCase();
   const list = startMenuShortcuts().map((f) => ({ f, n: path.basename(f).replace(/\.(lnk|url)$/i, '').toLowerCase() }));
-  const pick = list.find((x) => x.n === want) || list.find((x) => x.n.startsWith(want)) || list.find((x) => x.n.includes(want)) || list.find((x) => want.split(/\s+/).every((w) => x.n.includes(w)));
-  if (!pick) return { opened: false, error: 'not found', similar: list.filter((x) => want.split(/\s+/).some((w) => w.length > 2 && x.n.includes(w))).slice(0, 8).map((x) => x.n) };
+  // Programs before their helpers ("Brave" before "Brave Uninstall"), shorter names first.
+  list.sort((a, b) => a.n.length - b.n.length);
+  const sk = skeleton(want);
+  const pick =
+    list.find((x) => x.n === want) ||
+    list.find((x) => x.n.startsWith(want)) ||
+    list.find((x) => x.n.includes(want)) ||
+    list.find((x) => want.split(/\s+/).every((w) => x.n.includes(w))) ||
+    // By sound, only when it is close: same skeleton, or one extra sound at the end.
+    (sk.length >= 3
+      ? list.find((x) => skeleton(x.n) === sk) ||
+        list.find((x) => skeleton(x.n.split(/\s+/)[0]) === sk) ||
+        list.find((x) => {
+          const a = skeleton(x.n.split(/\s+/)[0]);
+          return a.length >= 3 && Math.abs(a.length - sk.length) === 1 && (sk.startsWith(a) || a.startsWith(sk));
+        })
+      : null);
+  if (!pick) return { opened: false, error: 'not found', installed: [...new Set(list.map((x) => x.n))].slice(0, 120) };
   const err = await shell.openPath(pick.f);
   return err ? { opened: false, error: err } : { opened: true, app: path.basename(pick.f).replace(/\.(lnk|url)$/i, '') };
 }
@@ -538,4 +582,4 @@ function places() {
   return Object.fromEntries(Object.entries(k).filter(([, v]) => v));
 }
 
-module.exports = { read, plan, run, undo, changes, isChange, places, expand, safe, typeOf, walk };
+module.exports = { read, plan, run, undo, changes, isChange, places, expand, safe, typeOf, walk, appNames, skeleton };

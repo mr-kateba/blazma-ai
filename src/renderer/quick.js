@@ -174,6 +174,19 @@ let voiceMode = false;
 let hideTimer = null;
 const VOICE_TOOLS = new Set(['open_app', 'open', 'find_files', 'search_my_files']);
 
+// "افتح بريف" / "شغّل ستيم" / "open Steam": opened at once, without the model
+// (the model sometimes answered "I opened it" without opening anything).
+const OPEN_RE = /^(?:(?:يا|طيب|لو سمحت|please)\s+)?(?:افتح|إفتح|أفتح|فتح|افتحلي|شغل|شغّل|شغلي|شغّلي|ابدأ|ابدا|open|launch|start|run)\s+(?:لي\s+|ليا\s+|me\s+|up\s+)?(.{2,60}?)\s*[.؟?!،]*$/i;
+const FOLDER_WORDS = /^(?:مجلد\s+|فولدر\s+|folder\s+|my\s+)?(التنزيلات|التحميلات|المستندات|سطح المكتب|الصور|الفيديو|الموسيقى|downloads|documents|desktop|pictures|videos|music)(?:\s+folder)?$/i;
+function openIntent(text) {
+  const m = OPEN_RE.exec(String(text || '').replace(/[\u064B-\u065F]/g, '').trim());
+  if (!m) return null;
+  const what = m[1].trim();
+  if (/ملف|file|صورة|picture|رابط|موقع|site|http/i.test(what)) return null; // needs a search first
+  const folder = FOLDER_WORDS.exec(what);
+  return folder ? { tool: 'open', args: { path: folder[1] }, label: what } : { tool: 'open_app', args: { name: what }, label: what };
+}
+
 function showVoice(heard) {
   voiceMode = true;
   clearTimeout(hideTimer);
@@ -222,35 +235,71 @@ async function voiceAnswer(heard) {
   const where = Object.entries(places)
     .map(([k, v]) => `${k}: ${v}`)
     .join('\n');
-  let system = `${cs.systemPrompt}\n\n${V.system(new Date().toLocaleString(LANG === 'en' ? 'en' : 'ar'), where)}`;
+  const now = new Date();
+  const off = -now.getTimezoneOffset();
+  const zone = `UTC${off >= 0 ? '+' : '-'}${String(Math.floor(Math.abs(off) / 60)).padStart(2, '0')}:${String(Math.abs(off) % 60).padStart(2, '0')}`;
+  // The UTC time too, so "what time is it in London" can be worked out without the web.
+  const clock = `${now.toLocaleString(LANG === 'en' ? 'en' : 'ar')} (${zone}; UTC now ${now.toISOString().slice(11, 16)})`;
+  let system = `${cs.systemPrompt}\n\n${V.system(clock, where)}`;
   if (cs.memoryEnabled && cs.memory && cs.memory.length) system += `\n\n${ui.v2.memory.context(cs.memory.map((m) => `- ${m.text}`).join('\n'))}`;
   const msgs = [
     { role: 'system', content: system },
     { role: 'user', content: heard },
   ];
+  const direct = openIntent(heard);
+  if (direct) {
+    out.textContent = ui.v2.agent.step[direct.tool](direct.args);
+    const r = await window.blazma.agentRead(direct.tool, direct.args).catch(() => ({ ok: false }));
+    if (r.ok && r.result.opened) {
+      answer = V.opened(r.result.app || direct.label);
+      done();
+      out.textContent = answer;
+      return finishVoice(answer);
+    }
+    // A program that is not installed: said at once (the model tends to loop here).
+    if (r.ok && r.result.error === 'not found' && direct.tool === 'open_app') {
+      answer = V.notInstalled(direct.label.replace(/^(?:ال)?(?:متصفح|برنامج|تطبيق|لعبة)\s+/, ''));
+      done();
+      out.textContent = answer;
+      return finishVoice(answer);
+    }
+  }
   const said = []; // text written next to tool calls (the start of the answer)
+  let think = false;
   try {
     for (let round = 0; round < 5; round++) {
       const res = await fetch(`http://127.0.0.1:${conn.port}/v1/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${conn.apiKey}` },
-        body: JSON.stringify({ messages: msgs, temperature: 0.3, max_tokens: 400, chat_template_kwargs: { enable_thinking: false }, ...(round < 4 ? { tools } : {}) }),
+        // The model's own sampling (Gemma 4: temperature 1, top_k 64): at a low
+        // temperature with tools it repeats an empty "thought" forever.
+        // stop: two empty thought blocks in a row never happen in a real answer.
+        // A loop like that is retried once with thinking on.
+        body: JSON.stringify({ messages: msgs, temperature: 0.7, ...cs.sampling, max_tokens: think ? 1200 : 400, stop: ['<channel|><|channel>'], chat_template_kwargs: { enable_thinking: think }, ...(round < 4 ? { tools } : {}) }),
         signal,
       });
       const j = await res.json();
       const m = (j.choices && j.choices[0] && j.choices[0].message) || {};
       let calls = Array.isArray(m.tool_calls) ? m.tool_calls : [];
-      let content = String(m.content || '');
+      let content = String(m.content || '').replace(/<\|channel>thought\s*(?:<channel\|>)?/g, '');
       if (!calls.length) {
         const leaked = extractTextToolCalls(content);
         content = leaked.content;
         calls = leaked.calls.map((c, i) => ({ id: `v${round}_${i}`, type: 'function', function: c }));
       }
+      if (!calls.length && !visibleText(content).trim() && !think) {
+        think = true;
+        round--;
+        continue;
+      }
       if (!calls.length) {
         answer = [...said, visibleText(content).trim()].filter(Boolean).join(' ');
         break;
       }
-      if (visibleText(content).trim()) said.push(visibleText(content).trim());
+      // Text next to a call is kept (an answer can start before a tool), but
+      // not "I will search now…".
+      const before = visibleText(content).trim();
+      if (before && !/^(سأ|سوف|لحظة|جاري|دعني|حسناً،? سأ|I will|I'll|Let me|One moment)/i.test(before)) said.push(before);
       msgs.push({ role: 'assistant', content, tool_calls: calls });
       for (const c of calls) {
         let args = {};
