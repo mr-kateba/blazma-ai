@@ -57,6 +57,11 @@ const EDITABLE_SETTINGS = [
   'port',
   'memoryEnabled',
   'memory',
+  'memoryAuto',
+  'agentMode',
+  'brainEnabled',
+  'brainFolders',
+  'wakeEnabled',
   'quickEnabled',
   'quickKey',
   'quickScreenKey',
@@ -185,6 +190,34 @@ function registerIpc({ setup, monitor, getWindow }) {
   handle('voice:segments', (wav) => wrap(() => voice.transcribe(wav instanceof Uint8Array ? wav : new Uint8Array(wav || []), { segments: true })));
   // "مكتبتي": the user's document folders, indexed for answers (knowledge.js).
   handle('kb:status', () => knowledge.status());
+  // "وضع الوكيل" (agent.js): reads run at once; changes are planned, shown, then run.
+  handle('agent:read', (name, args) => wrap(() => require('./agent').read(String(name), args && typeof args === 'object' ? args : {})));
+  handle('agent:plan', (name, args) => wrap(() => require('./agent').plan(String(name), args && typeof args === 'object' ? args : {})));
+  handle('agent:run', (planId, journalId) => wrap(() => require('./agent').run(String(planId), String(journalId))));
+  handle('agent:undo', (journalId) => wrap(() => require('./agent').undo(String(journalId))));
+  handle('agent:changes', (journalId) => require('./agent').changes(String(journalId)));
+  handle('agent:places', () => require('./agent').places());
+  // "يا بلازما" (wake.js)
+  handle('wake:heard', (wav, mode) => require('./wake').heard(wav instanceof Uint8Array ? wav : new Uint8Array(wav || []), mode === 'command' ? 'command' : 'wake'));
+  handle('wake:ready', (ok, error) => require('./wake').ready(Boolean(ok), error ? String(error).slice(0, 100) : null));
+  handle('wake:status', () => require('./wake').status());
+  handle('wake:enable', (on) => {
+    settings.update({ wakeEnabled: Boolean(on) });
+    require('./wake').start();
+    return require('./wake').status();
+  });
+  handle('wake:spoken', () => require('./wake').pause(false));
+  // "عقل جهازك" (brain.js)
+  handle('brain:status', () => require('./brain').status());
+  handle('brain:enable', (on) => wrap(() => require('./brain').enable(Boolean(on))));
+  handle('brain:refresh', () => wrap(() => require('./brain').refresh(true).then(() => require('./brain').status())));
+  handle('brain:addFolder', async () => {
+    const { canceled, filePaths } = await dialog.showOpenDialog(getWindow(), { title: tr('pickDocs'), properties: ['openDirectory'] });
+    if (canceled || !filePaths[0]) return require('./brain').status();
+    const b = require('./brain');
+    return b.setFolders([...(settings.get().brainFolders || []), filePaths[0]]);
+  });
+  handle('brain:removeFolder', (folder) => require('./brain').setFolders((settings.get().brainFolders || []).filter((d) => d !== String(folder))));
   handle('kb:addFolder', async () => {
     const { canceled, filePaths } = await dialog.showOpenDialog(getWindow(), { title: tr('pickDocs'), properties: ['openDirectory'] });
     if (canceled || !filePaths[0]) return { ok: true, result: null };

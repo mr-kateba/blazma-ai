@@ -5,7 +5,9 @@
 import { ui, LANG, DIR } from './i18n/index.js';
 import { renderMarkdown } from './lib/markdown.js';
 import { readSse } from './lib/sse.js';
-import { visibleText } from './lib/toolcalls.js';
+import { visibleText, extractTextToolCalls } from './lib/toolcalls.js';
+import { speak, stopSpeaking } from './lib/speech.js';
+import { BRAIN_TOOLS, AGENT_TOOLS } from './lib/agenttools.js';
 
 const Q = ui.v2.quick;
 const $ = (id) => document.getElementById(id);
@@ -30,6 +32,9 @@ window.blazma.getTheme().then(({ dark }) => (document.documentElement.dataset.th
 
 function showContext(ctx) {
   if (controller) controller.abort();
+  if (ctx && ctx.voice) return showVoice(ctx.voice);
+  voiceMode = false;
+  stopSpeaking();
   selected = (ctx && ctx.text) || '';
   image = (ctx && ctx.image) || '';
   answer = '';
@@ -157,7 +162,142 @@ $('q-replace').addEventListener('click', () => {
   const text = visibleText(answer).trim();
   if (text) window.blazma.quickReplace(text);
 });
-$('q-close').addEventListener('click', () => window.blazma.quickHide());
-document.addEventListener('keydown', (e) => e.key === 'Escape' && window.blazma.quickHide());
-window.blazma.onQuickContext(showContext);
-window.blazma.quickContext().then(showContext);
+$('q-close').addEventListener('click', () => {
+  stopSpeaking();
+  if (voiceMode) window.blazma.wakeSpoken();
+  window.blazma.quickHide();
+});
+
+// ---------- "يا بلازما": a spoken request (main/wake.js) ----------
+
+let voiceMode = false;
+let hideTimer = null;
+const VOICE_TOOLS = new Set(['open_app', 'open', 'find_files', 'search_my_files']);
+
+function showVoice(heard) {
+  voiceMode = true;
+  clearTimeout(hideTimer);
+  stopSpeaking();
+  selected = '';
+  image = '';
+  answer = '';
+  const V = ui.v2.wake;
+  const label = document.createElement('span');
+  label.className = 'muted small';
+  label.textContent = V.heard;
+  const t = document.createElement('div');
+  t.className = 'q-sel-text';
+  t.dir = 'auto';
+  t.textContent = heard;
+  $('q-selected').replaceChildren(label, t);
+  $('q-actions').hidden = $('q-screen-actions').hidden = true;
+  $('q-copy').hidden = $('q-chat').hidden = $('q-replace').hidden = true;
+  $('q-input').value = '';
+  voiceAnswer(heard);
+}
+
+async function voiceAnswer(heard) {
+  const V = ui.v2.wake;
+  controller = new AbortController();
+  const signal = controller.signal;
+  lastPrompt = heard;
+  const out = $('q-answer');
+  out.replaceChildren();
+  out.classList.add('pulse');
+  const done = () => {
+    out.classList.remove('pulse');
+    $('q-copy').hidden = !answer;
+    $('q-chat').hidden = !answer;
+  };
+  const conn = await window.blazma.getConnection();
+  if (!conn) {
+    out.textContent = Q.notReady;
+    done();
+    return finishVoice(Q.notReady);
+  }
+  const [cs, st] = await Promise.all([window.blazma.getChatSettings(), window.blazma.getSettings()]);
+  const places = await window.blazma.agentPlaces();
+  const tools = [...BRAIN_TOOLS, ...AGENT_TOOLS].filter((t) => VOICE_TOOLS.has(t.function.name) && (t.function.name !== 'search_my_files' || st.brainEnabled));
+  if (cs.webSearch) tools.push({ type: 'function', function: { name: 'web_search', description: 'Search the internet for anything recent or that you do not know.', parameters: { type: 'object', properties: { query: { type: 'string' } }, required: ['query'] } } });
+  const where = Object.entries(places)
+    .map(([k, v]) => `${k}: ${v}`)
+    .join('\n');
+  let system = `${cs.systemPrompt}\n\n${V.system(new Date().toLocaleString(LANG === 'en' ? 'en' : 'ar'), where)}`;
+  if (cs.memoryEnabled && cs.memory && cs.memory.length) system += `\n\n${ui.v2.memory.context(cs.memory.map((m) => `- ${m.text}`).join('\n'))}`;
+  const msgs = [
+    { role: 'system', content: system },
+    { role: 'user', content: heard },
+  ];
+  try {
+    for (let round = 0; round < 5; round++) {
+      const res = await fetch(`http://127.0.0.1:${conn.port}/v1/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${conn.apiKey}` },
+        body: JSON.stringify({ messages: msgs, temperature: 0.3, max_tokens: 400, chat_template_kwargs: { enable_thinking: false }, ...(round < 4 ? { tools } : {}) }),
+        signal,
+      });
+      const j = await res.json();
+      const m = (j.choices && j.choices[0] && j.choices[0].message) || {};
+      let calls = Array.isArray(m.tool_calls) ? m.tool_calls : [];
+      let content = String(m.content || '');
+      if (!calls.length) {
+        const leaked = extractTextToolCalls(content);
+        content = leaked.content;
+        calls = leaked.calls.map((c, i) => ({ id: `v${round}_${i}`, type: 'function', function: c }));
+      }
+      if (!calls.length) {
+        answer = visibleText(content).trim();
+        break;
+      }
+      msgs.push({ role: 'assistant', content, tool_calls: calls });
+      for (const c of calls) {
+        let args = {};
+        try {
+          args = JSON.parse(c.function.arguments || '{}');
+        } catch {}
+        const name = c.function.name;
+        out.textContent = ui.v2.agent.step[name] ? ui.v2.agent.step[name](args) : name === 'web_search' ? ui.chat.stepSearch(args.query || '') : '…';
+        let result = 'Unknown tool.';
+        if (name === 'web_search') {
+          const r = await window.blazma.webSearch(String(args.query || ''));
+          result = r.ok ? r.result.results.slice(0, 5).map((x, i) => `${i + 1}. ${x.title}\n${x.snippet}`).join('\n\n') : 'The search failed.';
+        } else if (name === 'search_my_files') {
+          const r = await window.blazma.kbSearch(String(args.question || ''), null);
+          result = r.ok && r.result.length ? r.result.map((p, i) => `[${i + 1}] ${p.file}\n${p.text}`).join('\n\n').slice(0, 8000) : 'Nothing found.';
+        } else if (VOICE_TOOLS.has(name)) {
+          const r = await window.blazma.agentRead(name, args);
+          result = r.ok ? JSON.stringify(r.result).slice(0, 8000) : `Failed: ${r.error.code}`;
+        }
+        msgs.push({ role: 'tool', tool_call_id: c.id || `v${round}`, content: result });
+      }
+    }
+  } catch (err) {
+    if (err.name === 'AbortError') return;
+    answer = '';
+  }
+  done();
+  if (!answer) {
+    out.textContent = ui.chat.errors.generic;
+    return finishVoice('');
+  }
+  out.replaceChildren(renderMarkdown(answer, md));
+  out.dir = 'auto';
+  finishVoice(answer);
+}
+
+// Says the answer, then lets the wake word listen again and hides the window.
+async function finishVoice(text) {
+  const resume = () => {
+    window.blazma.wakeSpoken();
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => {
+      if (voiceMode && !document.hasFocus()) window.blazma.quickHide();
+    }, 9000);
+  };
+  if (!text) return resume();
+  const tag = document.createElement('span');
+  tag.addEventListener('speech-end', resume, { once: true });
+  tag.addEventListener('speech-error', resume, { once: true });
+  const res = await speak(text, tag).catch(() => ({ ok: false }));
+  if (!res.ok) resume();
+}

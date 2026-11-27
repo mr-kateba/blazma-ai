@@ -195,6 +195,19 @@ function openWith(text, image = '') {
   win.focus();
 }
 
+// "يا بلازما" (wake.js): the window shows what was heard and answers aloud,
+// in the corner of the screen and without taking the focus from the game or
+// program in front. It hides itself after the answer.
+function openVoice(heard) {
+  context = { text: '', image: '', voice: String(heard || '').slice(0, 2000), at: Date.now() };
+  if (!win) createWindow();
+  const area = screen.getPrimaryDisplay().workArea;
+  const [w, h] = win.getSize();
+  win.setPosition(area.x + area.width - w - 16, area.y + area.height - h - 16);
+  if (!win.webContents.isLoading()) win.webContents.send('quick:context', context);
+  win.showInactive();
+}
+
 const ACTIONS = { text: () => open(), screen: () => openScreen() };
 const SETTING = { text: 'quickKey', screen: 'quickScreenKey' };
 
@@ -252,4 +265,4 @@ function stop() {
   helper = null;
 }
 
-module.exports = { apply, setKey, setEnabled, hide, stop, open, openWith, openScreen, captureScreen, replaceSelection, getContext: () => context };
+module.exports = { apply, setKey, setEnabled, hide, stop, open, openWith, openScreen, openVoice, captureScreen, replaceSelection, getContext: () => context };

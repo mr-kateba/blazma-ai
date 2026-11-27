@@ -58,6 +58,37 @@ contextBridge.exposeInMainWorld(
       return () => ipcRenderer.removeListener('voice:progress', listener);
     },
     kbStatus: () => ipcRenderer.invoke('kb:status'),
+    agentRead: (name, args) => ipcRenderer.invoke('agent:read', String(name), args),
+    agentPlan: (name, args) => ipcRenderer.invoke('agent:plan', String(name), args),
+    agentRun: (planId, journalId) => ipcRenderer.invoke('agent:run', String(planId), String(journalId)),
+    agentUndo: (journalId) => ipcRenderer.invoke('agent:undo', String(journalId)),
+    agentChanges: (journalId) => ipcRenderer.invoke('agent:changes', String(journalId)),
+    agentPlaces: () => ipcRenderer.invoke('agent:places'),
+    brainStatus: () => ipcRenderer.invoke('brain:status'),
+    wakeHeard: (wav, mode) => ipcRenderer.invoke('wake:heard', wav, String(mode)),
+    wakeReady: (ok, error) => ipcRenderer.invoke('wake:ready', Boolean(ok), error ? String(error) : null),
+    wakeStatus: () => ipcRenderer.invoke('wake:status'),
+    wakeEnable: (on) => ipcRenderer.invoke('wake:enable', Boolean(on)),
+    wakeSpoken: () => ipcRenderer.invoke('wake:spoken'),
+    onWakeCommand(cb) {
+      const listener = (_e, m) => cb(m);
+      ipcRenderer.on('wake:command', listener);
+      return () => ipcRenderer.removeListener('wake:command', listener);
+    },
+    onWake(cb) {
+      const listener = (_e, s) => cb(s);
+      ipcRenderer.on('wake:changed', listener);
+      return () => ipcRenderer.removeListener('wake:changed', listener);
+    },
+    brainEnable: (on) => ipcRenderer.invoke('brain:enable', Boolean(on)),
+    brainRefresh: () => ipcRenderer.invoke('brain:refresh'),
+    brainAddFolder: () => ipcRenderer.invoke('brain:addFolder'),
+    brainRemoveFolder: (folder) => ipcRenderer.invoke('brain:removeFolder', String(folder)),
+    onBrain(cb) {
+      const listener = (_e, s) => cb(s);
+      ipcRenderer.on('brain:changed', listener);
+      return () => ipcRenderer.removeListener('brain:changed', listener);
+    },
     kbAddFolder: () => ipcRenderer.invoke('kb:addFolder'),
     kbRemoveFolder: (folder) => ipcRenderer.invoke('kb:removeFolder', String(folder)),
     kbUpdate: () => ipcRenderer.invoke('kb:update'),

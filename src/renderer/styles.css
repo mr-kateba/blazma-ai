@@ -1324,3 +1324,13 @@ body.previewing .chat-title h1, body.previewing #btn-export-chat, body.previewin
 /* "ترجم الملف" on an attached Word/PDF file */
 .file-chip-tr { flex-shrink: 0; height: 22px; padding: 0 8px; border: 1px solid var(--border); border-radius: 11px; background: none; color: var(--accent); font-size: 11.5px; cursor: pointer; white-space: nowrap; }
 .file-chip-tr:hover { background: var(--accent-soft); }
+
+/* "تعلّمت عنك" under a reply (automatic memory) */
+.learned { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-top: 10px; padding: 7px 12px; border: 1px dashed var(--border); border-radius: 10px; color: var(--muted); font-size: 12.5px; }
+.learned-fact { color: var(--text); }
+.link-btn { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.mem-item .tag { margin-inline-start: auto; }
+
+/* A list in a dialog (the agent's planned changes) */
+.dlg-list { max-height: 220px; overflow: auto; margin: -8px 0 16px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); font-size: 12.5px; line-height: 1.7; }
+.dlg-list > div { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; unicode-bidi: plaintext; }

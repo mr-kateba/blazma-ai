@@ -10,7 +10,7 @@ let open = null;
 
 // field: null for a yes/no question, or { value, placeholder, maxLength } for
 // a short text. Resolves with true/false, or with the text / null.
-function showDialog({ title, text = '', ok = ui.common.ok, cancel = ui.common.cancel, danger = false, field = null, choices = null, value = '' }) {
+function showDialog({ title, text = '', ok = ui.common.ok, cancel = ui.common.cancel, danger = false, field = null, choices = null, value = '', list = null }) {
   if (open) open.finish(null);
   const back = document.activeElement;
   return new Promise((resolve) => {
@@ -25,6 +25,7 @@ function showDialog({ title, text = '', ok = ui.common.ok, cancel = ui.common.ca
       { class: 'dlg', role: field ? 'dialog' : 'alertdialog', 'aria-modal': 'true', 'aria-label': title || text },
       title ? el('h3', { class: 'dlg-title' }, title) : null,
       text ? el('p', { class: 'dlg-text' }, text) : null,
+      list && list.length ? el('div', { class: 'dlg-list' }, ...list.map((line) => el('div', { dir: 'auto' }, line))) : null,
       input,
       select,
       el('div', { class: 'dlg-actions' }, okBtn, cancelBtn),

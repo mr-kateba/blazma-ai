@@ -40,7 +40,12 @@ const DEFAULTS = Object.freeze({
   language: 'ar', // interface language: 'ar' | 'en'
   systemPrompt: DEFAULT_PROMPTS.ar,
   memoryEnabled: true, // facts about the user added to every chat
-  memory: [], // [{ id, text }]
+  memory: [], // [{ id, text, auto? }] (auto: learned from a chat, lib/learn.js)
+  memoryAuto: true, // learn lasting facts about the user from the chats
+  agentMode: false, // "وضع الوكيل": the model may work on files and open programs (agent.js)
+  brainEnabled: false, // "عقل جهازك": the user's folders read and kept up to date (brain.js)
+  brainFolders: [],
+  wakeEnabled: false, // "يا بلازما": listen for the wake word (wake.js)
   quickEnabled: true, // the quick assistant on a global shortcut (quick.js)
   quickKey: 'Alt+Space',
   quickScreenKey: 'Alt+Shift+Space', // a picture of the screen for the quick assistant
@@ -81,6 +86,11 @@ const VALIDATORS = {
   gpuTempDanger: (v) => v === null || isInt(v, 30, 110),
   language: (v) => ['ar', 'en'].includes(v),
   memoryEnabled: (v) => typeof v === 'boolean',
+  memoryAuto: (v) => typeof v === 'boolean',
+  agentMode: (v) => typeof v === 'boolean',
+  brainEnabled: (v) => typeof v === 'boolean',
+  brainFolders: (v) => Array.isArray(v) && v.length <= 20 && v.every((d) => typeof d === 'string' && d.length <= 400),
+  wakeEnabled: (v) => typeof v === 'boolean',
   memory: (v) => Array.isArray(v) && v.length <= 200 && v.every((m) => m && typeof m.id === 'string' && typeof m.text === 'string' && m.text.length <= 500),
   quickEnabled: (v) => typeof v === 'boolean',
   mcpServers: (v) =>

@@ -11,6 +11,9 @@ import { speak, stopSpeaking, isSpeaking } from '../lib/speech.js';
 import { startRecording } from '../lib/recorder.js';
 import { isMedia, decodeMedia, pieces, stamp, MAX_MEDIA_BYTES, MAX_MEDIA_SECONDS } from '../lib/media.js';
 import { translateUnits, defaultTarget, LANGS } from '../lib/translator.js';
+import { learnFrom } from '../lib/learn.js';
+import { BRAIN_TOOLS, AGENT_TOOLS, AGENT_NAMES, agentRules, runAgentTool } from '../lib/agenttools.js';
+import { deepResearch } from '../lib/research.js';
 import { loadPersonas, personaById, openPersonaMenu } from './personas.js';
 import { confirmDialog, promptDialog, choiceDialog } from '../lib/dialog.js';
 import { attachSlashMenu, parseCommand, withCommand, commandById } from '../lib/slash.js';
@@ -467,6 +470,8 @@ function messageNode(msg, index) {
       ),
     );
   }
+  if (!isUser && msg.streaming && msg.research) body.append(el('div', { class: 'research-status', dir: DIR }, el('span', { class: 'spinner', 'aria-hidden': 'true' }), msg.research));
+  if (isUser && msg.research) body.prepend(el('span', { class: 'slash-chip' }, ui.v2.research.chip));
   if (!isUser && msg.compare) {
     // Side by side: this reply and the same question answered by another model.
     const close = el('button', { type: 'button', class: 'icon-btn', title: ui.v2.compare.close, 'aria-label': ui.v2.compare.close }, '✕');
@@ -481,7 +486,7 @@ function messageNode(msg, index) {
   } else if (!isUser && msg.content) body.append(renderMarkdown(msg.streaming ? visibleText(msg.content) : msg.content, msg.streaming ? mdLabelsLive : mdLabels));
   if (!isUser && !msg.streaming && msg.sources && msg.sources.length) {
     const seen = new Set();
-    const unique = msg.sources.filter((src) => !seen.has(src.url) && seen.add(src.url)).slice(0, 6);
+    const unique = msg.sources.filter((src) => !seen.has(src.url) && seen.add(src.url)).slice(0, msg.researchSources ? 15 : 6);
     body.append(
       el(
         'div',
@@ -500,6 +505,29 @@ function messageNode(msg, index) {
     );
   }
 
+  if (!isUser && !msg.streaming && msg.changed && msg.journal) {
+    const A = ui.v2.agent;
+    body.append(
+      el(
+        'div',
+        { class: 'agent-undo', dir: DIR },
+        el('span', null, msg.undone ? msg.undone : A.changed(msg.changed)),
+        msg.undone ? null : el('button', { type: 'button', class: 'btn ghost small', onclick: () => undoChanges(msg) }, `↶ ${A.undo}`),
+      ),
+    );
+  }
+  if (!isUser && !msg.streaming && msg.learned && msg.learned.length) {
+    const L = ui.v2.memory;
+    body.append(
+      el(
+        'div',
+        { class: 'learned', dir: DIR },
+        el('span', { 'aria-hidden': 'true' }, '🧠'),
+        el('span', null, L.learned, ' ', ...msg.learned.map((x, k) => el('bdi', { class: 'learned-fact' }, (k ? '، ' : '') + x.text))),
+        el('button', { type: 'button', class: 'link-btn', onclick: () => forgetLearned(msg) }, L.forget),
+      ),
+    );
+  }
   if (msg.stopped) body.append(el('p', { class: 'muted small' }, ui.chat.stopped));
   if (msg.error) body.append(el('div', { class: 'msg-error' }, msg.error));
 
@@ -1063,6 +1091,10 @@ const MAX_TOOL_ROUNDS = 3;
 // confirmed by the user once per chat and tool.
 let mcpByName = new Map();
 let mcpAllowed = new Set();
+// "وضع الوكيل" and "عقل جهازك" for the reply being written (lib/agenttools.js).
+let agentOn = false;
+let brainOn = false;
+const AGENT_ROUNDS = 10;
 
 // Runs one tool call and returns the text given back to the model.
 async function runTool(call, reply) {
@@ -1070,6 +1102,7 @@ async function runTool(call, reply) {
   try {
     args = JSON.parse(call.function.arguments || '{}');
   } catch {}
+  if (AGENT_NAMES.has(call.function.name) && (agentOn || brainOn)) return runAgentTool(call.function.name, args, reply, renderLast);
   const mcpTool = mcpByName.get(call.function.name);
   if (mcpTool) {
     const M = ui.v2.mcp;
@@ -1130,6 +1163,8 @@ async function runTool(call, reply) {
 // True from the moment a message is sent until its reply has started, so a
 // second Enter during the first awaits cannot send another message.
 let sending = false;
+// "بحث معمّق" was pressed for the next message (lib/research.js).
+let researchMode = false;
 
 async function send(text, images = [], files = [], command = null) {
   if (sending || abortController) return;
@@ -1149,7 +1184,10 @@ async function sendNow(text, images, files, command) {
     const total = files.reduce((n, f) => n + f.chars, 0);
     if (total > budget) showComposerNote(ui.chat.fileTooLong(Math.max(1, Math.floor((budget / total) * 100))), 8000);
   }
-  messages.push({ role: 'user', content: text, images, files, ...(command ? { command } : {}) });
+  const research = researchMode && text.trim().length > 3;
+  researchMode = false;
+  window.dispatchEvent(new CustomEvent('blazma:research-done'));
+  messages.push({ role: 'user', content: text, images, files, ...(command ? { command } : {}), ...(research ? { research: true } : {}) });
   renderLast();
   await generate();
 }
@@ -1211,6 +1249,14 @@ async function generate() {
         system += `\n\n${ui.v2.assistant.strictRule}`;
       }
     }
+    // "وضع الوكيل" / "عقل جهازك": tools on the user's files (and programs).
+    const st = await window.blazma.getSettings();
+    agentOn = Boolean(st.agentMode);
+    brainOn = Boolean(st.brainEnabled);
+    if (agentOn || brainOn) {
+      reply.journal = `j${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+      system += `\n\n${agentRules({ agent: agentOn, brain: brainOn, places: await window.blazma.agentPlaces(), brainFolders: st.brainFolders || [] })}`;
+    }
     if (chatSettings.shareDeviceInfo) {
       const summary = await window.blazma.deviceSummary().catch(() => null);
       if (summary) system += `\n\n${ui.chat.deviceContext(summary)}`;
@@ -1218,7 +1264,8 @@ async function generate() {
     if (signal.aborted) throw new DOMException('aborted', 'AbortError');
     if ((await window.blazma.getSettings()).mcpServers.some((x) => x.enabled)) await window.blazma.mcpEnsure();
     reply.thinkStart = Date.now(); // the model starts now (after the search above)
-    await streamReply({ reply, system, conn, chatSettings, webOn, signal });
+    if (lastUser && lastUser.research) await deepResearch({ question: lastUser.content, reply, update: renderLast, signal, labels: ui.v2.research });
+    else await streamReply({ reply, system, conn, chatSettings, webOn, signal });
   } catch (err) {
     if (err.name === 'AbortError') reply.stopped = true;
     else reply.error = ui.chat.errors.serverGone;
@@ -1231,7 +1278,48 @@ async function generate() {
     renderMessages();
     persist();
     if (document.activeElement === document.body) $('chat-input').focus();
+    autoLearn(reply);
   }
+}
+
+// "ذاكرة تتعلم لحالها" (lib/learn.js): lasting facts from the last exchange.
+async function autoLearn(reply) {
+  if (reply.error || reply.stopped || !reply.content || reply.imagePrompt) return;
+  const s = await window.blazma.getSettings();
+  if (!s.memoryEnabled || !s.memoryAuto) return;
+  const i = messages.indexOf(reply);
+  const user = i > 0 ? messages[i - 1] : null;
+  if (!user || user.role !== 'user' || user.command) return;
+  const facts = await learnFrom(user.content, reply.content, s.memory || []);
+  if (!facts.length) return;
+  const now = await window.blazma.getSettings();
+  const items = facts.map((text, k) => ({ id: `m${Date.now().toString(36)}${k}`, text, auto: true }));
+  await window.blazma.updateSettings({ memory: [...(now.memory || []), ...items].slice(-200) });
+  reply.learned = items.map(({ id, text }) => ({ id, text }));
+  if (messages.includes(reply)) {
+    renderMessages();
+    persist();
+  }
+}
+
+// "تراجع": every change of that request back as it was (agent.js journal).
+async function undoChanges(msg) {
+  const A = ui.v2.agent;
+  if (!(await confirmDialog({ title: A.undoTitle, text: A.undoText(msg.changed), ok: A.undo, cancel: ui.common.cancel }))) return;
+  const res = await window.blazma.agentUndo(msg.journal);
+  if (!res.ok) return showComposerNote(A.undoFailed, 6000);
+  msg.undone = A.undone(res.result.undone, res.result.inRecycleBin, res.result.failed.length);
+  renderMessages();
+  persist();
+}
+
+async function forgetLearned(msg) {
+  const ids = new Set((msg.learned || []).map((x) => x.id));
+  const s = await window.blazma.getSettings();
+  await window.blazma.updateSettings({ memory: (s.memory || []).filter((m) => !ids.has(m.id)) });
+  delete msg.learned;
+  renderMessages();
+  persist();
 }
 
 // The request to the model (with web-search tool rounds), streamed into reply.
@@ -1246,9 +1334,10 @@ async function streamReply({ reply, system, conn, chatSettings, webOn, signal })
   // Web tools when search is on, plus the MCP tools of running servers.
   const mcpList = await window.blazma.mcpTools().catch(() => []);
   mcpByName = new Map(mcpList.map((m) => [m.spec.function.name, m]));
-  const tools = [...(webOn ? TOOLS : []), ...mcpList.map((m) => m.spec)];
+  const tools = [...(webOn ? TOOLS : []), ...(brainOn || agentOn ? BRAIN_TOOLS : []), ...(agentOn ? AGENT_TOOLS : []), ...mcpList.map((m) => m.spec)];
+  const maxRounds = agentOn || brainOn ? AGENT_ROUNDS : MAX_TOOL_ROUNDS;
 
-  for (let round = 0; round <= MAX_TOOL_ROUNDS; round++) {
+  for (let round = 0; round <= maxRounds; round++) {
     const payload = {
       messages: apiMessages,
       stream: true,
@@ -1261,7 +1350,7 @@ async function streamReply({ reply, system, conn, chatSettings, webOn, signal })
       ...(tools.length ? { parallel_tool_calls: true } : {}),
     };
     // The last round has no tools, so the model must answer with what it found.
-    if (tools.length && round < MAX_TOOL_ROUNDS) payload.tools = tools;
+    if (tools.length && round < maxRounds) payload.tools = tools;
 
     const res = await fetch(`http://127.0.0.1:${conn.port}/v1/chat/completions`, {
       method: 'POST',
@@ -1912,6 +2001,36 @@ export function initChat() {
   });
 
   // Web search on/off, remembered in settings.
+  // "وضع الوكيل": the model may work on files and open programs.
+  const agentBtn = $('btn-agent');
+  const showAgent = (on) => {
+    agentBtn.setAttribute('aria-pressed', String(on));
+    agentBtn.title = on ? ui.v2.agent.toggleOn : ui.v2.agent.toggleOff;
+    agentBtn.setAttribute('aria-label', agentBtn.title);
+  };
+  window.blazma.getSettings().then((st) => showAgent(st.agentMode));
+  agentBtn.addEventListener('click', async () => {
+    const on = agentBtn.getAttribute('aria-pressed') !== 'true';
+    const st = await window.blazma.updateSettings({ agentMode: on });
+    showAgent(st.agentMode);
+    showComposerNote(on ? ui.v2.agent.onNote : ui.v2.agent.offNote, 5000);
+  });
+  // "بحث معمّق": the next message is researched on the web into a report.
+  const researchBtn = $('btn-research');
+  const showResearch = (on) => {
+    researchBtn.setAttribute('aria-pressed', String(on));
+    researchBtn.title = ui.v2.research.toggle;
+    researchBtn.setAttribute('aria-label', researchBtn.title);
+    $('chat-input').placeholder = on ? ui.v2.research.placeholder : ui.chat.placeholder;
+  };
+  showResearch(false);
+  researchBtn.addEventListener('click', () => {
+    researchMode = researchBtn.getAttribute('aria-pressed') !== 'true';
+    showResearch(researchMode);
+    $('chat-input').focus();
+  });
+  window.addEventListener('blazma:research-done', () => showResearch(false));
+
   const webBtn = $('btn-web');
   const showWeb = (on) => {
     webBtn.setAttribute('aria-pressed', String(on));

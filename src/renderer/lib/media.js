@@ -61,7 +61,7 @@ function quietPoint(pcm, from, to) {
   return Math.round(best);
 }
 
-function toWav(pcm) {
+export function toWav(pcm) {
   const out = new DataView(new ArrayBuffer(44 + pcm.length * 2));
   const str = (o, s) => [...s].forEach((c, i) => out.setUint8(o + i, c.charCodeAt(0)));
   str(0, 'RIFF');

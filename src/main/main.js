@@ -139,6 +139,17 @@ if (!app.requestSingleInstanceLock()) {
       crashLog.write('quick assistant', err);
     }
     require('./tasks').start({ setup, getWindow: () => mainWindow });
+    // "عقل جهازك" (brain.js) and "يا بلازما" (wake.js), when turned on.
+    try {
+      require('./brain').start((st) => mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents.send('brain:changed', st));
+    } catch (err) {
+      crashLog.write('brain', err);
+    }
+    try {
+      require('./wake').start((st) => mainWindow && !mainWindow.isDestroyed() && mainWindow.webContents.send('wake:changed', st));
+    } catch (err) {
+      crashLog.write('wake', err);
+    }
   });
 
   app.on('window-all-closed', () => app.quit());
@@ -147,7 +158,7 @@ if (!app.requestSingleInstanceLock()) {
   // Every helper program started by the app ends with it: the embedding
   // server (مكتبتي), whisper-server (voice), sd-server (drawing) and llama-server.
   const stopHelpers = () => {
-    for (const mod of ['./knowledge', './voice', './images', './vscode', './coder', './quick', './tasks', './mcp']) {
+    for (const mod of ['./knowledge', './voice', './images', './vscode', './coder', './quick', './tasks', './mcp', './brain', './wake']) {
       try {
         require(mod).stop();
       } catch {

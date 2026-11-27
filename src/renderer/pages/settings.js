@@ -4,7 +4,7 @@
 // behind a "؟" with a tooltip. Changes are saved at once; engine settings
 // apply after restarting the engine, offered in place.
 
-import { ui } from '../i18n/index.js';
+import { ui, LOCALE } from '../i18n/index.js';
 import { el } from '../lib/dom.js';
 import { speak } from '../lib/speech.js';
 import { refreshDeviceInfo } from './device.js';
@@ -598,7 +598,7 @@ function memorySection() {
               await save({ memory: (values.memory || []).filter((x) => x.id !== m.id) });
               draw();
             });
-            return el('div', { class: 'mem-item' }, el('span', { dir: 'auto' }, m.text), del);
+            return el('div', { class: 'mem-item' }, el('span', { dir: 'auto' }, m.text), m.auto ? el('span', { class: 'tag', title: M.autoTagDesc }, M.autoTag) : null, del);
           })
         : [el('div', { class: 'set-desc' }, M.none)]),
     );
@@ -620,7 +620,99 @@ function memorySection() {
     M.title,
     M.desc,
     item(M.enable, M.enableDesc, toggle(values.memoryEnabled, (on) => save({ memoryEnabled: on }))),
+    item(M.auto, M.autoDesc, toggle(values.memoryAuto !== false, (on) => save({ memoryAuto: on }))),
     el('div', { class: 'set-item set-item-col' }, el('div', { class: 'row mem-add' }, input, add), list),
+  );
+}
+
+// "عقل جهازك" (main/brain.js): folders read and kept up to date.
+let brainOff = null;
+function brainSection(st) {
+  const B = V.brain;
+  const line = el('div', { class: 'set-desc', id: 'brain-status' });
+  const draw = (s) => {
+    const when = s.updatedAt ? B.updated(new Date(s.updatedAt).toLocaleString(LOCALE)) : '';
+    line.textContent = !s.enabled ? '' : s.running ? B.running(s.progress) : s.error ? B.failed : s.known ? `${B.status(s)} ${when}` : B.never;
+  };
+  draw(st);
+  if (brainOff) brainOff();
+  brainOff = window.blazma.onBrain((s) => {
+    if (document.getElementById('brain-status')) draw(s);
+  });
+  const folders = (st.folders || []).map((f) => {
+    const rm = el('button', { type: 'button', class: 'btn ghost small' }, B.remove);
+    rm.addEventListener('click', async () => {
+      await window.blazma.brainRemoveFolder(f);
+      render();
+    });
+    return el('div', { class: 'kb-folder' }, el('span', { dir: 'ltr', class: 'kb-path' }, f), rm);
+  });
+  const add = el('button', { type: 'button', class: 'btn' }, B.add);
+  add.addEventListener('click', async () => {
+    await window.blazma.brainAddFolder();
+    render();
+  });
+  const now = el('button', { type: 'button', class: 'btn primary', disabled: !st.enabled || st.running }, B.refresh);
+  now.addEventListener('click', async () => {
+    now.disabled = true;
+    const res = await window.blazma.brainRefresh();
+    if (!res.ok) toast((ui.errors[res.error.code] || ui.errors.unknown).title, 'error');
+    render();
+  });
+  return section(
+    'brain',
+    B.title,
+    B.desc,
+    item(
+      B.enable,
+      B.enableDesc,
+      toggle(st.enabled, async (on) => {
+        await window.blazma.brainEnable(on);
+        values = await window.blazma.getSettings();
+        render();
+      }),
+    ),
+    st.enabled ? item(B.folders, null, null, el('div', { class: 'kb-folders' }, ...folders)) : null,
+    st.enabled ? item(B.refresh, line, el('div', { class: 'row' }, add, now)) : null,
+    el('div', { class: 'set-item' }, el('p', { class: 'muted small' }, B.note)),
+  );
+}
+
+// "يا بلازما" (main/wake.js): listen for the wake word.
+let wakeOff = null;
+function wakeSection() {
+  const W = V.wake;
+  const line = el('div', { class: 'set-desc', id: 'wake-status' });
+  const install = el('button', { type: 'button', class: 'btn' }, W.install);
+  install.addEventListener('click', async () => {
+    install.disabled = true;
+    install.textContent = W.installing;
+    const res = await window.blazma.voiceInstall();
+    if (!res.ok) toast((ui.errors[res.error.code] || ui.errors.unknown).title, 'error');
+    await window.blazma.wakeEnable(values.wakeEnabled);
+    render();
+  });
+  const draw = (s) => {
+    install.hidden = s.error !== 'voice-missing';
+    line.textContent = !s.enabled ? W.off : s.error === 'voice-missing' ? W.needVoice : s.error ? W.micFailed : s.listening ? W.listening : W.starting;
+  };
+  window.blazma.wakeStatus().then(draw);
+  if (wakeOff) wakeOff();
+  wakeOff = window.blazma.onWake((s) => document.getElementById('wake-status') && draw({ enabled: values.wakeEnabled, ...s }));
+  return section(
+    'wake',
+    W.title,
+    W.desc,
+    item(
+      W.enable,
+      line,
+      toggle(values.wakeEnabled, async (on) => {
+        values = await window.blazma.updateSettings({ wakeEnabled: on });
+        draw(await window.blazma.wakeEnable(on));
+      }),
+    ),
+    item(W.examples, W.examplesDesc, null),
+    el('div', { class: 'set-item' }, el('p', { class: 'muted small' }, W.privacy), install),
   );
 }
 
@@ -907,7 +999,7 @@ function crashItem() {
 
 // ---------- page ----------
 
-const SECTIONS = ['general', 'chat', 'memory', 'quick', 'tasks', 'mcp', 'kb', 'engine', 'monitor', 'api', 'updates', 'about'];
+const SECTIONS = ['general', 'chat', 'memory', 'brain', 'wake', 'quick', 'tasks', 'mcp', 'kb', 'engine', 'monitor', 'api', 'updates', 'about'];
 let currentTab = (() => {
   try {
     return SECTIONS.includes(localStorage.getItem('blazma.settingsTab')) ? localStorage.getItem('blazma.settingsTab') : 'general';
@@ -938,18 +1030,18 @@ function showTab(id) {
 window.addEventListener('blazma:settings-tab', (e) => showTab(e.detail));
 
 async function render() {
-  const [v, info, state, appInfo, conn, kb] = await Promise.all([window.blazma.getSettings(), window.blazma.monitorInfo(), window.blazma.getSetupState(), window.blazma.getAppInfo(), window.blazma.getConnection(), window.blazma.kbStatus()]);
+  const [v, info, state, appInfo, conn, kb, brain] = await Promise.all([window.blazma.getSettings(), window.blazma.monitorInfo(), window.blazma.getSetupState(), window.blazma.getAppInfo(), window.blazma.getConnection(), window.blazma.kbStatus(), window.blazma.brainStatus()]);
   values = v;
   const toc = el(
     'nav',
     { class: 'set-toc', 'aria-label': S.tocLabel },
     ...SECTIONS.map((id) => {
-      const b = el('button', { type: 'button', 'data-target': id }, el('span', { class: 'set-toc-icon', 'aria-hidden': 'true' }, S.tocIcons[id] || { memory: '🧠', quick: '⌨', tasks: '⏰', mcp: '🧩' }[id]), S.toc[id] || V[id].title);
+      const b = el('button', { type: 'button', 'data-target': id }, el('span', { class: 'set-toc-icon', 'aria-hidden': 'true' }, S.tocIcons[id] || { memory: '🧠', brain: '🗂', wake: '🎙', quick: '⌨', tasks: '⏰', mcp: '🧩' }[id]), S.toc[id] || V[id].title);
       b.addEventListener('click', () => showTab(id));
       return b;
     }),
   );
-  const body = el('div', { class: 'set-body' }, generalSection(), chatSection(), memorySection(), quickSection(), tasksSection(), mcpSection(), kbSection(kb), engineSection(state), monitorSection(info), apiSection(conn), updatesSection(), aboutSection(appInfo));
+  const body = el('div', { class: 'set-body' }, generalSection(), chatSection(), memorySection(), brainSection(brain), wakeSection(), quickSection(), tasksSection(), mcpSection(), kbSection(kb), engineSection(state), monitorSection(info), apiSection(conn), updatesSection(), aboutSection(appInfo));
   $('settings-root').replaceChildren(el('div', { class: 'set-layout' }, toc, body));
   renderEngineBanner();
   renderUpdates();
